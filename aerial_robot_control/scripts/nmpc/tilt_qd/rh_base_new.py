@@ -15,6 +15,7 @@ class RecedingHorizonBase(ABC):
     :param string method: Sets correct path to save c generated code and is either "nmpc" or "wrench_est".
     :opt param bool overwrite: Flag to overwrite existing c generated code for the OCP solver. Default: False
     """
+
     def __init__(self, method, overwrite: bool = False):
         self._acados_model = self.create_acados_model()
         self._create_acados_ocp()
@@ -35,15 +36,15 @@ class RecedingHorizonBase(ABC):
             raise FileNotFoundError(f"Configuration file {param_path} not found.")
         except KeyError:
             raise KeyError(f"Mode or method not found in configuration file {param_path}.")
-        
+
         # Compute number of shooting intervals or "steps" (or "nodes") along the horizon
         self.params["N_steps"] = int(self.params["T_pred"] / self.params["T_integ"])
-    
+
     def _create_acados_ocp(self) -> AcadosOcp:
         # Gets called from child class's implementation
         # Create OCP object and set basic properties
         self._ocp = AcadosOcp()
-        acados_source_path = os.environ["ACADOS_SOURCE_DIR"]        # Get acados source path from environment variable
+        acados_source_path = os.environ["ACADOS_SOURCE_DIR"]  # Get acados source path from environment variable
         self._ocp.acados_include_path = acados_source_path + "/include"
         self._ocp.acados_lib_path = acados_source_path + "/lib"
         self._ocp.model = self._acados_model
@@ -52,13 +53,13 @@ class RecedingHorizonBase(ABC):
         sys.path.insert(0, acados_source_path)
 
         # Set parameters
-        self._ocp.dims.N = self.params["N_steps"]                   # Number of time steps along the prediction horizon
-        self._ocp.dims.np = self._acados_model.p.size()[0]             # Number of parameters
-        self._ocp.parameter_values = np.zeros(self._ocp.dims.np)    # Initialize parameters with zeros
-    
+        self._ocp.dims.N = self.params["N_steps"]  # Number of time steps along the prediction horizon
+        self._ocp.dims.np = self._acados_model.p.size()[0]  # Number of parameters
+        self._ocp.parameter_values = np.zeros(self._ocp.dims.np)  # Initialize parameters with zeros
+
     def get_acados_model(self) -> AcadosModel:
         return self._acados_model
-    
+
     def get_ocp(self) -> AcadosOcp:
         return self._ocp
 
@@ -68,7 +69,7 @@ class RecedingHorizonBase(ABC):
     @abstractmethod
     def create_acados_model(self) -> AcadosModel:
         pass
-    
+
     @abstractmethod
     def create_acados_ocp_solver(self) -> AcadosOcpSolver:
         pass
@@ -81,7 +82,8 @@ class RecedingHorizonBase(ABC):
         folder_path = os.path.join(rospack.get_path("aerial_robot_control"), "include", "aerial_robot_control", method,
                                    model_name)
         safe_mkdir_recursive(folder_path, overwrite)
-        os.chdir(folder_path)   # Change working directory to the model folder (also affects inheritted classes)
+        os.chdir(folder_path)  # Change working directory to the model folder (also affects inheritted classes)
+
 
 def safe_mkdir_recursive(directory, overwrite=False):
     if not os.path.exists(directory):
