@@ -63,7 +63,11 @@ def simulate(nmpc_model_id, sim_model_id=0, plot_type=1, no_viz=True, save_data=
         t_servo_ctrl = nmpc.t_servo
     else:
         t_servo_ctrl = 0.0
-    ts_ctrl = nmpc.ts_ctrl
+
+    try:
+        ts_ctrl = nmpc.ts_ctrl
+    except AttributeError:
+        ts_ctrl = nmpc.params["T_samp"]
 
     ocp_solver = nmpc.get_ocp_solver()
     nx = ocp_solver.acados_ocp.dims.nx
@@ -110,7 +114,10 @@ def simulate(nmpc_model_id, sim_model_id=0, plot_type=1, no_viz=True, save_data=
     x_init_sim[6] = 1.0  # qw
 
     # ---------- Others ----------
-    xr_ur_converter = nmpc.get_xr_ur_converter()
+    try:
+        reference_generator = nmpc.get_xr_ur_converter()
+    except AttributeError:
+        reference_generator = nmpc.get_reference_generator()
 
     # Create visualizer only if visualization is not disabled
     if not no_viz:
@@ -163,7 +170,10 @@ def simulate(nmpc_model_id, sim_model_id=0, plot_type=1, no_viz=True, save_data=
                 target_xyz = np.array([[1.0, 1.0, 1.0]]).T
                 target_rpy = np.array([[0.0, 0.0, 0.0]]).T
 
-        xr, ur = xr_ur_converter.pose_point_2_xr_ur(target_xyz, target_rpy)
+        try:
+            xr, ur = reference_generator.pose_point_2_xr_ur(target_xyz, target_rpy)
+        except AttributeError:
+            xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy)
 
         if plot_type == 2:
             if nx > 13:
@@ -210,7 +220,7 @@ def simulate(nmpc_model_id, sim_model_id=0, plot_type=1, no_viz=True, save_data=
             viz.comp_time[i] = comp_time_end - comp_time_start
 
         if type(nmpc) is NMPCTiltQdNoServoNewCost:
-            xr_ur_converter.update_a_prev(u_cmd.item(4), u_cmd.item(5), u_cmd.item(6), u_cmd.item(7))
+            reference_generator.update_a_prev(u_cmd.item(4), u_cmd.item(5), u_cmd.item(6), u_cmd.item(7))
         if type(nmpc) is NMPCTiltQdServoVelInput:
             alpha_integ += u_cmd[4:] * ts_ctrl
             u_cmd[4:] = alpha_integ  # convert from delta input to real input
