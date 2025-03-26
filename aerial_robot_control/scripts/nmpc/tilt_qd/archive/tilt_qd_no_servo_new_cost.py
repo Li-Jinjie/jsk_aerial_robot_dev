@@ -30,6 +30,7 @@ nmpc_params = nmpc_param_dict["controller"]["nmpc"]
 nmpc_params["N_node"] = int(nmpc_params["T_pred"] / nmpc_params["T_integ"])
 
 
+# new cost means using the deviation of servo command as the cost. Defined in the reference generator
 class NMPCTiltQdNoServoNewCost(NMPCBase):
     def __init__(self):
         super(NMPCTiltQdNoServoNewCost, self).__init__()

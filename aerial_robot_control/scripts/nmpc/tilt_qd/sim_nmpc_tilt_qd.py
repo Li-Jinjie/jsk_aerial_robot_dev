@@ -15,15 +15,15 @@ import phys_param_beetle_art as phys_art
 
 # naive models
 from tilt_qd_no_servo import NMPCTiltQdNoServo
-from tilt_qd_no_servo_new_cost import NMPCTiltQdNoServoNewCost
+from archive.tilt_qd_no_servo_new_cost import NMPCTiltQdNoServoNewCost
 
 # consider the servo delay
 from tilt_qd_servo import NMPCTiltQdServo
 from tilt_qd_servo_dist import NMPCTiltQdServoDist
 from archive.tilt_qd_servo_drag_w_dist import NMPCTiltQdServoDragDist
 
-from tilt_qd_servo_old_cost import NMPCTiltQdServoOldCost
-from tilt_qd_servo_vel_input import NMPCTiltQdServoVelInput
+from archive.tilt_qd_servo_old_cost import NMPCTiltQdServoOldCost
+from archive.tilt_qd_servo_vel_input import NMPCTiltQdServoVelInput
 
 # further consider the thrust delay
 from tilt_qd_servo_thrust import NMPCTiltQdServoThrust
