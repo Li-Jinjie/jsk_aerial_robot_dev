@@ -114,7 +114,11 @@ def simulate(nmpc_model_id, sim_model_id=0, plot_type=1, no_viz=True, save_data=
     N_sim = int(t_total_sim / ts_sim)
 
     # sim solver
-    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
+    if sim_model_id == 0:
+        sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
+    else:
+        sim_solver = sim_nmpc.create_acados_sim_solver(sim_nmpc.get_ocp_model(), ts_sim, True)
+
     nx_sim = sim_solver.acados_sim.dims.nx
 
     x_init_sim = np.zeros(nx_sim)
