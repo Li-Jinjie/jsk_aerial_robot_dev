@@ -4,21 +4,21 @@ import numpy as np
 import casadi as ca
 from qd_nmpc_base import QDNMPCBase
 import phys_param_beetle_omni as phys_omni
-from sim_fake_sensor import FakeSensor
 
 
-class NMPCTiltQdServoThrustDist(QDNMPCBase):
+class NMPCTiltQdServoThrustDrag(QDNMPCBase):
     """
-    Controller Name: Tiltable Quadrotor NMPC including Servo and Thrust Model as well as CoG Disturbance
+    Controller Name: Tiltable Quadrotor NMPC including Servo and Thrust Model
     The controller itself is constructed in base class. This file is used to define the properties
     of the controller, specifically, the weights and cost function for the acados solver.
     The output of the controller is the thrust and servo angle command for each rotor.
-    
+
     :param bool overwrite: Flag to overwrite existing c generated code for the OCP solver. Default: False
     """
+
     def __init__(self, overwrite: bool = False, phys=phys_omni):
         # Model name
-        self.model_name = "tilt_qd_servo_thrust_dist_mdl"
+        self.model_name = "tilt_qd_servo_thrust_drag_mdl"
         self.phys = phys
 
         # ====== Define controller setup through flags ======
@@ -27,6 +27,7 @@ class NMPCTiltQdServoThrustDist(QDNMPCBase):
         # - include_servo_model: Flag to include the servo model based on the angle alpha (a) between frame E (end of arm) and R (rotor). If not included, angle control is assumed to be equal to angle state.
         # - include_servo_derivative: Flag to include the continuous time-derivative of the servo angle as control input(!) instead of numeric differentation.
         # - include_thrust_model: Flag to include dynamics from rotor and use thrust as state. If not included, thrust control is assumed to be equal to thrust state.
+        # - include_drag_model_for_each_rotor: Flag to include drag model for each rotor individually. If not included, drag control is assumed to be equal to drag state.
         # - include_cog_dist_model: Flag to include disturbance on the CoG into the acados model states. Disturbance on each rotor individually was investigated into but didn't properly work, therefore only disturbance on CoG implemented.
         # - include_cog_dist_parameter: Flag to include disturbance on the CoG into the acados model parameters. Disturbance on each rotor individually was investigated into but didn't properly work, therefore only disturbance on CoG implemented.
         # - include_impedance: Flag to include virtual mass and inertia to calculate impedance cost. Doesn't add any functionality for the model.
@@ -35,22 +36,17 @@ class NMPCTiltQdServoThrustDist(QDNMPCBase):
         self.tilt = True
         self.include_servo_model = True
         self.include_servo_derivative = False
-        self.include_thrust_model = True   # TODO extend to include_thrust_derivative
+        self.include_thrust_model = True  # TODO extend to include_thrust_derivative
         self.include_drag_model_for_each_rotor = True
-        self.include_cog_dist_model = True
-        self.include_cog_dist_parameter = True  # TODO seperation between model and parameter necessary?
+        self.include_cog_dist_model = False
+        self.include_cog_dist_parameter = False
         self.include_impedance = False
 
         # Read parameters from configuration file in the robot's package
-        self.read_params("controller", "nmpc", "beetle_omni", "BeetleNMPCFullServoThrustDist.yaml")
+        self.read_params("controller", "nmpc", "beetle", "BeetleNMPCFull.yaml")
 
         # Create acados model & solver and generate c code
         super().__init__(overwrite)
-
-        # Necessary for simulation environment
-        self.fake_sensor = FakeSensor(self.include_servo_model,
-                                      self.include_thrust_model,
-                                      self.include_cog_dist_model)
 
     def get_cost_function(self, lin_acc_w=None, ang_acc_b=None):
         # Cost function
@@ -70,18 +66,16 @@ class NMPCTiltQdServoThrustDist(QDNMPCBase):
             qe_z + self.qzr,
             self.w,
             self.a_s,
-            self.ft_s,
-            self.fds_w,
-            self.tau_ds_b
+            self.ft_s
         )
 
         state_y_e = state_y
 
         control_y = ca.vertcat(
             self.ft_c - self.ft_s,  # ft_c_ref must be zero!
-            self.a_c - self.a_s     # a_c_ref must be zero!
+            self.a_c - self.a_s  # a_c_ref must be zero!
         )
-        
+
         return state_y, state_y_e, control_y
 
     def get_weights(self):
@@ -105,26 +99,20 @@ class NMPCTiltQdServoThrustDist(QDNMPCBase):
                 self.params["Qa"],
                 self.params["Qa"],
                 self.params["Qa"],
-                self.params["Qt"],
-                self.params["Qt"],
-                self.params["Qt"],
-                self.params["Qt"],
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
+                self.params["Qa"],
+                self.params["Qa"],
+                self.params["Qa"],
+                self.params["Qa"],
             ]
         )
         print("Q: \n", Q)
 
         R = np.diag(
             [
-                self.params["Rtc_d"],
-                self.params["Rtc_d"],
-                self.params["Rtc_d"],
-                self.params["Rtc_d"],
+                1,
+                1,
+                1,
+                1,
                 self.params["Rac_d"],
                 self.params["Rac_d"],
                 self.params["Rac_d"],
@@ -134,7 +122,7 @@ class NMPCTiltQdServoThrustDist(QDNMPCBase):
         print("R: \n", R)
 
         return Q, R
-    
+
     def get_reference(self, target_xyz, target_qwxyz, ft_ref, a_ref):
         """
         Assemble reference trajectory from target pose and reference control values.
@@ -150,19 +138,21 @@ class NMPCTiltQdServoThrustDist(QDNMPCBase):
         :return ur: Reference for the input u
         """
         # Get dimensions
-        ocp = self.get_ocp(); nn = ocp.dims.N
-        nx = ocp.dims.nx; nu = ocp.dims.nu
+        ocp = self.get_ocp();
+        nn = ocp.dims.N
+        nx = ocp.dims.nx;
+        nu = ocp.dims.nu
 
         # Assemble state reference
         xr = np.zeros([nn + 1, nx])
-        xr[:, 0] = target_xyz[0]       # x
-        xr[:, 1] = target_xyz[1]       # y
-        xr[:, 2] = target_xyz[2]       # z
+        xr[:, 0] = target_xyz[0]  # x
+        xr[:, 1] = target_xyz[1]  # y
+        xr[:, 2] = target_xyz[2]  # z
         # No reference for vx, vy, vz (idx: 3, 4, 5)
-        xr[:, 6] = target_qwxyz[0]     # qx
-        xr[:, 7] = target_qwxyz[1]     # qx
-        xr[:, 8] = target_qwxyz[2]     # qy
-        xr[:, 9] = target_qwxyz[3]     # qz
+        xr[:, 6] = target_qwxyz[0]  # qx
+        xr[:, 7] = target_qwxyz[1]  # qx
+        xr[:, 8] = target_qwxyz[2]  # qy
+        xr[:, 9] = target_qwxyz[3]  # qz
         # No reference for wx, wy, wz (idx: 10, 11, 12)
         xr[:, 13] = a_ref[0]
         xr[:, 14] = a_ref[1]
@@ -176,13 +166,13 @@ class NMPCTiltQdServoThrustDist(QDNMPCBase):
         # Assemble input reference
         # Note: Reference has to be zero if variable is included as state in cost function!
         ur = np.zeros([nn, nu])
-        
+
         return xr, ur
 
 
 if __name__ == "__main__":
     overwrite = True
-    nmpc = NMPCTiltQdServoThrustDist(overwrite)
+    nmpc = NMPCTiltQdServoThrustDrag(overwrite)
 
     acados_ocp_solver = nmpc.get_ocp_solver()
     print("Successfully initialized acados ocp: ", acados_ocp_solver.acados_ocp)

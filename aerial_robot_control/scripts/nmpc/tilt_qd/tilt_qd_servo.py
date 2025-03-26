@@ -39,6 +39,7 @@ class NMPCTiltQdServo(QDNMPCBase):
         self.include_cog_dist_model = False
         self.include_cog_dist_parameter = False  # TODO seperation between model and parameter necessary?
         self.include_impedance = False
+        self.include_drag_model_for_each_rotor = True
 
         # Read parameters from configuration file in the robot's package
         self.read_params("controller", "nmpc", "beetle", "BeetleNMPCFull.yaml")

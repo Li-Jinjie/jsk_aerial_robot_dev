@@ -20,7 +20,7 @@ from tilt_qd_no_servo_new_cost import NMPCTiltQdNoServoNewCost
 # consider the servo delay
 from tilt_qd_servo import NMPCTiltQdServo
 from tilt_qd_servo_dist import NMPCTiltQdServoDist
-from arxiv_tilt_qd_servo_drag_w_dist import NMPCTiltQdServoDragDist
+from archive.tilt_qd_servo_drag_w_dist import NMPCTiltQdServoDragDist
 
 from tilt_qd_servo_old_cost import NMPCTiltQdServoOldCost
 from tilt_qd_servo_vel_input import NMPCTiltQdServoVelInput
@@ -28,7 +28,7 @@ from tilt_qd_servo_vel_input import NMPCTiltQdServoVelInput
 # further consider the thrust delay
 from tilt_qd_servo_thrust import NMPCTiltQdServoThrust
 from tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
-from arxiv_tilt_qd_servo_thrust_drag import NMPCTiltQdServoThrustDrag
+from tilt_qd_servo_thrust_drag import NMPCTiltQdServoThrustDrag
 
 # only consider the thrust delay
 from tilt_qd_thrust import NMPCTiltQdThrust
@@ -94,7 +94,7 @@ def simulate(nmpc_model_id, sim_model_id=0, plot_type=1, no_viz=True, save_data=
     if sim_model_id == 0:
         sim_nmpc = NMPCTiltQdServoThrust(phys=sim_phys)  # consider the dynamics of all actuators, including servo and thrust
     elif sim_model_id == 1:
-        sim_nmpc = NMPCTiltQdServoThrustDrag()  # TODO: change to use sim_phys
+        sim_nmpc = NMPCTiltQdServoThrustDrag(phys=sim_phys)
     else:
         raise ValueError(f"Invalid sim model {sim_model_id}.")
 

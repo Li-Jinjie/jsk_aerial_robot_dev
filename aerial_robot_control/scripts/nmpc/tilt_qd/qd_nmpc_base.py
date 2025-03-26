@@ -17,6 +17,7 @@ class QDNMPCBase(RecedingHorizonBase):
      - include_servo_model: Flag to include the servo model based on the angle alpha (a) between frame E (end of arm) and R (rotor). If not included, angle control is assumed to be equal to angle state.
      - include_servo_derivative: Flag to include the continuous time-derivative of the servo angle as control input(!) instead of numeric differentation.
      - include_thrust_model: Flag to include dynamics from rotor and use thrust as state. If not included, thrust control is assumed to be equal to thrust state.
+     - include_drag_model_for_each_rotor: Flag to include drag model for each rotor individually. If not included, drag control is assumed to be equal to drag state.
      - include_cog_dist_model: Flag to include disturbance on the CoG into the acados model states. Disturbance on each rotor individually was investigated into but didn't properly work, therefore only disturbance on CoG implemented.
      - include_cog_dist_parameter: Flag to include disturbance on the CoG into the acados model parameters. Disturbance on each rotor individually was investigated into but didn't properly work, therefore only disturbance on CoG implemented.
      - include_impedance: Flag to include virtual mass and inertia to calculate impedance cost. Doesn't add any functionality for the model.
@@ -240,10 +241,25 @@ class QDNMPCBase(RecedingHorizonBase):
             ft3 = self.ft3c
             ft4 = self.ft4c
 
-        ft_r1 = ca.vertcat(0, 0, ft1)
-        ft_r2 = ca.vertcat(0, 0, ft2)
-        ft_r3 = ca.vertcat(0, 0, ft3)
-        ft_r4 = ca.vertcat(0, 0, ft4)
+        if self.include_drag_model_for_each_rotor:
+            dr_a1 = phys.dr1 * a1
+            dr_a2 = phys.dr2 * a2
+            dr_a3 = phys.dr3 * a3
+            dr_a4 = phys.dr4 * a4
+            fd1 = (phys.c4 * dr_a1**4 + phys.c3 * dr_a1**3 + phys.c2 * dr_a1**2 + phys.c1 * dr_a1 + phys.c0) * ft1
+            fd2 = (phys.c4 * dr_a2**4 + phys.c3 * dr_a2**3 + phys.c2 * dr_a2**2 + phys.c1 * dr_a2 + phys.c0) * ft2
+            fd3 = (phys.c4 * dr_a3**4 + phys.c3 * dr_a3**3 + phys.c2 * dr_a3**2 + phys.c1 * dr_a3 + phys.c0) * ft3
+            fd4 = (phys.c4 * dr_a4**4 + phys.c3 * dr_a4**3 + phys.c2 * dr_a4**2 + phys.c1 * dr_a4 + phys.c0) * ft4
+
+            ft_r1 = ca.vertcat(0, 0, ft1 - fd1)
+            ft_r2 = ca.vertcat(0, 0, ft2 - fd2)
+            ft_r3 = ca.vertcat(0, 0, ft3 - fd3)
+            ft_r4 = ca.vertcat(0, 0, ft4 - fd4)
+        else:
+            ft_r1 = ca.vertcat(0, 0, ft1)
+            ft_r2 = ca.vertcat(0, 0, ft2)
+            ft_r3 = ca.vertcat(0, 0, ft3)
+            ft_r4 = ca.vertcat(0, 0, ft4)
 
         tau_r1 = ca.vertcat(0, 0, -phys.dr1 * ft1 * phys.kq_d_kt)
         tau_r2 = ca.vertcat(0, 0, -phys.dr2 * ft2 * phys.kq_d_kt)
