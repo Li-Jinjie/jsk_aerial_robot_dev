@@ -17,7 +17,7 @@ import casadi as ca
 
 from nmpc_base import NMPCBase, XrUrConverterBase
 
-from phys_param_beetle_omni import *
+import phys_param_beetle_omni as phy
 
 # read parameters from yaml
 rospack = rospkg.RosPack()
@@ -32,7 +32,7 @@ nmpc_params["N_node"] = int(nmpc_params["T_pred"] / nmpc_params["T_integ"])
 class NMPCTiltQdServoDist(NMPCBase):
     def __init__(self, is_build: bool = True):
         super(NMPCTiltQdServoDist, self).__init__(is_build)
-        self.t_servo = t_servo
+        self.t_servo = phy.t_servo
 
         # for EKF
         self.sim_solver = self.create_acados_sim_solver(self._ocp_model, nmpc_params["T_samp"], is_build)
@@ -44,6 +44,30 @@ class NMPCTiltQdServoDist(NMPCBase):
         return nmpc_params["T_samp"]
 
     def create_acados_model(self, model_name: str) -> AcadosModel:
+        # global parameters
+        # - inertia
+        mass = ca.SX.sym("mass")
+        gravity = ca.SX.sym("gravity")
+        Ixx = ca.SX.sym("Ixx")
+        Iyy = ca.SX.sym("Iyy")
+        Izz = ca.SX.sym("Izz")
+        # - servo
+        t_servo = ca.SX.sym("t_servo")
+        # - rotor
+        # this order is good for drones with different number of rotors
+        kq_d_kt = ca.SX.sym("kq_d_kt")
+        dr1 = ca.SX.sym("dr1")
+        p1_b = ca.SX.sym("p1_b", 3)
+        dr2 = ca.SX.sym("dr2")
+        p2_b = ca.SX.sym("p2_b", 3)
+        dr3 = ca.SX.sym("dr3")
+        p3_b = ca.SX.sym("p3_b", 3)
+        dr4 = ca.SX.sym("dr4")
+        p4_b = ca.SX.sym("p4_b", 3)
+
+        p_global = ca.vertcat(mass, gravity, Ixx, Iyy, Izz, t_servo,
+                              kq_d_kt, dr1, p1_b, dr2, p2_b, dr3, p3_b, dr4, p4_b)
+
         # model states
         p = ca.SX.sym("p", 3)
         v = ca.SX.sym("v", 3)
@@ -108,16 +132,18 @@ class NMPCTiltQdServoDist(NMPCBase):
         )
         rot_ib = ca.vertcat(row_1, row_2, row_3)
 
-        den = np.sqrt(p1_b[0] ** 2 + p1_b[1] ** 2)
-        rot_be1 = np.array([[p1_b[0] / den, -p1_b[1] / den, 0], [p1_b[1] / den, p1_b[0] / den, 0], [0, 0, 1]])
+        den = ca.sqrt(p1_b[0] ** 2 + p1_b[1] ** 2)
+        rot_be1 = ca.vertcat(ca.horzcat(p1_b[0] / den, -p1_b[1] / den, 0), ca.horzcat(p1_b[1] / den, p1_b[0] / den, 0),
+                             ca.horzcat(0, 0, 1))
 
-        den = np.sqrt(p2_b[0] ** 2 + p2_b[1] ** 2)
-        rot_be2 = np.array([[p2_b[0] / den, -p2_b[1] / den, 0], [p2_b[1] / den, p2_b[0] / den, 0], [0, 0, 1]])
+        den = ca.sqrt(p2_b[0] ** 2 + p2_b[1] ** 2)
+        rot_be2 = ca.vertcat(ca.horzcat(p2_b[0] / den, -p2_b[1] / den, 0), ca.horzcat(p2_b[1] / den, p2_b[0] / den, 0),
+                             ca.horzcat(0, 0, 1))
 
-        den = np.sqrt(p3_b[0] ** 2 + p3_b[1] ** 2)
+        den = ca.sqrt(p3_b[0] ** 2 + p3_b[1] ** 2)
         rot_be3 = np.array([[p3_b[0] / den, -p3_b[1] / den, 0], [p3_b[1] / den, p3_b[0] / den, 0], [0, 0, 1]])
 
-        den = np.sqrt(p4_b[0] ** 2 + p4_b[1] ** 2)
+        den = ca.sqrt(p4_b[0] ** 2 + p4_b[1] ** 2)
         rot_be4 = np.array([[p4_b[0] / den, -p4_b[1] / den, 0], [p4_b[1] / den, p4_b[0] / den, 0], [0, 0, 1]])
 
         rot_e1r1 = ca.vertcat(
@@ -134,9 +160,9 @@ class NMPCTiltQdServoDist(NMPCBase):
         )
 
         # inertial
-        iv = ca.diag([Ixx, Iyy, Izz])
-        inv_iv = ca.diag([1 / Ixx, 1 / Iyy, 1 / Izz])
-        g_i = np.array([0, 0, -gravity])
+        iv = ca.diag(ca.vertcat(Ixx, Iyy, Izz))
+        inv_iv = ca.diag(ca.vertcat(1 / Ixx, 1 / Iyy, 1 / Izz))
+        g_i = ca.vertcat(0, 0, -gravity)
 
         # wrench
         ft_r1 = ca.vertcat(0, 0, ft1)
@@ -150,20 +176,20 @@ class NMPCTiltQdServoDist(NMPCBase):
         tau_r4 = ca.vertcat(0, 0, -dr4 * ft4 * kq_d_kt)
 
         f_u_b = (
-            ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, ft_r1))
-            + ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, ft_r2))
-            + ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, ft_r3))
-            + ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, ft_r4))
+                ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, ft_r1))
+                + ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, ft_r2))
+                + ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, ft_r3))
+                + ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, ft_r4))
         )
         tau_u_b = (
-            ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, tau_r1))
-            + ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, tau_r2))
-            + ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, tau_r3))
-            + ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, tau_r4))
-            + ca.cross(np.array(p1_b), ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, ft_r1)))
-            + ca.cross(np.array(p2_b), ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, ft_r2)))
-            + ca.cross(np.array(p3_b), ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, ft_r3)))
-            + ca.cross(np.array(p4_b), ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, ft_r4)))
+                ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, tau_r1))
+                + ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, tau_r2))
+                + ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, tau_r3))
+                + ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, tau_r4))
+                + ca.cross(p1_b, ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, ft_r1)))
+                + ca.cross(p2_b, ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, ft_r2)))
+                + ca.cross(p3_b, ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, ft_r3)))
+                + ca.cross(p4_b, ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, ft_r4)))
         )
 
         # dynamic model
@@ -204,6 +230,7 @@ class NMPCTiltQdServoDist(NMPCBase):
         model.xdot = x_dot
         model.u = controls
         model.p = parameters
+        model.p_global = p_global
         model.cost_y_expr = ca.vertcat(state_y, control_y)  # NONLINEAR_LS
         model.cost_y_expr_e = state_y
 
@@ -213,6 +240,7 @@ class NMPCTiltQdServoDist(NMPCBase):
         nx = ocp_model.x.size()[0]
         nu = ocp_model.u.size()[0]
         n_params = ocp_model.p.size()[0]
+        n_p_global = ocp_model.p_global.size()[0]
 
         # get file path for acados
         rospack = rospkg.RosPack()
@@ -230,7 +258,20 @@ class NMPCTiltQdServoDist(NMPCBase):
         ocp.acados_include_path = acados_source_path + "/include"
         ocp.acados_lib_path = acados_source_path + "/lib"
         ocp.model = ocp_model
-        ocp.dims.N = nmpc_params["N_node"]
+        ocp.solver_options.N_horizon = nmpc_params["N_node"]
+
+        # initialize p_global
+        # mass, gravity, Ixx, Iyy, Izz, t_servo,
+        # kq_d_kt, dr1, p1_b, dr2, p2_b, dr3, p3_b, dr4, p4_b
+        para_inertia = np.array([phy.mass, phy.gravity, phy.Ixx, phy.Iyy, phy.Izz])
+        para_mid = np.array([phy.t_servo, phy.kq_d_kt])
+        para_rotor_1 = np.array([phy.dr1, phy.p1_b[0], phy.p1_b[1], phy.p1_b[2]])
+        para_rotor_2 = np.array([phy.dr2, phy.p2_b[0], phy.p2_b[1], phy.p2_b[2]])
+        para_rotor_3 = np.array([phy.dr3, phy.p3_b[0], phy.p3_b[1], phy.p3_b[2]])
+        para_rotor_4 = np.array([phy.dr4, phy.p4_b[0], phy.p4_b[1], phy.p4_b[2]])
+        p_global_values = np.concatenate(
+            (para_inertia, para_mid, para_rotor_1, para_rotor_2, para_rotor_3, para_rotor_4))
+        ocp.p_global_values = p_global_values
 
         # initialize parameters
         ocp.dims.np = n_params
@@ -381,7 +422,7 @@ class NMPCTiltQdServoDist(NMPCBase):
         x_ref = np.zeros(nx)
         x_ref[6] = 1.0  # qw
         u_ref = np.zeros(nu)
-        u_ref[0:4] = mass * gravity / 4  # ft1, ft2, ft3, ft4
+        u_ref[0:4] = phy.mass * phy.gravity / 4  # ft1, ft2, ft3, ft4
         ocp.constraints.x0 = x_ref
         ocp.cost.yref = np.concatenate((x_ref, u_ref))
         ocp.cost.yref_e = x_ref
@@ -417,18 +458,18 @@ class XrUrConverter(XrUrConverterBase):
         self.nu = 8
 
     def _set_physical_params(self):
-        self.p1_b = p1_b
-        self.p2_b = p2_b
-        self.p3_b = p3_b
-        self.p4_b = p4_b
-        self.dr1 = dr1
-        self.dr2 = dr2
-        self.dr3 = dr3
-        self.dr4 = dr4
-        self.kq_d_kt = kq_d_kt
+        self.p1_b = phy.p1_b
+        self.p2_b = phy.p2_b
+        self.p3_b = phy.p3_b
+        self.p4_b = phy.p4_b
+        self.dr1 = phy.dr1
+        self.dr2 = phy.dr2
+        self.dr3 = phy.dr3
+        self.dr4 = phy.dr4
+        self.kq_d_kt = phy.kq_d_kt
 
-        self.mass = mass
-        self.gravity = gravity
+        self.mass = phy.mass
+        self.gravity = phy.gravity
 
         self.alloc_mat_pinv = self._get_alloc_mat_pinv()
         self.ocp_N = nmpc_params["N_node"]
