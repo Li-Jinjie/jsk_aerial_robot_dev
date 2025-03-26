@@ -3,7 +3,7 @@
 import numpy as np
 import casadi as ca
 from qd_nmpc_base import QDNMPCBase
-import phys_param_beetle_omni as phys
+import phys_param_beetle_omni as phys_omni
 from sim_fake_sensor import FakeSensor
 
 
@@ -16,7 +16,7 @@ class NMPCTiltQdServoThrustDist(QDNMPCBase):
     
     :param bool overwrite: Flag to overwrite existing c generated code for the OCP solver. Default: False
     """
-    def __init__(self, overwrite: bool = False):
+    def __init__(self, overwrite: bool = False, phys=phys_omni):
         # Model name
         self.model_name = "tilt_qd_servo_thrust_dist_mdl"
         self.phys = phys

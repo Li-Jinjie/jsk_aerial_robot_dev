@@ -3,7 +3,7 @@
 import numpy as np
 import casadi as ca
 from qd_nmpc_base import QDNMPCBase
-import phys_param_beetle_art as phys
+import phys_param_beetle_omni as phys_omni
 
 
 class NMPCTiltQdNoServo(QDNMPCBase):
@@ -15,7 +15,7 @@ class NMPCTiltQdNoServo(QDNMPCBase):
 
     :param bool overwrite: Flag to overwrite existing c generated code for the OCP solver. Default: False
     """
-    def __init__(self, overwrite: bool = False):
+    def __init__(self, overwrite: bool = False, phys=phys_omni):
         # Model name
         self.model_name = "tilt_qd_no_servo_mdl"
         self.phys = phys

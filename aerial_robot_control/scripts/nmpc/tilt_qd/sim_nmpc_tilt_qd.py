@@ -9,6 +9,10 @@ import os
 
 from nmpc_viz import Visualizer
 
+# physical models
+import phys_param_beetle_omni as phys_omni
+import phys_param_beetle_art as phys_art
+
 # naive models
 from tilt_qd_no_servo import NMPCTiltQdNoServo
 from tilt_qd_no_servo_new_cost import NMPCTiltQdNoServoNewCost
@@ -34,17 +38,18 @@ def simulate(nmpc_model_id, sim_model_id=0, plot_type=1, no_viz=True, save_data=
     # ========== init ==========
     # ---------- Controller ----------
     if nmpc_model_id == 0:
-        nmpc = NMPCTiltQdNoServo()
+        nmpc = NMPCTiltQdNoServo(phys=phys_art)
     elif nmpc_model_id == 1:
-        nmpc = NMPCTiltQdServo()
+        nmpc = NMPCTiltQdServo(phys=phys_art)
     elif nmpc_model_id == 2:
-        nmpc = NMPCTiltQdThrust()
+        nmpc = NMPCTiltQdThrust(phys=phys_art)
     elif nmpc_model_id == 3:
-        nmpc = NMPCTiltQdServoThrust()
+        nmpc = NMPCTiltQdServoThrust(phys=phys_art)
+
     elif nmpc_model_id == 21:
-        nmpc = NMPCTiltQdServoDist()
+        nmpc = NMPCTiltQdServoDist(phys=phys_omni)
     elif nmpc_model_id == 22:
-        nmpc = NMPCTiltQdServoThrustDist()
+        nmpc = NMPCTiltQdServoThrustDist(phys=phys_omni)
 
     # archiving methods
     elif nmpc_model_id == 91:
@@ -84,10 +89,12 @@ def simulate(nmpc_model_id, sim_model_id=0, plot_type=1, no_viz=True, save_data=
         ocp_solver.set(stage, "u", u_init)
 
     # ---------- Simulator ----------
+    sim_phys = phys_omni if 30 > nmpc_model_id > 20 else phys_art
+
     if sim_model_id == 0:
-        sim_nmpc = NMPCTiltQdServoThrust()  # consider the dynamics of all actuators, including servo and thrust
+        sim_nmpc = NMPCTiltQdServoThrust(phys=sim_phys)  # consider the dynamics of all actuators, including servo and thrust
     elif sim_model_id == 1:
-        sim_nmpc = NMPCTiltQdServoThrustDrag()
+        sim_nmpc = NMPCTiltQdServoThrustDrag()  # TODO: change to use sim_phys
     else:
         raise ValueError(f"Invalid sim model {sim_model_id}.")
 
