@@ -3,6 +3,7 @@
 import numpy as np
 import casadi as ca
 from qd_nmpc_base import QDNMPCBase
+import phys_param_beetle_art as phys
 
 
 class NMPCTiltQdServo(QDNMPCBase):
@@ -17,7 +18,8 @@ class NMPCTiltQdServo(QDNMPCBase):
 
     def __init__(self, overwrite: bool = False):
         # Model name
-        model_name = "tilt_qd_servo_mdl"
+        self.model_name = "tilt_qd_servo_mdl"
+        self.phys = phys
 
         # ====== Define controller setup through flags ======
         #
@@ -42,7 +44,7 @@ class NMPCTiltQdServo(QDNMPCBase):
         self.read_params("controller", "nmpc", "beetle", "BeetleNMPCFull.yaml")
 
         # Create acados model & solver and generate c code
-        super().__init__(model_name, overwrite)
+        super().__init__(overwrite)
 
     def get_cost_function(self, lin_acc_w=None, ang_acc_b=None):
         # Cost function

@@ -9,9 +9,6 @@ sys.path.append(os.path.dirname(
 from rh_base_new import RecedingHorizonBase
 from qd_reference_generator import QDNMPCReferenceGenerator
 
-import phys_param_beetle_art as phys
-
-
 class QDNMPCBase(RecedingHorizonBase):
     """
     Base class for all NMPC controllers for quadrotors.
@@ -25,17 +22,10 @@ class QDNMPCBase(RecedingHorizonBase):
      - include_impedance: Flag to include virtual mass and inertia to calculate impedance cost. Doesn't add any functionality for the model.
      - include_a_prev: Flag to include reference value for the servo angle command in NMPCReferenceGenerator() based on command from previous timestep.
 
-    :param str model_name: Name of the model defined in controller file.
     :param bool overwrite: Flag to overwrite existing c generated code for the OCP solver. Default: False
     """
 
-    def __init__(self, model_name: str, overwrite: bool = False):
-        # Store model name
-        self.model_name = model_name
-
-        # Load robot specific parameters
-        self.phys = phys
-
+    def __init__(self, overwrite: bool = False):
         # Call RecedingHorizon constructor coming as NMPC method
         super().__init__("nmpc", overwrite)
 
