@@ -10,7 +10,9 @@ import argparse
 from nmpc_viz import Visualizer, SensorVisualizer
 
 from tilt_qd_servo_thrust_dist_imp import NMPCTiltQdServoThrustImpedance
-from tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist, FIRDifferentiator
+from tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
+
+from sim_fir_differentiator import FIRDifferentiator
 
 from mhe_wrench_est_momentum import MHEWrenchEstMomentum
 from mhe_wrench_est_acc_mom import MHEWrenchEstAccMom
@@ -109,8 +111,7 @@ if __name__ == "__main__":
     N_sim = int(t_total_sim / ts_sim)
 
     # sim solver
-    sim_nmpc.get_ocp_model()
-    sim_solver = sim_nmpc.create_acados_sim_solver(sim_nmpc.get_ocp_model(), ts_sim, True)
+    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
 
     x_init_sim = np.zeros(nx_sim)
@@ -246,7 +247,7 @@ if __name__ == "__main__":
             w = x_now_sim[10:13]
             mass = sim_nmpc.fake_sensor.mass
             gravity = sim_nmpc.fake_sensor.gravity
-            iv = sim_nmpc.fake_sensor.iv
+            iv = sim_nmpc.fake_sensor.I
 
             sf_b_imu = sf_b + np.random.normal(0.0, 0.1, 3)  # add noise. real: scale = 0.00727 * gravity
             w_imu = w + np.random.normal(0.0, 0.01, 3)  # add noise. real: scale = 0.0008 rad/s

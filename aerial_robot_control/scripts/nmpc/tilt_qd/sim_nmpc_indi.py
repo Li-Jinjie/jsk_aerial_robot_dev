@@ -3,42 +3,31 @@
 """
 import copy
 import time
-
+import os
+import sys
 import numpy as np
 import argparse
 
+# Add parent directory to path to allow relative imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from nmpc_viz import Visualizer, SensorVisualizer
 
-from tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist, FIRDifferentiator
+from tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
+from sim_fir_differentiator import FIRDifferentiator
 
 np.random.seed(42)
 
-if __name__ == "__main__":
-    # read arguments
-    parser = argparse.ArgumentParser(description="Run the simulation of different disturbance rejection methods.")
-    parser.add_argument(
-        "if_est_dist",
-        type=int,
-        help="Whether to estimate the disturbance. Options: 0 (no), 1 (yes)."
-    )
-    parser.add_argument(
-        "indi_type",
-        type=int,
-        help="Whether to use INDI. Options: 0 (no), 1 (the B_inv is calculated using mpc command); "
-             "2 (the B_inv is calculated using shifted mpc command); "
-             "3 (the B_inv is calculated using sensor command); "
-             "4 (the B_inv is calculated using the inverse of allocation matrix)."
-    )
-    parser.add_argument("-b", "--if_use_ang_acc", type=int, default=1, help="Whether to use angular acceleration.")
-    parser.add_argument("-p", "--plot_type", type=int, default=0, help="The type of plot. Options: 0 (full), 1, 2.")
 
-    args = parser.parse_args()
-
+def simulate(args):
     # ========== init ==========
     # ---------- Controller ----------
     nmpc = NMPCTiltQdServoThrustDist()
-    t_servo_ctrl = getattr(nmpc, "t_servo", 0.0)
-    ts_ctrl = nmpc.ts_ctrl
+    if hasattr(nmpc, "t_servo"):
+        t_servo_ctrl = nmpc.t_servo
+    else:
+        t_servo_ctrl = 0.0
+
+    ts_ctrl = nmpc.params["T_samp"]
 
     # ocp solver
     ocp_solver = nmpc.get_ocp_solver()
@@ -84,8 +73,7 @@ if __name__ == "__main__":
     N_sim = int(t_total_sim / ts_sim)
 
     # sim solver
-    sim_nmpc.get_ocp_model()
-    sim_solver = sim_nmpc.create_acados_sim_solver(sim_nmpc.get_ocp_model(), ts_sim, True)
+    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
 
     x_init_sim = np.zeros(nx_sim)
@@ -93,7 +81,7 @@ if __name__ == "__main__":
     x_init_sim[-6:] = disturb_init
 
     # ---------- Others ----------
-    xr_ur_converter = nmpc.get_xr_ur_converter()
+    reference_generator = nmpc.get_reference_generator()
     viz = Visualizer(N_sim, nx_sim, nu, x_init_sim, is_record_diff_u=True)
 
     fir_param = [-0.5, 0, 0.5]  # central difference
@@ -146,7 +134,7 @@ if __name__ == "__main__":
         #         target_xyz = np.array([[1.0, 1.0, 1.0]]).T
         #         target_rpy = np.array([[0.0, 0.0, 0.0]]).T
 
-        xr, ur = xr_ur_converter.pose_point_2_xr_ur(target_xyz, target_rpy)
+        xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy)
 
         if args.plot_type == 2:
             if nx > 13:
@@ -214,7 +202,7 @@ if __name__ == "__main__":
             w = x_now_sim[10:13]
             mass = sim_nmpc.fake_sensor.mass
             gravity = sim_nmpc.fake_sensor.gravity
-            iv = sim_nmpc.fake_sensor.iv
+            iv = sim_nmpc.fake_sensor.I
 
             sf_b_imu = sf_b + np.random.normal(0.0, 0.1, 3)  # add noise. real: scale = 0.00727 * gravity
             w_imu = w + np.random.normal(0.0, 0.001, 3)  # add noise. real: scale = 0.0008 rad/s
@@ -246,7 +234,7 @@ if __name__ == "__main__":
             z_sensor[6] = ft_sensor[3] * np.sin(a_sensor[3])
             z_sensor[7] = ft_sensor[3] * np.cos(a_sensor[3])
 
-            wrench_u_sensor_b = np.dot(xr_ur_converter.alloc_mat, z_sensor)
+            wrench_u_sensor_b = np.dot(reference_generator.alloc_mat, z_sensor)
 
             u_meas = np.zeros(8)
             u_meas[0:4] = ft_sensor
@@ -271,7 +259,7 @@ if __name__ == "__main__":
             z_mpc[6] = ft_mpc[3] * np.sin(a_mpc[3])
             z_mpc[7] = ft_mpc[3] * np.cos(a_mpc[3])
 
-            wrench_u_mpc_b = np.dot(xr_ur_converter.alloc_mat, z_mpc)
+            wrench_u_mpc_b = np.dot(reference_generator.alloc_mat, z_mpc)
 
             # update disturbance estimation
             if args.if_est_dist == 1:
@@ -306,7 +294,7 @@ if __name__ == "__main__":
                 u_cmd = copy.deepcopy(u_mpc + d_u)
 
             if args.indi_type == 4:
-                d_z = np.dot(xr_ur_converter.alloc_mat_pinv, -dist_wrench_res_b)
+                d_z = np.dot(reference_generator.alloc_mat_pinv, -dist_wrench_res_b)
                 z = z_mpc + d_z
 
                 u_cmd = np.zeros(8)
@@ -356,3 +344,26 @@ if __name__ == "__main__":
     elif args.plot_type == 2:
         viz.visualize_rpy(ocp_solver.acados_ocp.model.name, sim_solver.model_name, ts_ctrl, ts_sim, t_total_sim,
                           t_servo_ctrl=t_servo_ctrl, t_servo_sim=t_servo_sim)
+
+if __name__ == "__main__":
+    # read arguments
+    parser = argparse.ArgumentParser(description="Run the simulation of different disturbance rejection methods.")
+    parser.add_argument(
+        "if_est_dist",
+        type=int,
+        help="Whether to estimate the disturbance. Options: 0 (no), 1 (yes)."
+    )
+    parser.add_argument(
+        "indi_type",
+        type=int,
+        help="Whether to use INDI. Options: 0 (no), 1 (the B_inv is calculated using mpc command); "
+             "2 (the B_inv is calculated using shifted mpc command); "
+             "3 (the B_inv is calculated using sensor command); "
+             "4 (the B_inv is calculated using the inverse of allocation matrix)."
+    )
+    parser.add_argument("-b", "--if_use_ang_acc", type=int, default=1, help="Whether to use angular acceleration.")
+    parser.add_argument("-p", "--plot_type", type=int, default=0, help="The type of plot. Options: 0 (full), 1, 2.")
+
+    args = parser.parse_args()
+
+    simulate(args)
