@@ -4,7 +4,7 @@
 import numpy as np
 from tf_conversions import transformations as tf
 from abc import ABC, abstractmethod
-from acados_template import AcadosModel, AcadosOcpSolver, AcadosSim, AcadosSimSolver
+from acados_template import AcadosModel, AcadosSim, AcadosSimSolver
 
 from rh_base import RecedingHorizonBase
 

@@ -11,7 +11,7 @@ from nmpc_viz import Visualizer
 
 # physical models
 import phys_param_beetle_omni as phys_omni
-import phys_param_beetle_art as phys_art
+from archive import phys_param_beetle_art as phys_art
 
 # naive models
 from tilt_qd_no_servo import NMPCTiltQdNoServo

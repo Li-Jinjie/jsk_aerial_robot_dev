@@ -16,8 +16,10 @@ from tf_conversions import transformations as tf
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
 import casadi as ca
 
-from nmpc_base import NMPCBase, XrUrConverterBase
+if os.path.dirname(__file__) not in sys.path:
+    sys.path.append(os.path.dirname(__file__))
 
+from nmpc_base import NMPCBase, XrUrConverterBase
 from phys_param_beetle_art import *
 
 # read parameters from yaml
