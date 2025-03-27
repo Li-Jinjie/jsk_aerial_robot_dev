@@ -7,17 +7,24 @@ import time
 import numpy as np
 import argparse
 
-from nmpc_viz import Visualizer, SensorVisualizer
+import os
+import sys
+
+parent_path = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+if parent_path not in sys.path:
+    sys.path.append(parent_path)
+
+from tilt_qd.nmpc_viz import Visualizer
 
 from tilt_qd_servo_thrust_dist_imp import NMPCTiltQdServoThrustImpedance
-from tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
+from tilt_qd.tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
 
-from sim_fir_differentiator import FIRDifferentiator
+from tilt_qd.sim_fir_differentiator import FIRDifferentiator
 
-from mhe_wrench_est_momentum import MHEWrenchEstMomentum
-from mhe_wrench_est_acc_mom import MHEWrenchEstAccMom
-from mhe_wrench_est_new_meas import MHEVelDynIMU
-from mhe_wrench_est_imu_act import MHEWrenchEstIMUAct
+from tilt_qd_imp.mhe_wrench_est_momentum import MHEWrenchEstMomentum
+from tilt_qd_imp.mhe_wrench_est_acc_mom import MHEWrenchEstAccMom
+from tilt_qd_imp.mhe_wrench_est_new_meas import MHEVelDynIMU
+from tilt_qd_imp.mhe_wrench_est_imu_act import MHEWrenchEstIMUAct
 
 np.random.seed(42)
 

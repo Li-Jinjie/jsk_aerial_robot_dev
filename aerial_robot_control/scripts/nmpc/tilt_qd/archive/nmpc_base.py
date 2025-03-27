@@ -2,9 +2,14 @@
  Created by li-jinjie on 24-3-9.
 """
 import numpy as np
+import os
+import sys
 from tf_conversions import transformations as tf
 from abc import ABC, abstractmethod
 from acados_template import AcadosModel, AcadosSim, AcadosSimSolver
+
+if os.path.dirname(__file__) not in sys.path:
+    sys.path.append(os.path.dirname(__file__))
 
 from rh_base import RecedingHorizonBase
 

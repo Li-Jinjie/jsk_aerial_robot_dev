@@ -2,6 +2,13 @@
 # -*- encoding: ascii -*-
 import numpy as np
 import casadi as ca
+
+import os
+import sys
+
+if os.path.dirname(__file__) not in sys.path:
+    sys.path.append(os.path.dirname(__file__))
+
 from qd_nmpc_base import QDNMPCBase
 import phys_param_beetle_omni as phys_omni
 from sim_fake_sensor import FakeSensor

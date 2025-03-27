@@ -16,9 +16,8 @@ from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
 from tf_conversions import transformations as tf
 import casadi as ca
 
-from nmpc_base import NMPCBase, XrUrConverterBase
-
-from phys_param_beetle_omni import *
+from tilt_qd.archive.nmpc_base import NMPCBase, XrUrConverterBase
+from tilt_qd.phys_param_beetle_omni import *
 
 # read parameters from yaml
 rospack = rospkg.RosPack()
