@@ -191,7 +191,7 @@ public:
     int sqp_iter;
 
     ocp_nlp_out_get(nlp_config_, nlp_dims_, nlp_out_, 0, "kkt_norm_inf", &kkt_norm_inf);
-    ocp_nlp_get(nlp_config_, nlp_solver_, "sqp_iter", &sqp_iter);
+    ocp_nlp_get(nlp_solver_, "sqp_iter", &sqp_iter);
 
     acadosPrintStats();
 
@@ -288,7 +288,7 @@ protected:
     if (status != ACADOS_SUCCESS)
       throw AcadosSolveException(status);
 
-    ocp_nlp_get(nlp_config_, nlp_solver_, "time_tot", &elapsed_time);
+    ocp_nlp_get(nlp_solver_, "time_tot", &elapsed_time);
     min_time = MIN(elapsed_time, min_time);
 
     return min_time;
