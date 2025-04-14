@@ -65,7 +65,7 @@ class MPCPubCSVPredXU(MPCPubPredXU):
         # Load trajectory from a CSV
         self.scvx_traj = np.loadtxt(file_path, delimiter=',')  # one row for one time step
         self.x_traj = self.scvx_traj[:, 0:19]
-        self.u_traj = self.scvx_traj[:, 19:28]
+        self.u_traj = self.scvx_traj[:, 19:27]
 
         # Check trajectory information
         check_traj_info(self.x_traj)
@@ -91,7 +91,7 @@ class MPCPubCSVPredXU(MPCPubPredXU):
         This method is called automatically by the base class timer (~50 Hz).
         """
         # If we are still within our trajectory time window:
-        if t_elapsed <= self.x_traj[-1, -2]:
+        if t_elapsed <= self.x_traj[-1, -1]:
             # Create time nodes for interpolation
             t_nodes = np.linspace(0, self.T_horizon, self.N_nmpc + 1)
             t_nodes += t_elapsed
@@ -102,11 +102,11 @@ class MPCPubCSVPredXU(MPCPubPredXU):
 
             # Interpolate each state dimension
             for i in range(self.nx - 6):
-                x_traj[:, i] = np.interp(t_nodes, self.x_traj[:, -2], self.x_traj[:, i])
+                x_traj[:, i] = np.interp(t_nodes, self.x_traj[:, -1], self.x_traj[:, i])
 
             # Interpolate each control dimension
-            for i in range(self.nu):
-                u_traj[:, i] = np.interp(t_nodes[:-1], self.x_traj[:, -2], self.u_traj[:, i])
+            for i in range(self.nu - 4):
+                u_traj[:, i] = np.interp(t_nodes[:-1], self.x_traj[:, -1], self.u_traj[:, i])
 
             # Populate the PredXU message
             self.ref_xu_msg.x.layout.dim[1].stride = self.nx
@@ -125,7 +125,7 @@ class MPCPubCSVPredXU(MPCPubPredXU):
         Return True if we have exceeded the final trajectory time.
         This will cause the base class timer to shut down automatically.
         """
-        if t_elapsed > self.x_traj[-1, -2]:
+        if t_elapsed > self.x_traj[-1, -1]:
             rospy.loginfo(f"{self.namespace}/{self.node_name}: Trajectory time finished!")
             return True
         return False
