@@ -64,13 +64,19 @@ typedef enum
   DSHOT600
 } dshot_type_e;
 
+typedef enum
+{
+  BEHELI,
+  AM32
+} esc_type_e;
+
 class DShot
 {
 public:
   DShot(){};
   ~DShot(){};
 
-  void init(dshot_type_e dshot_type, TIM_HandleTypeDef* htim_motor_1, uint32_t channel_motor_1,
+  void init(esc_type_e esc_type, dshot_type_e dshot_type, TIM_HandleTypeDef* htim_motor_1, uint32_t channel_motor_1,
             TIM_HandleTypeDef* htim_motor_2, uint32_t channel_motor_2, TIM_HandleTypeDef* htim_motor_3,
             uint32_t channel_motor_3, TIM_HandleTypeDef* htim_motor_4, uint32_t channel_motor_4);
   void initTelemetry(UART_HandleTypeDef* huart);
@@ -81,6 +87,10 @@ public:
   bool is_telemetry_ = false;
   int id_telem_ = 0;
   int id_telem_prev_ = -1;
+  // esc init
+  bool if_init_esc_ = false;
+  int init_count_  = 0;
+  int init_duration_ = 0; //hardcoding(tested): min init time 
 
   ESCReader esc_reader_;
 

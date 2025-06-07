@@ -5,7 +5,7 @@
 
 #include "dshot.h"
 
-void DShot::init(dshot_type_e dshot_type, TIM_HandleTypeDef* htim_motor_1, uint32_t channel_motor_1,
+void DShot::init(esc_type_e esc_type, dshot_type_e dshot_type, TIM_HandleTypeDef* htim_motor_1, uint32_t channel_motor_1,
                  TIM_HandleTypeDef* htim_motor_2, uint32_t channel_motor_2, TIM_HandleTypeDef* htim_motor_3,
                  uint32_t channel_motor_3, TIM_HandleTypeDef* htim_motor_4, uint32_t channel_motor_4)
 {
@@ -17,6 +17,21 @@ void DShot::init(dshot_type_e dshot_type, TIM_HandleTypeDef* htim_motor_1, uint3
   channel_motor_3_ = channel_motor_3;
   htim_motor_4_ = htim_motor_4;
   channel_motor_4_ = channel_motor_4;
+
+  switch (esc_type) {
+      case BEHELI:
+          if_init_esc_ = false;
+          init_duration_ = 0;
+          break;
+      case AM32:
+          if_init_esc_ = true;
+          init_duration_ = 5000; 
+          break;
+      default:
+          if_init_esc_ = false;
+          init_duration_ = 0;
+          break;
+  }
 
   dshot_set_timer(dshot_type);
   dshot_put_tc_callback_function();
