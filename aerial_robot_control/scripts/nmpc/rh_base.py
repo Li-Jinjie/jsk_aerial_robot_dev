@@ -89,55 +89,38 @@ def safe_mkdir_recursive(directory, overwrite: bool = False):
     :param directory: Absoulte path of the directory to create.
     :param overwrite: If True, overwrite the directory if it already exists. Default: False
     """
+    if not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+        return
+    
     if overwrite:
-        # Delete existing directory
-        if os.path.exists(directory):
-            try:
-                # Only remove auto-generated files, not the directory itself
-                for _, dirs, files in os.walk(directory):
-                    for file in files:
-                        file_path = os.path.join(directory, file)
-                        if os.path.isfile(file_path) and file_path.endswith(".json"):
-                            os.remove(file_path)
-                    for dir in dirs:
-                        dir_path = os.path.join(directory, dir)
-                        if os.path.isdir(dir_path) and dir_path.endswith("c_generated_code"):
-                            shutil.rmtree(dir_path)
-            except Exception as e:
-                print(f"Error while removing directory {directory}:")
-                raise e
-        else:
-            # Create new directory
-            os.makedirs(directory, exist_ok=True)
+        # Only remove auto-generated files, not the directory itself
+        for _, dirs, files in os.walk(directory):
+            for file in files:
+                file_path = os.path.join(directory, file)
+                if os.path.isfile(file_path) and file_path.endswith(".json"):
+                    os.remove(file_path)
+            for dir in dirs:
+                dir_path = os.path.join(directory, dir)
+                if os.path.isdir(dir_path) and dir_path.endswith("c_generated_code"):
+                    shutil.rmtree(dir_path)
     else:
-        if not os.path.exists(directory):
-            try:
-                # Create new directory
-                os.makedirs(directory)
-            except OSError as e:
-                # Check if directory unexpectedly already exists (may happen if multiple
-                # processes try to read/create it at the same time)
-                if e.errno == errno.EEXIST and os.path.isdir(directory):
-                    pass
-                else:
-                    raise e
+        # Check if directory contains auto-generated files
+        empty = True
+        for _, dirs, files in os.walk(directory):
+            for file in files:
+                file_path = os.path.join(directory, file)
+                if os.path.isfile(file_path) and file_path.endswith(".json"):
+                    empty = False
+            for dir in dirs:
+                dir_path = os.path.join(directory, dir)
+                if os.path.isdir(dir_path) and dir_path.endswith("c_generated_code"):
+                    empty = False
+        if not empty:
+            # Directory already exists and contains controller files
+            print(f"Directory already exists. Set 'overwrite' to True to overwrite it. Path: {directory}")
+            # Skip further processing and exit program
+            sys.exit()
         else:
-            # Check if directory only contains non-auto-generated files
-            empty = True
-            for _, dirs, files in os.walk(directory):
-                for file in files:
-                    file_path = os.path.join(directory, file)
-                    if os.path.isfile(file_path) and file_path.endswith(".json"):
-                        empty = False
-                for dir in dirs:
-                    dir_path = os.path.join(directory, dir)
-                    if os.path.isdir(dir_path) and dir_path.endswith("c_generated_code"):
-                        empty = False
-            if not empty:
-                # Directory already exists and contains controller files
-                print(f"Directory {directory} already exists. Set 'overwrite' to True to overwrite it.")
-                # Skip further processing and exit program
-                sys.exit()
-            else:
-                # Directory exists but not auto-generated files
-                pass
+            # Directory exists but not auto-generated files
+            pass
