@@ -97,17 +97,18 @@ def safe_mkdir_recursive(directory, overwrite: bool = False):
                 for _, dirs, files in os.walk(directory):
                     for file in files:
                         file_path = os.path.join(directory, file)
-                        if os.path.isfile(file_path) and not (file_path.endswith("solver.h") or file_path.endswith("controller.h")):
+                        if os.path.isfile(file_path) and file_path.endswith(".json"):
                             os.remove(file_path)
                     for dir in dirs:
                         dir_path = os.path.join(directory, dir)
-                        if os.path.isdir(dir_path):
+                        if os.path.isdir(dir_path) and dir_path.endswith("c_generated_code"):
                             shutil.rmtree(dir_path)
             except Exception as e:
                 print(f"Error while removing directory {directory}:")
                 raise e
-        # Create new directory
-        os.makedirs(directory, exist_ok=True)
+        else:
+            # Create new directory
+            os.makedirs(directory, exist_ok=True)
     else:
         if not os.path.exists(directory):
             try:
@@ -126,11 +127,11 @@ def safe_mkdir_recursive(directory, overwrite: bool = False):
             for _, dirs, files in os.walk(directory):
                 for file in files:
                     file_path = os.path.join(directory, file)
-                    if os.path.isfile(file_path) and not (file_path.endswith("solver.h") or file_path.endswith("controller.h")):
+                    if os.path.isfile(file_path) and file_path.endswith(".json"):
                         empty = False
                 for dir in dirs:
                     dir_path = os.path.join(directory, dir)
-                    if os.path.isdir(dir_path):
+                    if os.path.isdir(dir_path) and dir_path.endswith("c_generated_code"):
                         empty = False
             if not empty:
                 # Directory already exists and contains controller files
