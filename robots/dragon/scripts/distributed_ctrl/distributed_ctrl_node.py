@@ -27,8 +27,9 @@ class DistributedPIDController:
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         # Create 4 symmetric gimbals
+        fz_offset = [17.3, 22.3, 21.9, 16.9]
         self.gimbals: List[GimbalUnit] = [
-            GimbalUnit(self.ns_robot, i, self.tf_buffer, self.world_frame) for i in range(1, 5)
+            GimbalUnit(self.ns_robot, i, self.tf_buffer, self.world_frame, fz_offset[i - 1]) for i in range(1, 5)
         ]
 
         # Subscribe joint states
@@ -93,7 +94,7 @@ class DistributedPIDController:
             ok = g.update_from_tf(timeout=0.05)
             if not ok:
                 rospy.logwarn_throttle(2.0, "[DistributedPID] TF not ready for %s", g.gimbal_pitch_module_frame)
-            g.compute_command(dt, use_pid=self.use_pid)
+            g.compute_command(dt)
 
         # 2) Publish /dragon/gimbals_ctrl (JointState) and /dragon/four_axes/command (FourAxisCommand)
         js = JointState()
@@ -112,8 +113,8 @@ class DistributedPIDController:
         cmd.base_thrust = base_thrust
 
         js.header.stamp = rospy.Time.now()
-        # self.gimbals_pub.publish(js)
-        # self.four_axes_pub.publish(cmd)
+        self.gimbals_pub.publish(js)
+        self.four_axes_pub.publish(cmd)
 
     # -- Helpers --
 

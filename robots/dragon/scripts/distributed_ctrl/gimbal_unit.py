@@ -20,7 +20,9 @@ class GimbalUnit:
     - Produces commanded angles (position targets) for pitch/roll
     """
 
-    def __init__(self, ns: str, idx: int, tf_buffer: tf2_ros.Buffer, world_frame: str = "world"):
+    def __init__(
+        self, ns: str, idx: int, tf_buffer: tf2_ros.Buffer, world_frame: str = "world", z_force_offset: float = 0.0
+    ):
         self.idx = idx
         self.tf_buffer = tf_buffer
         self.world = world_frame
@@ -49,7 +51,7 @@ class GimbalUnit:
         # --- controllers ---
         self.pid_x = PIDController(2.0, 0.0, 0.0, i_limit=1.0, out_limit=1.0)
         self.pid_y = PIDController(2.0, 0.0, 0.0, i_limit=1.0, out_limit=1.0)
-        self.pid_z = PIDController(2.0, 0.0, 0.0, i_limit=1.0, out_limit=1.0)
+        self.pid_z = PIDController(2.0, 0.0, 0.0, i_limit=1.0, out_limit=1.0, offset=z_force_offset)
 
         # Saturation for commanded joint positions
         self.force_min = -5.0  # N
@@ -84,14 +86,14 @@ class GimbalUnit:
 
     # -- Control --
 
-    def compute_command(self, dt: float, use_pid: bool = True):
+    def compute_command(self, dt: float):
         """
         Compute commands for pitch & roll. By default, apply PID on measured world R/P.
         Outputs absolute position targets (cmd_pitch/roll), clamped to joint limits.
         """
         # Measurement: use TF angles (world R,P) as approximate actual link attitude
-        print(f"[GimbalUnit {self.idx}] pos_w={self.pos_w}, quat_w={self.quat_w}, rpy_w={self.rpy_w}")
-        print(f"[GimbalUnit {self.idx}] gimbal_pos={self.gimbal_pos}")
+        # print(f"[GimbalUnit {self.idx}] pos_w={self.pos_w}, quat_w={self.quat_w}, rpy_w={self.rpy_w}")
+        # print(f"[GimbalUnit {self.idx}] gimbal_pos={self.gimbal_pos}")
 
         # meas_roll, meas_pitch, _ = self.rpy_w
         #
@@ -110,6 +112,8 @@ class GimbalUnit:
         # # Clamp to limits
         # self.cmd_pitch = max(self.pitch_min, min(self.pitch_max, self.cmd_pitch))
         # self.cmd_roll = max(self.roll_min, min(self.roll_max, self.cmd_roll))
+
+        self.cmd_thrust = self.pid_z.step(0.1 - self.pos_w[2], dt)
 
     def get_commands(self) -> Tuple[float, float, float]:
         return self.cmd_pitch, self.cmd_roll, self.cmd_thrust

@@ -7,7 +7,15 @@ import math
 class PIDController:
     """Simple PID controller with anti-windup and output clamp."""
 
-    def __init__(self, kp=1.0, ki=0.0, kd=0.0, i_limit: float = float("inf"), out_limit: float = float("inf")):
+    def __init__(
+        self,
+        kp=1.0,
+        ki=0.0,
+        kd=0.0,
+        i_limit: float = float("inf"),
+        out_limit: float = float("inf"),
+        offset: float = 0.0,
+    ):
         self.kp = float(kp)
         self.ki = float(ki)
         self.kd = float(kd)
@@ -15,6 +23,7 @@ class PIDController:
         self.out_limit = float(out_limit)
         self.integral = 0.0
         self.prev_err = None
+        self.offset = float(offset)
 
     def reset(self):
         self.integral = 0.0
@@ -40,4 +49,4 @@ class PIDController:
         # Clamp
         if abs(u) > self.out_limit:
             u = math.copysign(self.out_limit, u)
-        return u
+        return u + self.offset
