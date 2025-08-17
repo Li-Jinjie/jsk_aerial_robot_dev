@@ -50,9 +50,9 @@ class GimbalUnit:
         self.cmd_thrust = 0.0
 
         # --- controllers ---
-        self.pid_x = PIDController(1.0, 0.1, 0.0, i_limit=1.0, out_limit=1.0)
-        self.pid_y = PIDController(1.0, 0.1, 0.0, i_limit=1.0, out_limit=1.0)
-        self.pid_z = PIDController(1.0, 0.1, 0.05, i_limit=1.0, out_limit=1.0, offset=z_force_offset)
+        self.pid_x = PIDController(1.0, 0.0, 0.0, i_limit=1.0, out_limit=1.0)
+        self.pid_y = PIDController(1.0, 0.0, 0.0, i_limit=1.0, out_limit=1.0)
+        self.pid_z = PIDController(0.5, 0.1, 0.0, i_limit=1.0, out_limit=1.0, offset=z_force_offset)
 
         # Saturation for commanded joint positions
         self.force_min = -5.0  # N

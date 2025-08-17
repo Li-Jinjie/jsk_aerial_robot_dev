@@ -26,7 +26,7 @@ class DistributedPIDController:
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         # Create 4 symmetric gimbals
-        fz_offset = [17.3, 22.3, 21.9, 16.9]
+        fz_offset = [17.3, 22.3, 21.9, 16.5]
         self.gimbals: List[GimbalUnit] = [
             GimbalUnit(self.ns_robot, i, self.tf_buffer, self.world_frame, fz_offset[i - 1]) for i in range(1, 5)
         ]
