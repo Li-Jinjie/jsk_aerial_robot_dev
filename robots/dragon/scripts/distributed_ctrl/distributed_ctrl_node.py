@@ -19,7 +19,7 @@ class DistributedPIDController:
         # Params
         self.ns_robot = rospy.get_param("~robot_ns", "dragon")
         self.world_frame = rospy.get_param("~world_frame", "world")
-        self.rate_hz = rospy.get_param("~rate", 50.0)
+        self.rate_hz = rospy.get_param("~rate", 100.0)
         self.use_pid = rospy.get_param("~use_pid", True)
 
         # TF
@@ -27,12 +27,15 @@ class DistributedPIDController:
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         # Create 4 symmetric gimbals
-        self.gimbals: List[GimbalUnit] = [GimbalUnit(i, self.tf_buffer, self.world_frame) for i in range(1, 5)]
+        self.gimbals: List[GimbalUnit] = [
+            GimbalUnit(self.ns_robot, i, self.tf_buffer, self.world_frame) for i in range(1, 5)
+        ]
 
         # Subscribe joint states
         self.joint_state_sub = rospy.Subscriber(
             f"/{self.ns_robot}/joint_states", JointState, self.joint_state_cb, queue_size=10
         )
+        print(f"/{self.ns_robot}/joint_states")
 
         # Publishers
         self.gimbals_pub = rospy.Publisher(f"/{self.ns_robot}/gimbals_ctrl", JointState, queue_size=10)
@@ -55,7 +58,7 @@ class DistributedPIDController:
         self._last_time = rospy.Time.now()
 
         # Control loop timer
-        # self.timer = rospy.Timer(rospy.Duration(1.0 / self.rate_hz), self._on_timer)
+        self.timer = rospy.Timer(rospy.Duration(1.0 / self.rate_hz), self._on_timer)
 
         rospy.loginfo(
             "[DistributedPID] node initialized. rate=%.1f Hz, world='%s', robot='%s'",
@@ -89,29 +92,28 @@ class DistributedPIDController:
         for g in self.gimbals:
             ok = g.update_from_tf(timeout=0.05)
             if not ok:
-                rospy.logwarn_throttle(2.0, "[DistributedPID] TF not ready for %s", g.pitch_module_frame)
+                rospy.logwarn_throttle(2.0, "[DistributedPID] TF not ready for %s", g.gimbal_pitch_module_frame)
             g.compute_command(dt, use_pid=self.use_pid)
 
-        # 2) Publish /dragon/gimbals_ctrl (JointState)
+        # 2) Publish /dragon/gimbals_ctrl (JointState) and /dragon/four_axes/command (FourAxisCommand)
         js = JointState()
-        js.header.stamp = now
+        cmd = FourAxisCommand()
+
         js.name = self.gimbal_names
         # Gather commanded positions in the same order
         positions: List[float] = []
+        base_thrust: List[float] = []
         for idx in range(1, 5):
             g = self.gimbals[idx - 1]
-            cmd_p, cmd_r = g.get_joint_commands()
+            cmd_p, cmd_r, cmd_th = g.get_commands()
             positions.extend([cmd_p, cmd_r])
+            base_thrust.append(cmd_th)
         js.position = positions
-        self.gimbals_pub.publish(js)
+        cmd.base_thrust = base_thrust
 
-        # 3) Publish /dragon/four_axes/command (FourAxisCommand)
-        #    Use params so you can set them dynamically via rosparam/launch.
-        cmd = FourAxisCommand()
-        cmd.angles = self._get_param_vec("~four_axes/target_angles", 3, 0.0)  # [roll, pitch, yaw] (rad)
-        cmd.body_rates = self._get_param_vec("~four_axes/target_body_rates", 3, 0.0)  # [p, q, r] (rad/s)
-        cmd.base_thrust = self._get_param_list("~four_axes/base_thrust", [0.0, 0.0, 0.0, 0.0])  # N (len may vary)
-        self.four_axes_pub.publish(cmd)
+        js.header.stamp = rospy.Time.now()
+        # self.gimbals_pub.publish(js)
+        # self.four_axes_pub.publish(cmd)
 
     # -- Helpers --
 
