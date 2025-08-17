@@ -20,7 +20,6 @@ class DistributedPIDController:
         self.ns_robot = rospy.get_param("~robot_ns", "dragon")
         self.world_frame = rospy.get_param("~world_frame", "world")
         self.rate_hz = rospy.get_param("~rate", 100.0)
-        self.use_pid = rospy.get_param("~use_pid", True)
 
         # TF
         self.tf_buffer = tf2_ros.Buffer()
@@ -89,12 +88,20 @@ class DistributedPIDController:
             dt = 1.0 / self.rate_hz
         self._last_time = now
 
+        # reference:
+        takeoff_height = rospy.get_param(self.ns_robot + "/navigation/takeoff_height", 0.5)
+        ref_pos_link1 = [0.21, 0.01, takeoff_height]
+        ref_pos_link2 = [0.48, 0.22, takeoff_height]
+        ref_pos_link3 = [0.26, 0.48, takeoff_height]
+        ref_pos_link4 = [0.00, 0.27, takeoff_height]
+        ref_pos = [ref_pos_link1, ref_pos_link2, ref_pos_link3, ref_pos_link4]
+
         # 1) Update TFs and compute commands for each gimbal
-        for g in self.gimbals:
+        for i, g in enumerate(self.gimbals):
             ok = g.update_from_tf(timeout=0.05)
             if not ok:
                 rospy.logwarn_throttle(2.0, "[DistributedPID] TF not ready for %s", g.gimbal_pitch_module_frame)
-            g.compute_command(dt)
+            g.compute_command(dt, ref_pos[i])
 
         # 2) Publish /dragon/gimbals_ctrl (JointState) and /dragon/four_axes/command (FourAxisCommand)
         js = JointState()

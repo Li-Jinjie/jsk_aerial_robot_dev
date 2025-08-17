@@ -49,4 +49,4 @@ class PIDController:
         # Clamp
         if abs(u) > self.out_limit:
             u = math.copysign(self.out_limit, u)
-        return u + self.offset
+        return u
