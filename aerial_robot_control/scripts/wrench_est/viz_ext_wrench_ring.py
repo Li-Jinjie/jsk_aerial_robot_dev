@@ -25,9 +25,10 @@ class RingMarker:
             rospy.get_namespace() + "ext_wrench_est/viz_ring", Marker, queue_size=1, latch=True
         )
         rospy.Subscriber(rospy.get_namespace() + "ext_wrench_est/value", WrenchStamped, self.wrench_callback)
+        self.wrench_msg = WrenchStamped()  # Placeholder for the latest wrench message
 
-        # Cache the most recent colour (start as green / no disturbance)
-        self.colour = (0.0, 1.0, 0.0, 0.8)
+        # Cache the most recent color (start as red / STOPPED mode)
+        self.color = (1.0, 0.0, 0.0, 0.8)
 
         # Pre-compute ring geometry once
         self.ring_points = self._compute_ring_points()
@@ -35,12 +36,15 @@ class RingMarker:
         # Publish continuously so late-starting RViz instances still see the ring
         rate = rospy.Rate(20)  # [Hz]
         while not rospy.is_shutdown():
-            self.publish_ring()
+            self._modify_color()
+            self._publish_ring()
             rate.sleep()
 
     # ------------------------- Callbacks ------------------------- #
     def wrench_callback(self, msg: WrenchStamped):
-        """Update ring colour according to force magnitude."""
+        self.wrench_msg = msg
+
+    def _modify_color(self):
         # # TODO: modify this part
         # f = msg.wrench.force
         # mag = math.sqrt(f.x**2 + f.y**2 + f.z**2)
@@ -61,10 +65,10 @@ class RingMarker:
             g = 1.0
         else:
             r, g, b = 1.0, 1.0, 1.0
-        self.colour = (r, g, b, a)
+        self.color = (r, g, b, a)
 
     # ----------------------- Publishing -------------------------- #
-    def publish_ring(self):
+    def _publish_ring(self):
         marker = Marker()
         marker.header.frame_id = rospy.get_namespace().strip("/") + "/cog"
         marker.header.stamp = rospy.Time.now()
@@ -77,7 +81,7 @@ class RingMarker:
         marker.pose.orientation.w = 1.0
 
         marker.scale.x = self.line_width
-        marker.color.r, marker.color.g, marker.color.b, marker.color.a = self.colour
+        marker.color.r, marker.color.g, marker.color.b, marker.color.a = self.color
         marker.points = self.ring_points
 
         self.marker_pub.publish(marker)
