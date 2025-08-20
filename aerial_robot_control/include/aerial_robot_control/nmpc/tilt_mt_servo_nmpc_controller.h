@@ -123,10 +123,10 @@ protected:
   double vel_max_, vel_min_, vel_limit_takeoff_;
 
   /* initialize() */
-  virtual void initPlugins() {};
-  virtual void initGeneralParams();
-  virtual void initNMPCCostW();
-  virtual void initNMPCConstraints();
+  void initGeneralParams() override;
+  void initNMPCCostW() override;
+  void initNMPCConstraints() override;
+
   void setControlMode();
   virtual inline void initActuatorStates()
   {
@@ -137,11 +137,11 @@ protected:
   virtual void resetPlugins() {};
 
   /* activate() */
+  void initNMPCParams() override;
+
   virtual void initAllocMat();
-  virtual void initNMPCParams();
   void updateInertialParams();
   std::vector<double> PhysToNMPCParams() const;
-
   void modifyVelConstraints(double vel_min, double vel_max) const;
 
   /* update() */
@@ -149,8 +149,9 @@ protected:
   void sendCmd() override;
 
   // controlCore()
-  void prepareNMPCRef();
-  virtual void prepareNMPCParams();
+  void prepareNMPCRef() override;
+  void prepareNMPCParams() override;
+
   void setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i, const tf::Vector3& ref_acc_i,
                   const tf::Quaternion& ref_quat_ib, const tf::Vector3& ref_omega_b, const tf::Vector3& ref_ang_acc_b,
                   const int& horizon_idx);
