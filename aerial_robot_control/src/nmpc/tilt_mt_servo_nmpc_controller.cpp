@@ -14,18 +14,6 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
 {
   BaseMPC::initialize(nh, nhp, robot_model, estimator, navigator, ctrl_loop_du);
 
-  /* init plugins */
-  initPlugins();
-
-  /* init general parameters */
-  initGeneralParams();
-
-  /* init cost weight parameters */
-  initNMPCCostW();
-
-  /* init constraints */
-  initNMPCConstraints();
-
   /* init dynamic reconfigure */
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
@@ -71,11 +59,8 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
 
 void nmpc::TiltMtServoNMPC::activate()
 {
-  ControlBase::activate();
-
   initAllocMat();
   updateInertialParams();
-  initNMPCParams();
 
   if (is_print_phys_params_)
     printPhysicalParams();
@@ -89,6 +74,8 @@ void nmpc::TiltMtServoNMPC::activate()
   spinal::FlightConfigCmd flight_config_cmd;
   flight_config_cmd.cmd = spinal::FlightConfigCmd::INTEGRATION_CONTROL_ON_CMD;
   pub_flight_config_cmd_spinal_.publish(flight_config_cmd);
+
+  BaseMPC::activate();
 }
 
 bool nmpc::TiltMtServoNMPC::update()
@@ -104,7 +91,7 @@ bool nmpc::TiltMtServoNMPC::update()
 
 void nmpc::TiltMtServoNMPC::reset()
 {
-  ControlBase::reset();
+  BaseMPC::reset();
 
   resetPlugins();
 

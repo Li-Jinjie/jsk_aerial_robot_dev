@@ -21,6 +21,62 @@ namespace nmpc
 class BaseMPC : public ControlBase
 {
 public:
+  BaseMPC() = default;
+  ~BaseMPC() override = default;
+
+  void initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
+                  boost::shared_ptr<aerial_robot_model::RobotModel> robot_model,
+                  boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
+                  boost::shared_ptr<aerial_robot_navigation::BaseNavigator> navigator, double ctrl_loop_du) override
+  {
+    ControlBase::initialize(nh, nhp, robot_model, estimator, navigator, ctrl_loop_du);
+
+    /* init mpc solver plugin */
+    mpc_solver_loader_ptr_ =
+        boost::make_shared<pluginlib::ClassLoader<aerial_robot_control::mpc_solver::BaseMPCSolver>>(
+            "aerial_robot_control", "aerial_robot_control::mpc_solver::BaseMPCSolver");
+
+    try
+    {
+      // 1. read the plugin name from the parameter server
+      std::string mpc_solver_name;
+      if (!nh_.getParam("mpc_solver_name", mpc_solver_name))
+      {
+        ROS_ERROR(
+            "mpc_solver_name for mpc_solver_plugin is not loaded. "
+            "You must specify the mpc_solver_name in the launch file.");
+        return;
+      }
+
+      // 2. load the plugin
+      mpc_solver_ptr_ = mpc_solver_loader_ptr_->createInstance(mpc_solver_name);
+      mpc_solver_ptr_->initialize();
+      ROS_INFO("load mpc solver plugin: %s", mpc_solver_name.c_str());
+    }
+    catch (pluginlib::PluginlibException& ex)
+    {
+      ROS_ERROR("mpc_solver_plugin: The plugin failed to load for some reason. Error: %s", ex.what());
+    }
+
+    /* init plugins */
+    initPlugins();
+
+    /* init general parameters */
+    initGeneralParams();
+
+    /* init cost weight parameters */
+    initNMPCCostW();
+
+    /* init constraints */
+    initNMPCConstraints();
+  }
+
+  void activate() override
+  {
+    initNMPCParams();
+    ControlBase::activate();
+  }
+
   bool update() override
   {
     ros::Time now = ros::Time::now();
@@ -62,42 +118,10 @@ protected:
   boost::shared_ptr<aerial_robot_control::mpc_solver::BaseMPCSolver> mpc_solver_ptr_;
 
   /* initialize() */
-  inline void initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
-                         boost::shared_ptr<aerial_robot_model::RobotModel> robot_model,
-                         boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
-                         boost::shared_ptr<aerial_robot_navigation::BaseNavigator> navigator,
-                         double ctrl_loop_du) override
-  {
-    ControlBase::initialize(nh, nhp, robot_model, estimator, navigator, ctrl_loop_du);
-
-    /* init mpc solver plugin */
-    mpc_solver_loader_ptr_ =
-        boost::make_shared<pluginlib::ClassLoader<aerial_robot_control::mpc_solver::BaseMPCSolver>>(
-            "aerial_robot_control", "aerial_robot_control::mpc_solver::BaseMPCSolver");
-
-    try
-    {
-      // 1. read the plugin name from the parameter server
-      std::string mpc_solver_name;
-      if (!nh_.getParam("mpc_solver_name", mpc_solver_name))
-      {
-        ROS_ERROR(
-            "mpc_solver_name for mpc_solver_plugin is not loaded. "
-            "You must specify the mpc_solver_name in the launch file.");
-        return;
-      }
-
-      // 2. load the plugin
-      mpc_solver_ptr_ = mpc_solver_loader_ptr_->createInstance(mpc_solver_name);
-      mpc_solver_ptr_->initialize();
-      ROS_INFO("load mpc solver plugin: %s", mpc_solver_name.c_str());
-    }
-    catch (pluginlib::PluginlibException& ex)
-    {
-      ROS_ERROR("mpc_solver_plugin: The plugin failed to load for some reason. Error: %s", ex.what());
-    }
-  }
-
+  virtual void initPlugins() {};
+  virtual void initGeneralParams() = 0;
+  virtual void initNMPCCostW() = 0;
+  virtual void initNMPCConstraints() = 0;
   // define the ROS msg related to MPC
   inline static void initPredXU(aerial_robot_msgs::PredXU& x_u, int nn, int nx, int nu)
   {
@@ -129,8 +153,14 @@ protected:
     std::fill(x_u.u.data.begin(), x_u.u.data.end(), 0.0);
   }
 
+  /* activate() */
+  virtual void initNMPCParams() = 0;
+
   /* update() */
   // 1. set reference for NMPC
+  virtual void prepareNMPCRef() = 0;
+  virtual void prepareNMPCParams() {};
+
   virtual void callbackSetRefXU(const aerial_robot_msgs::PredXUConstPtr& msg) = 0;
   static void rosXU2VecXU(const aerial_robot_msgs::PredXU& x_u, std::vector<std::vector<double>>& x_vec,
                           std::vector<std::vector<double>>& u_vec)
