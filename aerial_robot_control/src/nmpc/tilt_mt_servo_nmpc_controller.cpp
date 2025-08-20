@@ -162,6 +162,11 @@ void nmpc::TiltMtServoNMPC::initGeneralParams()
   getParam<double>(nmpc_nh, "T_step", t_nmpc_step_, 0.1);
   getParam<double>(nmpc_nh, "T_horizon", t_nmpc_horizon_, 2.0);
 
+  if (t_nmpc_samp_ != 1 / ctrl_loop_du_)
+    throw std::runtime_error(
+        "The NMPC sampling time T_samp is not equal to the control loop time! Please set T_step to 1/ctrl_loop_du_ in "
+        "the config.");
+
   getParam<bool>(nmpc_nh, "is_attitude_ctrl", is_attitude_ctrl_, true);
   getParam<bool>(nmpc_nh, "is_body_rate_ctrl", is_body_rate_ctrl_, false);
   getParam<bool>(nmpc_nh, "is_print_phys_params", is_print_phys_params_, false);
