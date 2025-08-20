@@ -109,7 +109,7 @@ void nmpc::TiltMtServoNMPC::reset()
   resetPlugins();
 
   // reset x_u_ref_
-  std::vector<double> x_vec_ee = meas2VecX(true);
+  std::vector<double> x_vec_ee = meas2VecX(robot_model_->hasFrame("ee_contact"));
   std::vector<double> u_vec(mpc_solver_ptr_->NU_, 0);
 
   int &NX = mpc_solver_ptr_->NX_, &NU = mpc_solver_ptr_->NU_, &NN = mpc_solver_ptr_->NN_;
@@ -366,7 +366,7 @@ void nmpc::TiltMtServoNMPC::initNMPCParams()
 
   int idx;
   // TODO: this condition is temporary for drones that don't pass in phys param (bi, tri, fix-qd)
-  if (mpc_solver_ptr_->NP_ > 4 + 6)
+  if (mpc_solver_ptr_->NP_ > 4 + 6)  // 4 for quaternion, 6 for disturbances
   {
     ROS_INFO("Set physical parameters for NMPC solver");
 
@@ -462,14 +462,17 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
   phys_p[idx] = t_servo_;
   idx++;
 
-  std::vector<double> contact_frame_p, contact_frame_q;
-  robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
+  if (robot_model_->hasFrame("ee_contact"))
+  {
+    std::vector<double> contact_frame_p, contact_frame_q;
+    robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
 
-  std::copy(contact_frame_p.begin(), contact_frame_p.end(), phys_p.begin() + idx);
-  idx += static_cast<int>(contact_frame_p.size());
+    std::copy(contact_frame_p.begin(), contact_frame_p.end(), phys_p.begin() + idx);
+    idx += static_cast<int>(contact_frame_p.size());
 
-  std::copy(contact_frame_q.begin(), contact_frame_q.end(), phys_p.begin() + idx);
-  idx += static_cast<int>(contact_frame_q.size());
+    std::copy(contact_frame_q.begin(), contact_frame_q.end(), phys_p.begin() + idx);
+    idx += static_cast<int>(contact_frame_q.size());
+  }
 
   return phys_p;
 }
@@ -590,15 +593,24 @@ void nmpc::TiltMtServoNMPC::prepareNMPCRef()
   target_cog_quat.setRPY(target_cog_rpy.x(), target_cog_rpy.y(), target_cog_rpy.z());
   tf::Vector3 target_cog_omega = navigator_->getTargetOmega();
 
-  // make conversion
-  tf::Vector3 target_ee_pos_in_w, target_ee_vel_in_w, target_ee_omega;
-  tf::Quaternion target_ee_quat;
-  robot_model_->convertFromCoGToEEContact(target_cog_pos_in_w, target_cog_vel_in_w, target_cog_quat, target_cog_omega,
-                                          target_ee_pos_in_w, target_ee_vel_in_w, target_ee_quat, target_ee_omega);
+  if (robot_model_->hasFrame("ee_contact"))
+  {
+    // make conversion
+    tf::Vector3 target_ee_pos_in_w, target_ee_vel_in_w, target_ee_omega;
+    tf::Quaternion target_ee_quat;
+    robot_model_->convertFromCoGToEEContact(target_cog_pos_in_w, target_cog_vel_in_w, target_cog_quat, target_cog_omega,
+                                            target_ee_pos_in_w, target_ee_vel_in_w, target_ee_quat, target_ee_omega);
 
-  // set the reference state and control input
-  setXrUrRef(target_ee_pos_in_w, target_ee_vel_in_w, tf::Vector3(0, 0, 0), target_ee_quat, target_ee_omega,
-             tf::Vector3(0, 0, 0), -1);
+    // set the reference state and control input
+    setXrUrRef(target_ee_pos_in_w, target_ee_vel_in_w, tf::Vector3(0, 0, 0), target_ee_quat, target_ee_omega,
+               tf::Vector3(0, 0, 0), -1);
+  }
+  else
+  {
+    setXrUrRef(target_cog_pos_in_w, target_cog_vel_in_w, tf::Vector3(0, 0, 0), target_cog_quat, target_cog_omega,
+               tf::Vector3(0, 0, 0), -1);
+  }
+
   rosXU2VecXU(x_u_ref_, mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_);
   mpc_solver_ptr_->setReference(mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_, true);
 }
