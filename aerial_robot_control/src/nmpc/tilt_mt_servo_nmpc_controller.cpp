@@ -45,7 +45,6 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   pub_viz_ref_ = nh_.advertise<geometry_msgs::PoseArray>("nmpc/viz_ref", 1);
   pub_flight_cmd_ = nh_.advertise<spinal::FourAxisCommand>("four_axes/command", 1);
   pub_gimbal_control_ = nh_.advertise<sensor_msgs::JointState>("gimbals_ctrl", 1);
-  pub_flight_config_cmd_spinal_ = nh_.advertise<spinal::FlightConfigCmd>("flight_config_cmd", 1);
 
   /* services */
   srv_set_control_mode_ = nh_.serviceClient<spinal::SetControlMode>("set_control_mode");
@@ -84,11 +83,7 @@ void nmpc::TiltMtServoNMPC::activate()
   modifyVelConstraints(-vel_limit_takeoff_, vel_limit_takeoff_);
   has_restored_vel_ = false;  // reset the flag, so that we can restore the velocity after hovering
 
-  /* also for some commands that should be sent after takeoff */
-  // enable imu sending, only works in simulation. TODO: check its compatibility with real robot
-  spinal::FlightConfigCmd flight_config_cmd;
-  flight_config_cmd.cmd = spinal::FlightConfigCmd::INTEGRATION_CONTROL_ON_CMD;
-  pub_flight_config_cmd_spinal_.publish(flight_config_cmd);
+  BaseMPC::activate();
 }
 
 bool nmpc::TiltMtServoNMPC::update()
