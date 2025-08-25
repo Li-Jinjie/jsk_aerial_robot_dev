@@ -24,6 +24,7 @@
 #include "aerial_robot_msgs/FixRotor.h"
 #include "spinal/FourAxisCommand.h"
 #include "spinal/SetControlMode.h"
+#include "spinal/FlightConfigCmd.h"
 #include "spinal/DesireCoord.h"
 
 /* action */
@@ -58,10 +59,11 @@ public:
 protected:
   ros::Timer tmr_viz_;
 
-  ros::Publisher pub_viz_pred_;        // for viz predictions
-  ros::Publisher pub_viz_ref_;         // for viz reference
-  ros::Publisher pub_flight_cmd_;      // for spinal
-  ros::Publisher pub_gimbal_control_;  // for gimbal control
+  ros::Publisher pub_viz_pred_;                  // for viz predictions
+  ros::Publisher pub_viz_ref_;                   // for viz reference
+  ros::Publisher pub_flight_cmd_;                // for spinal
+  ros::Publisher pub_gimbal_control_;            // for gimbal control
+  ros::Publisher pub_flight_config_cmd_spinal_;  // for spinal, enable the gyro measurement after the takeoff
 
   ros::ServiceClient srv_set_control_mode_;
   std::vector<boost::shared_ptr<NMPCControlDynamicConfig>> nmpc_reconf_servers_;
