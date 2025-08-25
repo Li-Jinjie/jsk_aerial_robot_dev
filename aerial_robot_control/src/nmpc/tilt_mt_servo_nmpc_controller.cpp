@@ -14,18 +14,6 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
 {
   BaseMPC::initialize(nh, nhp, robot_model, estimator, navigator, ctrl_loop_du);
 
-  /* init plugins */
-  initPlugins();
-
-  /* init general parameters */
-  initGeneralParams();
-
-  /* init cost weight parameters */
-  initNMPCCostW();
-
-  /* init constraints */
-  initNMPCConstraints();
-
   /* init dynamic reconfigure */
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
@@ -71,11 +59,8 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
 
 void nmpc::TiltMtServoNMPC::activate()
 {
-  ControlBase::activate();
-
   initAllocMat();
   updateInertialParams();
-  initNMPCParams();
 
   if (is_print_phys_params_)
     printPhysicalParams();
@@ -85,15 +70,17 @@ void nmpc::TiltMtServoNMPC::activate()
   has_restored_vel_ = false;  // reset the flag, so that we can restore the velocity after hovering
 
   /* also for some commands that should be sent after takeoff */
-  // enable imu sending, only works in simulation. TODO: check its compatibility with real robot
+  // enable imu sending, only works in simulation. Without this part, the IMU reading in Gazebo in incorrect.
   spinal::FlightConfigCmd flight_config_cmd;
   flight_config_cmd.cmd = spinal::FlightConfigCmd::INTEGRATION_CONTROL_ON_CMD;
   pub_flight_config_cmd_spinal_.publish(flight_config_cmd);
+
+  BaseMPC::activate();
 }
 
 bool nmpc::TiltMtServoNMPC::update()
 {
-  if (!ControlBase::update())
+  if (!BaseMPC::update())
     return false;
 
   this->controlCore();
@@ -104,12 +91,12 @@ bool nmpc::TiltMtServoNMPC::update()
 
 void nmpc::TiltMtServoNMPC::reset()
 {
-  ControlBase::reset();
+  BaseMPC::reset();
 
   resetPlugins();
 
   // reset x_u_ref_
-  std::vector<double> x_vec_ee = meas2VecX(true);
+  std::vector<double> x_vec_ee = meas2VecX(robot_model_->hasFrame("ee_contact"));
   std::vector<double> u_vec(mpc_solver_ptr_->NU_, 0);
 
   int &NX = mpc_solver_ptr_->NX_, &NU = mpc_solver_ptr_->NU_, &NN = mpc_solver_ptr_->NN_;
@@ -161,6 +148,11 @@ void nmpc::TiltMtServoNMPC::initGeneralParams()
   getParam<double>(nmpc_nh, "T_samp", t_nmpc_samp_, 0.025);
   getParam<double>(nmpc_nh, "T_step", t_nmpc_step_, 0.1);
   getParam<double>(nmpc_nh, "T_horizon", t_nmpc_horizon_, 2.0);
+
+  if (t_nmpc_samp_ != 1 / ctrl_loop_du_)
+    throw std::runtime_error(
+        "The NMPC sampling time T_samp is not equal to the control loop time! Please set T_step to 1/ctrl_loop_du_ in "
+        "the config.");
 
   getParam<bool>(nmpc_nh, "is_attitude_ctrl", is_attitude_ctrl_, true);
   getParam<bool>(nmpc_nh, "is_body_rate_ctrl", is_body_rate_ctrl_, false);
@@ -366,7 +358,7 @@ void nmpc::TiltMtServoNMPC::initNMPCParams()
 
   int idx;
   // TODO: this condition is temporary for drones that don't pass in phys param (bi, tri, fix-qd)
-  if (mpc_solver_ptr_->NP_ > 4 + 6)
+  if (mpc_solver_ptr_->NP_ > 4 + 6)  // 4 for quaternion, 6 for disturbances
   {
     ROS_INFO("Set physical parameters for NMPC solver");
 
@@ -462,14 +454,17 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
   phys_p[idx] = t_servo_;
   idx++;
 
-  std::vector<double> contact_frame_p, contact_frame_q;
-  robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
+  if (robot_model_->hasFrame("ee_contact"))
+  {
+    std::vector<double> contact_frame_p, contact_frame_q;
+    robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
 
-  std::copy(contact_frame_p.begin(), contact_frame_p.end(), phys_p.begin() + idx);
-  idx += static_cast<int>(contact_frame_p.size());
+    std::copy(contact_frame_p.begin(), contact_frame_p.end(), phys_p.begin() + idx);
+    idx += static_cast<int>(contact_frame_p.size());
 
-  std::copy(contact_frame_q.begin(), contact_frame_q.end(), phys_p.begin() + idx);
-  idx += static_cast<int>(contact_frame_q.size());
+    std::copy(contact_frame_q.begin(), contact_frame_q.end(), phys_p.begin() + idx);
+    idx += static_cast<int>(contact_frame_q.size());
+  }
 
   return phys_p;
 }
@@ -590,15 +585,24 @@ void nmpc::TiltMtServoNMPC::prepareNMPCRef()
   target_cog_quat.setRPY(target_cog_rpy.x(), target_cog_rpy.y(), target_cog_rpy.z());
   tf::Vector3 target_cog_omega = navigator_->getTargetOmega();
 
-  // make conversion
-  tf::Vector3 target_ee_pos_in_w, target_ee_vel_in_w, target_ee_omega;
-  tf::Quaternion target_ee_quat;
-  robot_model_->convertFromCoGToEEContact(target_cog_pos_in_w, target_cog_vel_in_w, target_cog_quat, target_cog_omega,
-                                          target_ee_pos_in_w, target_ee_vel_in_w, target_ee_quat, target_ee_omega);
+  if (robot_model_->hasFrame("ee_contact"))
+  {
+    // make conversion
+    tf::Vector3 target_ee_pos_in_w, target_ee_vel_in_w, target_ee_omega;
+    tf::Quaternion target_ee_quat;
+    robot_model_->convertFromCoGToEEContact(target_cog_pos_in_w, target_cog_vel_in_w, target_cog_quat, target_cog_omega,
+                                            target_ee_pos_in_w, target_ee_vel_in_w, target_ee_quat, target_ee_omega);
 
-  // set the reference state and control input
-  setXrUrRef(target_ee_pos_in_w, target_ee_vel_in_w, tf::Vector3(0, 0, 0), target_ee_quat, target_ee_omega,
-             tf::Vector3(0, 0, 0), -1);
+    // set the reference state and control input
+    setXrUrRef(target_ee_pos_in_w, target_ee_vel_in_w, tf::Vector3(0, 0, 0), target_ee_quat, target_ee_omega,
+               tf::Vector3(0, 0, 0), -1);
+  }
+  else
+  {
+    setXrUrRef(target_cog_pos_in_w, target_cog_vel_in_w, tf::Vector3(0, 0, 0), target_cog_quat, target_cog_omega,
+               tf::Vector3(0, 0, 0), -1);
+  }
+
   rosXU2VecXU(x_u_ref_, mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_);
   mpc_solver_ptr_->setReference(mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_, true);
 }
