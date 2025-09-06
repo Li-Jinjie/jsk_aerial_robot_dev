@@ -7,12 +7,12 @@ import argparse
 from matplotlib.lines import lineStyles
 
 from utils import unwrap_angle_sequence, calculate_rmse, quat2euler, calculate_quat_error, interp_quat
-from utils import matlab_yellow, matlab_green, matlab_orange
+from utils import matlab_yellow, matlab_green, matlab_orange, matlab_blue
 
 legend_alpha = 0.5
 
 
-def main(file_path, type):
+def main(file_path, type, if_hand_teleop):
     # Load the data from csv file
     data = pd.read_csv(file_path)
 
@@ -249,6 +249,12 @@ def main(file_path, type):
         color_real = "#FF2C00"
         color_cog = "#f29619"  # the orange in scienceplots
 
+        inside_valve_t_start = 13.7
+        inside_valve_t_stop = 58.9
+
+        con_rot_t_start = 39.0
+        con_rot_t_stop = 68.6
+
         # --------------------------------
         plt.subplot(4, 2, 1)
         t_ref = np.array(data_xyz_ref["__time"]) - t_bias
@@ -262,6 +268,9 @@ def main(file_path, type):
         t = np.array(data_xyz["__time"]) - t_bias
         x = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/x"])
         plt.plot(t, x, label="ee", color=color_real)
+
+        if if_hand_teleop:
+            plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
 
         plt.legend(framealpha=legend_alpha, ncol=2)
         plt.ylabel("X [m]", fontsize=label_size)
@@ -294,6 +303,12 @@ def main(file_path, type):
 
         plt.ylabel("Roll [$^\\circ$]", fontsize=label_size)
 
+        if if_hand_teleop:
+            plt.axvspan(con_rot_t_start, con_rot_t_stop, facecolor=matlab_green, alpha=0.2)
+            plt.axvspan(
+                con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
+            )
+
         # calculate RMSE
         rmse_roll = calculate_rmse(t, roll, t_ref, roll_ref)
         print(f"RMSE Roll [rad]: {rmse_roll}")
@@ -313,6 +328,9 @@ def main(file_path, type):
         y = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/y"])
         plt.plot(t, y, label="ee", color=color_real)
         plt.ylabel("Y [m]", fontsize=label_size)
+
+        if if_hand_teleop:
+            plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
 
         # plt.legend(framealpha=legend_alpha, ncol=2)
 
@@ -335,6 +353,12 @@ def main(file_path, type):
         plt.plot(t, pitch * 180 / np.pi, label="real", color=color_real)
         plt.ylabel("Pitch [$^\\circ$]", fontsize=label_size)
 
+        if if_hand_teleop:
+            plt.axvspan(con_rot_t_start, con_rot_t_stop, facecolor=matlab_green, alpha=0.2)
+            plt.axvspan(
+                con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
+            )
+
         # calculate RMSE
         rmse_pitch = calculate_rmse(t, pitch, t_ref, pitch_ref)
         print(f"RMSE Pitch [rad]: {rmse_pitch}")
@@ -356,6 +380,9 @@ def main(file_path, type):
         plt.plot(t, z, label="Z", color=color_real)
         plt.ylabel("Z [m]", fontsize=label_size)
 
+        if if_hand_teleop:
+            plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
+
         # calculate RMSE
         rmse_z = calculate_rmse(t, z, t_ref, z_ref)
         print(f"RMSE Z [m]: {rmse_z}")
@@ -375,6 +402,12 @@ def main(file_path, type):
         plt.plot(t, yaw * 180 / np.pi, label="real", color=color_real)
         plt.ylabel("Yaw [$^\\circ$]", fontsize=label_size)
 
+        if if_hand_teleop:
+            plt.axvspan(con_rot_t_start, con_rot_t_stop, facecolor=matlab_green, alpha=0.2)
+            plt.axvspan(
+                con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
+            )
+
         # calculate RMSE
         rmse_yaw = calculate_rmse(t, yaw, t_ref, yaw_ref, is_yaw=True)
         print(f"RMSE Yaw [rad]: {rmse_yaw}")
@@ -393,7 +426,7 @@ def main(file_path, type):
         plt.plot(t, thrust4, label="$f_{c4}$", linestyle=":")
         plt.ylabel("Thrust Cmd [N]", fontsize=label_size)
         plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="lower right", ncol=2)
+        plt.legend(framealpha=legend_alpha, loc="lower left", ncol=2)
 
         # --------------------------------
         plt.subplot(4, 2, 8)
@@ -409,7 +442,7 @@ def main(file_path, type):
 
         plt.ylabel("Servo Cmd [$^\\circ$]", fontsize=label_size)
         plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="lower right", ncol=2)
+        plt.legend(framealpha=legend_alpha, loc="center left", ncol=2)
 
         # --------------------------------
         plt.tight_layout()
@@ -808,8 +841,9 @@ if __name__ == "__main__":
         description="Plot the trajectory. Please use plotjuggler to generate the csv file."
     )
     parser.add_argument("file_path", type=str, help="The file name of the trajectory")
-    parser.add_argument("--type", type=int, help="The type of the trajectory")
+    parser.add_argument("-t", "--type", type=int, help="The type of the trajectory")
+    parser.add_argument("-o", "--hand_teleop", action="store_true", help="Whether the trajectory is from hand teleop")
 
     args = parser.parse_args()
 
-    main(args.file_path, args.type)
+    main(args.file_path, args.type, args.hand_teleop)
