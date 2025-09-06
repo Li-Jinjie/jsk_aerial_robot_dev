@@ -150,12 +150,12 @@ def main(file_path, plot_type):
         # --------------- Wrench -----------------
         keys = ["fx", "tx", "fy", "ty", "fz", "tz"]
         ylabels = [
-            r"${}^B\hat{f}_x$ [N]",
-            r"${}^B\hat{\tau}_x$ [N$\cdot$m]",
-            r"${}^B\hat{f}_y$ [N]",
-            r"${}^B\hat{\tau}_y$ [N$\cdot$m]",
-            r"${}^B\hat{f}_z$ [N]",
-            r"${}^B\hat{\tau}_z$ [N$\cdot$m]",
+            r"${}^B\hat{f}_{de,x}$ [N]",
+            r"${}^B\hat{\tau}_{de,x}$ [N$\cdot$m]",
+            r"${}^B\hat{f}_{de,y}$ [N]",
+            r"${}^B\hat{\tau}_{de,y}$ [N$\cdot$m]",
+            r"${}^B\hat{f}_{de,z}$ [N]",
+            r"${}^B\hat{\tau}_{de,z}$ [N$\cdot$m]",
         ]
 
         for i, (key, ylabel) in enumerate(zip(keys, ylabels)):

@@ -751,7 +751,7 @@ def main(file_path, type, if_hand_teleop):
         plt.plot(t, fz_iterm, label="$f_{z}$", linestyle="-")
 
         plt.legend(framealpha=legend_alpha)
-        plt.ylabel("${^W\\boldsymbol{f}_d}$ [N]", fontsize=label_size)
+        plt.ylabel("${^W\\boldsymbol{f}_{dm}}$ [N]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 4)
@@ -765,7 +765,7 @@ def main(file_path, type, if_hand_teleop):
         plt.plot(t, torque_z_iterm, label="$\\tau_{z}$", linestyle="-")
 
         plt.legend(framealpha=legend_alpha)
-        plt.ylabel("${^B\\boldsymbol{\\tau}_d}$ [N$\cdot$m]", fontsize=label_size)
+        plt.ylabel("${^B\\boldsymbol{\\tau}_{dm}}$ [N$\cdot$m]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 5)
@@ -779,7 +779,7 @@ def main(file_path, type, if_hand_teleop):
         plt.plot(t, fz, label="$f_{z}$", linestyle="-")
 
         plt.legend(framealpha=legend_alpha)
-        plt.ylabel("${^W\hat{\\boldsymbol{f}}_{e,0}}$ [N]", fontsize=label_size)
+        plt.ylabel("${^B\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 6)
@@ -793,7 +793,7 @@ def main(file_path, type, if_hand_teleop):
         plt.plot(t, torque_z, label="$\\tau_{z}$", linestyle="-")
 
         plt.legend(framealpha=legend_alpha)
-        plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{e,0}}$ [N$\cdot$m]", fontsize=label_size)
+        plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{de,0}}$ [N$\cdot$m]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 7)
