@@ -111,6 +111,9 @@ def main(file_path, type):
         sequence="ZYX",
         degrees=False,
     )
+    data_euler_ref["roll"] = unwrap_angle_sequence(data_euler_ref["roll"].to_numpy())
+    data_euler_ref["pitch"] = unwrap_angle_sequence(data_euler_ref["pitch"].to_numpy())
+    data_euler_ref["yaw"] = unwrap_angle_sequence(data_euler_ref["yaw"].to_numpy())
 
     # interpolate the real quaternion date
     t_ref = np.array(data_qwxyz_ref["__time"])
@@ -237,18 +240,15 @@ def main(file_path, type):
         plt.subplot(4, 2, 2)
         t_ref = np.array(data_euler_ref["__time"]) - t_bias
         roll_ref = np.array(data_euler_ref["roll"])
-        roll_ref_wrap = unwrap_angle_sequence(roll_ref)
-        plt.plot(t_ref, roll_ref_wrap * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
+        plt.plot(t_ref, roll_ref * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
 
         t_cog = np.array(data_euler_cog["__time"]) - t_bias
         roll_cog = np.array(data_euler_cog["roll"])
-        roll_cog_wrap = unwrap_angle_sequence(roll_cog)
-        plt.plot(t_cog, roll_cog_wrap * 180 / np.pi, label="cog", linestyle="-.", color=color_cog)
+        plt.plot(t_cog, roll_cog * 180 / np.pi, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_euler["__time"]) - t_bias
         roll = np.array(data_euler["roll"])
-        roll_wrap = unwrap_angle_sequence(roll)
-        plt.plot(t, roll_wrap * 180 / np.pi, label="real", color=color_real)
+        plt.plot(t, roll * 180 / np.pi, label="real", color=color_real)
 
         plt.ylabel("Roll [$^\\circ$]", fontsize=label_size)
 
@@ -282,18 +282,15 @@ def main(file_path, type):
         plt.subplot(4, 2, 4)
         t_ref = np.array(data_euler_ref["__time"]) - t_bias
         pitch_ref = np.array(data_euler_ref["pitch"])
-        pitch_ref_wrap = unwrap_angle_sequence(pitch_ref)
-        plt.plot(t_ref, pitch_ref_wrap * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
+        plt.plot(t_ref, pitch_ref * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
 
         t_cog = np.array(data_euler_cog["__time"]) - t_bias
         pitch_cog = np.array(data_euler_cog["pitch"])
-        pitch_cog_wrap = unwrap_angle_sequence(pitch_cog)
-        plt.plot(t_cog, pitch_cog_wrap * 180 / np.pi, label="cog", linestyle="-.", color=color_cog)
+        plt.plot(t_cog, pitch_cog * 180 / np.pi, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_euler["__time"]) - t_bias
         pitch = np.array(data_euler["pitch"])
-        pitch_wrap = unwrap_angle_sequence(pitch)
-        plt.plot(t, pitch_wrap * 180 / np.pi, label="real", color=color_real)
+        plt.plot(t, pitch * 180 / np.pi, label="real", color=color_real)
         plt.ylabel("Pitch [$^\\circ$]", fontsize=label_size)
 
         # calculate RMSE
@@ -325,18 +322,15 @@ def main(file_path, type):
         plt.subplot(4, 2, 6)
         t_ref = np.array(data_euler_ref["__time"]) - t_bias
         yaw_ref = np.array(data_euler_ref["yaw"])
-        yaw_ref = unwrap_angle_sequence(yaw_ref)
         plt.plot(t_ref, yaw_ref * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
 
         t_cog = np.array(data_euler_cog["__time"]) - t_bias
         yaw_cog = np.array(data_euler_cog["yaw"])
-        yaw_cog_wrap = unwrap_angle_sequence(yaw_cog)
-        plt.plot(t_cog, yaw_cog_wrap * 180 / np.pi, label="cog", linestyle="-.", color=color_cog)
+        plt.plot(t_cog, yaw_cog * 180 / np.pi, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_euler["__time"]) - t_bias
         yaw = np.array(data_euler["yaw"])
-        yaw_wrap = unwrap_angle_sequence(yaw)
-        plt.plot(t, yaw_wrap * 180 / np.pi, label="real", color=color_real)
+        plt.plot(t, yaw * 180 / np.pi, label="real", color=color_real)
         plt.ylabel("Yaw [$^\\circ$]", fontsize=label_size)
 
         # calculate RMSE
