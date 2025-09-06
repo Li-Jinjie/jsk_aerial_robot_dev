@@ -6,7 +6,8 @@ import argparse
 
 from matplotlib.lines import lineStyles
 
-from utils import unwrap_angle_sequence, calculate_rmse, quat2euler, calculate_quat_error
+from utils import unwrap_angle_sequence, calculate_rmse, quat2euler, calculate_quat_error, interp_quat
+from utils import matlab_yellow, matlab_green, matlab_orange
 
 legend_alpha = 0.5
 
@@ -17,6 +18,15 @@ def main(file_path, type):
 
     # ======= xyz =========
     data_xyz = data[
+        [
+            "__time",
+            "/beetle1/uav/ee_contact/odom/pose/pose/position/x",
+            "/beetle1/uav/ee_contact/odom/pose/pose/position/y",
+            "/beetle1/uav/ee_contact/odom/pose/pose/position/z",
+        ]
+    ]
+
+    data_xyz_cog = data[
         [
             "__time",
             "/beetle1/uav/cog/odom/pose/pose/position/x",
@@ -44,9 +54,20 @@ def main(file_path, type):
 
     data_xyz = data_xyz.dropna()
     data_xyz_ref = data_xyz_ref.dropna()
+    data_xyz_cog = data_xyz_cog.dropna()
 
     # ======= rpy =========
     data_qwxyz = data[
+        [
+            "__time",
+            "/beetle1/uav/ee_contact/odom/pose/pose/orientation/w",
+            "/beetle1/uav/ee_contact/odom/pose/pose/orientation/x",
+            "/beetle1/uav/ee_contact/odom/pose/pose/orientation/y",
+            "/beetle1/uav/ee_contact/odom/pose/pose/orientation/z",
+        ]
+    ]
+
+    data_qwxyz_cog = data[
         [
             "__time",
             "/beetle1/uav/cog/odom/pose/pose/orientation/w",
@@ -77,6 +98,7 @@ def main(file_path, type):
 
     data_qwxyz_ref = data_qwxyz_ref.dropna()
     data_qwxyz = data_qwxyz.dropna()
+    data_qwxyz_cog = data_qwxyz_cog.dropna()
 
     # convert to euler
     data_euler_ref = pd.DataFrame()
@@ -94,27 +116,14 @@ def main(file_path, type):
     t_ref = np.array(data_qwxyz_ref["__time"])
     t = np.array(data_qwxyz["__time"])
 
-    data_qwxyz_interp = pd.DataFrame()
-    data_qwxyz_interp["__time"] = t_ref
-    data_qwxyz_interp["/beetle1/uav/cog/odom/pose/pose/orientation/w"] = np.interp(
-        t_ref, t, data_qwxyz["/beetle1/uav/cog/odom/pose/pose/orientation/w"]
-    )
-    data_qwxyz_interp["/beetle1/uav/cog/odom/pose/pose/orientation/x"] = np.interp(
-        t_ref, t, data_qwxyz["/beetle1/uav/cog/odom/pose/pose/orientation/x"]
-    )
-    data_qwxyz_interp["/beetle1/uav/cog/odom/pose/pose/orientation/y"] = np.interp(
-        t_ref, t, data_qwxyz["/beetle1/uav/cog/odom/pose/pose/orientation/y"]
-    )
-    data_qwxyz_interp["/beetle1/uav/cog/odom/pose/pose/orientation/z"] = np.interp(
-        t_ref, t, data_qwxyz["/beetle1/uav/cog/odom/pose/pose/orientation/z"]
-    )
+    data_qwxyz_interp = interp_quat(t_ref, t, data_qwxyz, "/beetle1/uav/ee_contact/odom/pose/pose/orientation")
 
     # calculate the quaternion error
     ew, ex, ey, ez = calculate_quat_error(
-        data_qwxyz_interp["/beetle1/uav/cog/odom/pose/pose/orientation/w"],
-        data_qwxyz_interp["/beetle1/uav/cog/odom/pose/pose/orientation/x"],
-        data_qwxyz_interp["/beetle1/uav/cog/odom/pose/pose/orientation/y"],
-        data_qwxyz_interp["/beetle1/uav/cog/odom/pose/pose/orientation/z"],
+        data_qwxyz_interp["/beetle1/uav/ee_contact/odom/pose/pose/orientation/w"],
+        data_qwxyz_interp["/beetle1/uav/ee_contact/odom/pose/pose/orientation/x"],
+        data_qwxyz_interp["/beetle1/uav/ee_contact/odom/pose/pose/orientation/y"],
+        data_qwxyz_interp["/beetle1/uav/ee_contact/odom/pose/pose/orientation/z"],
         data_qwxyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/rotation/w"],
         data_qwxyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/rotation/x"],
         data_qwxyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/rotation/y"],
@@ -128,6 +137,28 @@ def main(file_path, type):
     data_euler["roll"] = e_roll.to_numpy() + data_euler_ref["roll"].to_numpy()
     data_euler["pitch"] = e_pitch.to_numpy() + data_euler_ref["pitch"].to_numpy()
     data_euler["yaw"] = e_yaw.to_numpy() + data_euler_ref["yaw"].to_numpy()
+
+    # cog euler
+    t_cog = np.array(data_qwxyz_cog["__time"])
+    data_qwxyz_cog_interp = interp_quat(t_ref, t_cog, data_qwxyz_cog, "/beetle1/uav/cog/odom/pose/pose/orientation")
+
+    ew_cog, ex_cog, ey_cog, ez_cog = calculate_quat_error(
+        data_qwxyz_cog_interp["/beetle1/uav/cog/odom/pose/pose/orientation/w"],
+        data_qwxyz_cog_interp["/beetle1/uav/cog/odom/pose/pose/orientation/x"],
+        data_qwxyz_cog_interp["/beetle1/uav/cog/odom/pose/pose/orientation/y"],
+        data_qwxyz_cog_interp["/beetle1/uav/cog/odom/pose/pose/orientation/z"],
+        data_qwxyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/rotation/w"],
+        data_qwxyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/rotation/x"],
+        data_qwxyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/rotation/y"],
+        data_qwxyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/rotation/z"],
+    )
+    e_roll_cog, e_pitch_cog, e_yaw_cog = quat2euler(ew_cog, ex_cog, ey_cog, ez_cog, sequence="ZYX", degrees=False)
+
+    data_euler_cog = pd.DataFrame()
+    data_euler_cog["__time"] = t_ref
+    data_euler_cog["roll"] = e_roll_cog.to_numpy() + data_euler_ref["roll"].to_numpy()
+    data_euler_cog["pitch"] = e_pitch_cog.to_numpy() + data_euler_ref["pitch"].to_numpy()
+    data_euler_cog["yaw"] = e_yaw_cog.to_numpy() + data_euler_ref["yaw"].to_numpy()
 
     # thrust_cmd
     data_thrust_cmd = data[
@@ -168,21 +199,26 @@ def main(file_path, type):
 
         fig = plt.figure(figsize=(7, 7))
 
-        t_bias = max(data_xyz["__time"].iloc[0], data_xyz_ref["__time"].iloc[0])
+        t_bias = max(data_xyz["__time"].iloc[0], data_xyz_ref["__time"].iloc[0], data_xyz_cog["__time"].iloc[0])
         color_ref = "#0C5DA5"
         color_real = "#FF2C00"
+        color_cog = "#f29619"  # the orange in scienceplots
 
         # --------------------------------
         plt.subplot(4, 2, 1)
         t_ref = np.array(data_xyz_ref["__time"]) - t_bias
         x_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/x"])
-        plt.plot(t_ref, x_ref, label="ref", linestyle="--", color=color_ref)
+        plt.plot(t_ref, x_ref, label="ref_ee", linestyle="--", color=color_ref)
+
+        t_cog = np.array(data_xyz_cog["__time"]) - t_bias
+        x_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/x"])
+        plt.plot(t_cog, x_cog, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_xyz["__time"]) - t_bias
-        x = np.array(data_xyz["/beetle1/uav/cog/odom/pose/pose/position/x"])
-        plt.plot(t, x, label="real", color=color_real)
+        x = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/x"])
+        plt.plot(t, x, label="ee", color=color_real)
 
-        plt.legend(framealpha=legend_alpha)
+        plt.legend(framealpha=legend_alpha, ncol=2)
         plt.ylabel("X [m]", fontsize=label_size)
 
         # # right Y-axis: error plot
@@ -201,13 +237,18 @@ def main(file_path, type):
         plt.subplot(4, 2, 2)
         t_ref = np.array(data_euler_ref["__time"]) - t_bias
         roll_ref = np.array(data_euler_ref["roll"])
-        roll_ref = unwrap_angle_sequence(roll_ref)
-        plt.plot(t_ref, roll_ref * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
+        roll_ref_wrap = unwrap_angle_sequence(roll_ref)
+        plt.plot(t_ref, roll_ref_wrap * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
+
+        t_cog = np.array(data_euler_cog["__time"]) - t_bias
+        roll_cog = np.array(data_euler_cog["roll"])
+        roll_cog_wrap = unwrap_angle_sequence(roll_cog)
+        plt.plot(t_cog, roll_cog_wrap * 180 / np.pi, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_euler["__time"]) - t_bias
         roll = np.array(data_euler["roll"])
-        roll = unwrap_angle_sequence(roll)
-        plt.plot(t, roll * 180 / np.pi, label="real", color=color_real)
+        roll_wrap = unwrap_angle_sequence(roll)
+        plt.plot(t, roll_wrap * 180 / np.pi, label="real", color=color_real)
 
         plt.ylabel("Roll [$^\\circ$]", fontsize=label_size)
 
@@ -220,12 +261,18 @@ def main(file_path, type):
         plt.subplot(4, 2, 3)
         t_ref = np.array(data_xyz_ref["__time"]) - t_bias
         y_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/y"])
-        plt.plot(t_ref, y_ref, label="ref", linestyle="--", color=color_ref)
+        plt.plot(t_ref, y_ref, label="ref_ee", linestyle="--", color=color_ref)
+
+        t_cog = np.array(data_xyz_cog["__time"]) - t_bias
+        y_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/y"])
+        plt.plot(t_cog, y_cog, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_xyz["__time"]) - t_bias
-        y = np.array(data_xyz["/beetle1/uav/cog/odom/pose/pose/position/y"])
-        plt.plot(t, y, label="Y", color=color_real)
+        y = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/y"])
+        plt.plot(t, y, label="ee", color=color_real)
         plt.ylabel("Y [m]", fontsize=label_size)
+
+        # plt.legend(framealpha=legend_alpha, ncol=2)
 
         # calculate RMSE
         rmse_y = calculate_rmse(t, y, t_ref, y_ref)
@@ -235,13 +282,18 @@ def main(file_path, type):
         plt.subplot(4, 2, 4)
         t_ref = np.array(data_euler_ref["__time"]) - t_bias
         pitch_ref = np.array(data_euler_ref["pitch"])
-        pitch_ref = unwrap_angle_sequence(pitch_ref)
-        plt.plot(t_ref, pitch_ref * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
+        pitch_ref_wrap = unwrap_angle_sequence(pitch_ref)
+        plt.plot(t_ref, pitch_ref_wrap * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
+
+        t_cog = np.array(data_euler_cog["__time"]) - t_bias
+        pitch_cog = np.array(data_euler_cog["pitch"])
+        pitch_cog_wrap = unwrap_angle_sequence(pitch_cog)
+        plt.plot(t_cog, pitch_cog_wrap * 180 / np.pi, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_euler["__time"]) - t_bias
         pitch = np.array(data_euler["pitch"])
-        pitch = unwrap_angle_sequence(pitch)
-        plt.plot(t, pitch * 180 / np.pi, label="real", color=color_real)
+        pitch_wrap = unwrap_angle_sequence(pitch)
+        plt.plot(t, pitch_wrap * 180 / np.pi, label="real", color=color_real)
         plt.ylabel("Pitch [$^\\circ$]", fontsize=label_size)
 
         # calculate RMSE
@@ -255,8 +307,12 @@ def main(file_path, type):
         z_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/z"])
         plt.plot(t_ref, z_ref, label="ref", linestyle="--", color=color_ref)
 
+        t_cog = np.array(data_xyz_cog["__time"]) - t_bias
+        z_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/z"])
+        plt.plot(t_cog, z_cog, label="cog", linestyle="-.", color=color_cog)
+
         t = np.array(data_xyz["__time"]) - t_bias
-        z = np.array(data_xyz["/beetle1/uav/cog/odom/pose/pose/position/z"])
+        z = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/z"])
 
         plt.plot(t, z, label="Z", color=color_real)
         plt.ylabel("Z [m]", fontsize=label_size)
@@ -272,10 +328,15 @@ def main(file_path, type):
         yaw_ref = unwrap_angle_sequence(yaw_ref)
         plt.plot(t_ref, yaw_ref * 180 / np.pi, label="ref", linestyle="--", color=color_ref)
 
+        t_cog = np.array(data_euler_cog["__time"]) - t_bias
+        yaw_cog = np.array(data_euler_cog["yaw"])
+        yaw_cog_wrap = unwrap_angle_sequence(yaw_cog)
+        plt.plot(t_cog, yaw_cog_wrap * 180 / np.pi, label="cog", linestyle="-.", color=color_cog)
+
         t = np.array(data_euler["__time"]) - t_bias
         yaw = np.array(data_euler["yaw"])
-        yaw = unwrap_angle_sequence(yaw)
-        plt.plot(t, yaw * 180 / np.pi, label="real", color=color_real)
+        yaw_wrap = unwrap_angle_sequence(yaw)
+        plt.plot(t, yaw_wrap * 180 / np.pi, label="real", color=color_real)
         plt.ylabel("Yaw [$^\\circ$]", fontsize=label_size)
 
         # calculate RMSE
@@ -296,7 +357,7 @@ def main(file_path, type):
         plt.plot(t, thrust4, label="$f_{c4}$", linestyle=":")
         plt.ylabel("Thrust Cmd [N]", fontsize=label_size)
         plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="center right")
+        plt.legend(framealpha=legend_alpha, loc="lower right", ncol=2)
 
         # --------------------------------
         plt.subplot(4, 2, 8)
@@ -312,7 +373,7 @@ def main(file_path, type):
 
         plt.ylabel("Servo Cmd [$^\\circ$]", fontsize=label_size)
         plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="center right")
+        plt.legend(framealpha=legend_alpha, loc="lower right", ncol=2)
 
         # --------------------------------
         plt.tight_layout()
@@ -321,10 +382,10 @@ def main(file_path, type):
         plt.show()
 
     elif type == 1:
-        data_z = data[["__time", "/beetle1/uav/cog/odom/pose/pose/position/z"]]
+        data_z = data[["__time", "/beetle1/uav/ee_contact/odom/pose/pose/position/z"]]
         data_z = data_z.dropna()
 
-        data_vz = data[["__time", "/beetle1/uav/cog/odom/twist/twist/linear/z"]]
+        data_vz = data[["__time", "/beetle1/uav/ee_contact/odom/twist/twist/linear/z"]]
         data_vz = data_vz.dropna()
 
         data_thrust_cmd = data[
@@ -361,14 +422,14 @@ def main(file_path, type):
 
         plt.subplot(2, 2, 1)
         t = np.array(data_z["__time"])
-        z = np.array(data_z["/beetle1/uav/cog/odom/pose/pose/position/z"])
+        z = np.array(data_z["/beetle1/uav/ee_contact/odom/pose/pose/position/z"])
         plt.plot(t, z, label="real")
         plt.ylabel("Z [m]", fontsize=label_size)
         plt.xlim(x_min, x_max)
 
         plt.subplot(2, 2, 2)
         t = np.array(data_vz["__time"])
-        vz = np.array(data_vz["/beetle1/uav/cog/odom/twist/twist/linear/z"])
+        vz = np.array(data_vz["/beetle1/uav/ee_contact/odom/twist/twist/linear/z"])
         plt.plot(t, vz, label="real")
         plt.ylabel("Vz (m/s)", fontsize=label_size)
         plt.xlim(x_min, x_max)
@@ -425,7 +486,7 @@ def main(file_path, type):
         # plt.plot(t_ref, x_ref, label='X$_r$', linestyle="--")
 
         t = np.array(data_xyz["__time"]) - t_bias
-        x = np.array(data_xyz["/beetle1/uav/cog/odom/pose/pose/position/x"])
+        x = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/x"])
         plt.plot(t, x, label="X")
 
         # calculate RMSE
@@ -438,7 +499,7 @@ def main(file_path, type):
         # plt.plot(t_ref, y_ref, label='Y$_r$', linestyle="--")
 
         t = np.array(data_xyz["__time"]) - t_bias
-        y = np.array(data_xyz["/beetle1/uav/cog/odom/pose/pose/position/y"])
+        y = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/y"])
         plt.plot(t, y, label="Y")
 
         # calculate RMSE
@@ -451,7 +512,7 @@ def main(file_path, type):
         plt.plot(t_ref, z_ref, label="Z$_r$", linestyle="--")
 
         t = np.array(data_xyz["__time"]) - t_bias
-        z = np.array(data_xyz["/beetle1/uav/cog/odom/pose/pose/position/z"])
+        z = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/z"])
 
         plt.plot(t, z, label="Z")
 

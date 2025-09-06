@@ -110,6 +110,33 @@ def quat2euler(qw: pd.Series, qx: pd.Series, qy: pd.Series, qz: pd.Series, seque
         pitch = pd.Series(euler[:, 1], index=idx, name="pitch")
         roll = pd.Series(euler[:, 2], index=idx, name="roll")
     else:
-        raise ValueError(f"Unknown sequence: {sequence}")
+        print("Warning: only ZYX sequence is the correct order of euler angle in aerospace field.")
+        roll = pd.Series(euler[:, 0], index=idx, name="roll")
+        pitch = pd.Series(euler[:, 1], index=idx, name="pitch")
+        yaw = pd.Series(euler[:, 2], index=idx, name="yaw")
 
     return roll, pitch, yaw
+
+
+def interp_quat(t_ref, t, data_quat, topic_prefix):
+    """
+    Interpolate quaternion data to match reference time points.
+
+    Args:
+        t_ref: Reference time points
+        t: Original time points
+        data_quat: DataFrame containing quaternion data
+        topic_prefix: Topic prefix for quaternion components (e.g., "/beetle1/uav/ee_contact/odom/pose/pose/orientation")
+
+    Returns:
+        DataFrame with interpolated quaternion data
+    """
+    data_quat_interp = pd.DataFrame()
+    data_quat_interp["__time"] = t_ref
+
+    # Interpolate each quaternion component
+    for component in ["w", "x", "y", "z"]:
+        topic = f"{topic_prefix}/{component}"
+        data_quat_interp[topic] = np.interp(t_ref, t, data_quat[topic])
+
+    return data_quat_interp
