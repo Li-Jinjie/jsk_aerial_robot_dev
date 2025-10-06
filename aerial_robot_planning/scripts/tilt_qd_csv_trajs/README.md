@@ -111,7 +111,7 @@ def follow_trajectory(filename):
         # Skip headers
         for _ in range(3):
             next(file)
-        
+
         reader = csv.reader(file)
         for row in reader:
             time, px, py, pz = float(row[0]), float(row[1]), float(row[2]), float(row[3])
