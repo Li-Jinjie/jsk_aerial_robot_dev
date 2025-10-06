@@ -294,7 +294,7 @@ if __name__ == "__main__":
         "WtPInv(Single)": inv_weighted_single,
         "ConstrainedQP": None,
         "PInv(SVD)+QP": None,
-        "PInv(SVD)+Alloc": None,
+        "\\textbf{PInv(SVD)+Alloc}": None,
         "PInv(SVD): Tri": alloc_mat_inv_svd_tri,
     }
 
@@ -417,7 +417,7 @@ if __name__ == "__main__":
         "WtPInv(Single)": "#7E2F8E",
         "ConstrainedQP": "#0072BD",
         "PInv(SVD)+QP": "#77AC30",
-        "PInv(SVD)+Alloc": "#D95319",
+        "\\textbf{PInv(SVD)+Alloc}": "#D95319",
         "PInv(SVD): Tri": "#EDB120",
     }
     method_linestyles = {
@@ -427,7 +427,7 @@ if __name__ == "__main__":
         "WtPInv(Single)": "-.",
         "ConstrainedQP": "--",
         "PInv(SVD)+QP": "-.",
-        "PInv(SVD)+Alloc": "-",
+        "\\textbf{PInv(SVD)+Alloc}": "-",
         "PInv(SVD): Tri": "-",
     }
     rotor_names = [f"Rotor {i + 1}" for i in range(4)]

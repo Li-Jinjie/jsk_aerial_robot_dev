@@ -140,7 +140,7 @@ def main(file_path):
     plt.rcParams.update({"font.size": 11})  # default is 10
     label_size = 14
 
-    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(3.5, 5))
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(3.5, 3.5))
 
     t_bias = max(data_xyz["__time"].iloc[0], data_xyz_ref["__time"].iloc[0])
     color_ref = "#0C5DA5"
