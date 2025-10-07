@@ -398,7 +398,7 @@ def pub_hand_markers_rviz(viz_type):
         markers.markers.append(m)
 
         pub.publish(markers)
-        rospy.loginfo("Wall markers deleted on topic 'walls'.")
+        rospy.loginfo("Hand markers deleted on topic 'hand_markers'.")
         return
 
     # ---- Hand poses (m, deg) ----

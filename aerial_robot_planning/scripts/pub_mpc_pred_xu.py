@@ -35,7 +35,7 @@ class MPCPubPredXU(MPCPubBase, ABC):
     def pub_trajectory_points(self, pred_xu_msg: PredXU):
         """Publish the PredXU message."""
         pred_xu_msg.header.stamp = rospy.Time.now()
-        pred_xu_msg.header.frame_id = "map"
+        pred_xu_msg.header.frame_id = "world"
         self.pub_ref_xu.publish(pred_xu_msg)
 
 

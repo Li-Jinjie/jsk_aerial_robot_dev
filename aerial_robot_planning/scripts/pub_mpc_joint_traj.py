@@ -36,7 +36,7 @@ class MPCPubJointTraj(MPCPubBase, ABC):
     def pub_trajectory_points(self, traj_msg: MultiDOFJointTrajectory):
         """Publish the MultiDOFJointTrajectory message."""
         traj_msg.header.stamp = rospy.Time.now()
-        traj_msg.header.frame_id = "map"
+        traj_msg.header.frame_id = "world"
         self.pub_ref_traj.publish(traj_msg)
 
 
