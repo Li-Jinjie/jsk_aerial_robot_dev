@@ -61,13 +61,14 @@ class MPCPubCSVPredXU(MPCPubPredXU):
             self.ref_xu_msg.u.layout.dim = [MultiArrayDimension(), MultiArrayDimension()]
 
         # Load trajectory from a CSV and check dimensions
-        traj_robot, traj_child_frame, traj_data_df = read_csv_traj(file_path)
+        traj_robot, traj_frame_id, traj_child_frame_id, traj_data_df = read_csv_traj(file_path)
         if traj_robot != self.robot_name:
             rospy.logwarn(
                 f"Warning: The robot name in the CSV file ({traj_robot}) does not match the selected robot ({robot_name})."
             )
 
-        self.child_frame = traj_child_frame
+        self.frame_id = traj_frame_id
+        self.child_frame_id = traj_child_frame_id
 
         time_id = traj_data_df.columns.get_loc("time")
         self.time_traj = traj_data_df["time"].to_numpy()

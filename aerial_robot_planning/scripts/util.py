@@ -19,26 +19,30 @@ from geometry_msgs.msg import Point, Quaternion, PoseStamped
 
 def read_csv_traj(path, nrows=None):
     # please read READEME.md in tilt_qd_csv_trajs for the csv file format
+    non_data_row_num = 0
     with open(path, "r") as f:
         robot_line = f.readline().strip().split(",")
-        frame_line = f.readline().strip().split(",")
+        frame_id_line = f.readline().strip().split(",")
+        child_frame_id_line = f.readline().strip().split(",")
+        non_data_row_num += 3
 
-        if robot_line[0] != "robot" or frame_line[0] != "frame":
-            raise ValueError("CSV file format error: first two lines must start with 'robot' and 'frame'")
+        if robot_line[0] != "robot" or frame_id_line[0] != "frame_id" or child_frame_id_line[0] != "child_frame_id":
+            raise ValueError("CSV file format error: first three lines must be 'robot', 'frame_id', 'child_frame_id'")
         robot = robot_line[1] if len(robot_line) > 1 else None
-        frame = frame_line[1] if len(frame_line) > 1 else None
+        frame_id = frame_id_line[1] if len(frame_id_line) > 1 else None
+        child_frame_id = child_frame_id_line[1] if len(child_frame_id_line) > 1 else None
 
     if nrows is not None:
-        df = pd.read_csv(path, skiprows=2, nrows=nrows)
+        df = pd.read_csv(path, skiprows=non_data_row_num, nrows=nrows)
     else:
-        df = pd.read_csv(path, skiprows=2)
+        df = pd.read_csv(path, skiprows=non_data_row_num)
 
     # check each column has a header
     for col in df.columns:
         if col.strip() == "":
             raise ValueError("CSV file format error: all columns must have a header")
 
-    return robot, frame, df
+    return robot, frame_id, child_frame_id, df
 
 
 def check_first_data_received(obj: object, attr: str, object_name: str):

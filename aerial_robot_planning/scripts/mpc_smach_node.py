@@ -161,7 +161,9 @@ class InitState(smach.State):
             csv_file = csv_files[userdata.traj_type - len(traj_cls_list)]
             rospy.loginfo(f"Using CSV file: {csv_file}")
 
-            traj_robot, _, traj_data_df = read_csv_traj(os.path.join(csv_folder_path, csv_file), nrows=1)
+            traj_robot, frame_id, child_frame_id, traj_data_df = read_csv_traj(
+                os.path.join(csv_folder_path, csv_file), nrows=1
+            )
             if traj_robot != userdata.robot_name:
                 rospy.logwarn(
                     f"Warning: The robot name in the CSV file ({traj_robot}) does not match the selected robot ({userdata.robot_name})."
