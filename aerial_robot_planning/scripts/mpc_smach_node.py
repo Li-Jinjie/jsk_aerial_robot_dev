@@ -19,7 +19,7 @@ if current_path not in sys.path:
 from pub_mpc_joint_traj import MPCTrajPtPub, MPCSinglePtPub
 from pub_mpc_pred_xu import MPCPubCSVPredXU
 from geometry_msgs.msg import Pose, Quaternion, Vector3
-from util import pub_0066_wall_rviz, pub_hand_markers_rviz
+from util import read_csv_traj, pub_0066_wall_rviz, pub_hand_markers_rviz
 
 # === analytical trajectory ===
 import trajs
@@ -160,9 +160,15 @@ class InitState(smach.State):
         else:
             csv_file = csv_files[userdata.traj_type - len(traj_cls_list)]
             rospy.loginfo(f"Using CSV file: {csv_file}")
-            csv_traj = np.loadtxt(os.path.join(csv_folder_path, csv_file), delimiter=",", max_rows=1)
-            x, y, z = csv_traj[0:3]
-            qw, qx, qy, qz = csv_traj[6:10]
+
+            traj_robot, _, traj_data_df = read_csv_traj(os.path.join(csv_folder_path, csv_file), nrows=1)
+            if traj_robot != userdata.robot_name:
+                rospy.logwarn(
+                    f"Warning: The robot name in the CSV file ({traj_robot}) does not match the selected robot ({userdata.robot_name})."
+                )
+
+            x, y, z = traj_data_df.iloc[0][["px", "py", "pz"]]
+            qw, qx, qy, qz = traj_data_df.iloc[0][["qw", "qx", "qy", "qz"]]
 
         init_pose = Pose(
             position=Vector3(x, y, z),

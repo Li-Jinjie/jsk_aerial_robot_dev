@@ -20,7 +20,7 @@ if current_path not in sys.path:
     sys.path.insert(0, current_path)
 
 from pub_mpc_joint_traj import MPCPubBase
-from util import check_traj_info
+from util import read_csv_traj, check_traj_info
 
 
 ##########################################
@@ -60,17 +60,33 @@ class MPCPubCSVPredXU(MPCPubPredXU):
         if len(self.ref_xu_msg.u.layout.dim) < 2:
             self.ref_xu_msg.u.layout.dim = [MultiArrayDimension(), MultiArrayDimension()]
 
-        # Robot/trajectory dimensionalities
-        if self.nx != 23 or self.nu != 8:
-            raise ValueError("This class is designed for 23 states and 8 control inputs! Check the NMPC type!")
+        # Load trajectory from a CSV and check dimensions
+        traj_robot, traj_child_frame, traj_data_df = read_csv_traj(file_path)
+        if traj_robot != self.robot_name:
+            rospy.logwarn(
+                f"Warning: The robot name in the CSV file ({traj_robot}) does not match the selected robot ({robot_name})."
+            )
 
-        # Load trajectory from a CSV
-        self.scvx_traj = np.loadtxt(file_path, delimiter=",")  # one row for one time step
-        self.x_traj = self.scvx_traj[:, 0:19]
-        self.u_traj = self.scvx_traj[:, 19:28]
+        self.child_frame = traj_child_frame
+
+        time_id = traj_data_df.columns.get_loc("time")
+        self.time_traj = traj_data_df["time"].to_numpy()
+
+        effort_id = traj_data_df.columns.get_loc("control effort")
+        self.effort_traj = traj_data_df["effort"].to_numpy()
+
+        self.x_traj = traj_data_df[time_id + 1 : effort_id].to_numpy()  # all columns between time and control effort
+        self.u_traj = traj_data_df[effort_id + 1 :].to_numpy()  # all columns after control effort
+
+        if self.x_traj.shape[1] != self.nx - 6 or self.u_traj.shape[1] != self.nu:  # 6 for external wrench
+            raise ValueError(
+                f"Trajectory dimensions do not match NMPC settings! "
+                f"Expected {self.nx} states and {self.nu} controls, "
+                f"but got {self.x_traj.shape[1]} states and {self.u_traj.shape[1]} controls."
+            )
 
         # Check trajectory information and visualize it
-        traj_path_msg = check_traj_info(self.x_traj, if_return_path=True)
+        traj_path_msg = check_traj_info(self.time_traj, self.x_traj, if_return_path=True)
         self.traj_path_pub = rospy.Publisher(f"/{self.robot_name}/traj_path", Path, queue_size=1, latch=True)
         self.traj_path_pub.publish(traj_path_msg)
 
@@ -98,7 +114,7 @@ class MPCPubCSVPredXU(MPCPubPredXU):
         This method is called automatically by the base class timer (~50 Hz).
         """
         # If we are still within our trajectory time window:
-        if t_elapsed <= self.x_traj[-1, -2]:
+        if t_elapsed <= self.time_traj[-1]:
             # Create time nodes for interpolation
             t_nodes = np.linspace(0, self.T_horizon, self.N_nmpc + 1)
             t_nodes += t_elapsed
@@ -107,13 +123,16 @@ class MPCPubCSVPredXU(MPCPubPredXU):
             x_traj = np.zeros((self.N_nmpc + 1, self.nx))
             u_traj = np.zeros((self.N_nmpc, self.nu))
 
-            # Interpolate each state dimension
-            for i in range(self.nx - 6):
-                x_traj[:, i] = np.interp(t_nodes, self.x_traj[:, -2], self.x_traj[:, i])
+            # Interpolate each state dimension using NumPy's interp in a vectorized way.
+            # Although a Python loop is still used internally (via list comprehension), this runs much faster than
+            # a regular for-loop because the interpolation itself is performed in compiled C code.
+            x_traj[:, : self.nx - 6] = np.array(
+                [np.interp(t_nodes, self.time_traj, self.x_traj[:, i]) for i in range(self.nx - 6)]
+            ).T
 
-            # Interpolate each control dimension
-            for i in range(self.nu):
-                u_traj[:, i] = np.interp(t_nodes[:-1], self.x_traj[:, -2], self.u_traj[:, i])
+            u_traj[:, :] = np.array(
+                [np.interp(t_nodes[:-1], self.time_traj, self.u_traj[:, i]) for i in range(self.nu)]
+            ).T
 
             # Populate the PredXU message
             self.ref_xu_msg.x.layout.dim[1].stride = self.nx

@@ -4,6 +4,7 @@ Created by jiaxuan and jinjie on 25/01/22.
 
 from functools import wraps
 from typing import Optional
+import pandas as pd
 
 import numpy as np
 import rospy
@@ -14,6 +15,30 @@ import tf_conversions as tf
 from nav_msgs.msg import Odometry, Path
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point, Quaternion, PoseStamped
+
+
+def read_csv_traj(path, nrows=None):
+    # please read READEME.md in tilt_qd_csv_trajs for the csv file format
+    with open(path, "r") as f:
+        robot_line = f.readline().strip().split(",")
+        frame_line = f.readline().strip().split(",")
+
+        if robot_line[0] != "robot" or frame_line[0] != "frame":
+            raise ValueError("CSV file format error: first two lines must start with 'robot' and 'frame'")
+        robot = robot_line[1] if len(robot_line) > 1 else None
+        frame = frame_line[1] if len(frame_line) > 1 else None
+
+    if nrows is not None:
+        df = pd.read_csv(path, skiprows=2, nrows=nrows)
+    else:
+        df = pd.read_csv(path, skiprows=2)
+
+    # check each column has a header
+    for col in df.columns:
+        if col.strip() == "":
+            raise ValueError("CSV file format error: all columns must have a header")
+
+    return robot, frame, df
 
 
 def check_first_data_received(obj: object, attr: str, object_name: str):
@@ -57,7 +82,7 @@ def check_topic_subscription(func):
     return wrapper
 
 
-def check_traj_info(x: np.ndarray, if_return_path=False) -> Optional[Path]:
+def check_traj_info(t: np.ndarray, x: np.ndarray, if_return_path=False) -> Optional[Path]:
     """
     Check trajectory information and print out:
       - Overall time (number of time steps, assuming dt = 1 per step).
@@ -73,8 +98,7 @@ def check_traj_info(x: np.ndarray, if_return_path=False) -> Optional[Path]:
     print("\n===== Checking Trajectory Information =====")
     # --- Overall Time ---
     total_time_steps = x.shape[0]
-    # Assuming each row represents 1 time unit.
-    print("Overall time: {} time steps".format(total_time_steps))
+    print(f"Overall time: {t[-1]} s; Data number: {total_time_steps}")
 
     # --- Position ---
     # Positions are columns 0, 1, 2.
