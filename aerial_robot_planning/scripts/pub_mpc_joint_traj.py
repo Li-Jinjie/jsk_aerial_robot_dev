@@ -16,6 +16,7 @@ from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectory
 from aerial_robot_msgs.msg import FixRotor
 
 from pub_mpc_base import MPCPubBase
+from trajs import BaseTraj
 
 # Insert current folder into path so we can import from "trajs" or other local files
 current_path = os.path.abspath(os.path.dirname(__file__))
@@ -36,7 +37,6 @@ class MPCPubJointTraj(MPCPubBase, ABC):
     def pub_trajectory_points(self, traj_msg: MultiDOFJointTrajectory):
         """Publish the MultiDOFJointTrajectory message."""
         traj_msg.header.stamp = rospy.Time.now()
-        traj_msg.header.frame_id = "world"
         self.pub_ref_traj.publish(traj_msg)
 
 
@@ -49,7 +49,7 @@ class MPCTrajPtPub(MPCPubJointTraj):
     to the NMPC controller, based on a 'traj' object (e.g. CircleTraj, etc.).
     """
 
-    def __init__(self, robot_name: str, traj):
+    def __init__(self, robot_name: str, traj: BaseTraj):
         super().__init__(robot_name=robot_name, node_name="mpc_traj_pt_pub")
         self.traj = traj
         rospy.loginfo(f"{self.namespace}/{self.node_name}: Using trajectory {str(self.traj)}")
@@ -64,6 +64,11 @@ class MPCTrajPtPub(MPCPubJointTraj):
         """
         multi_dof_joint_traj = MultiDOFJointTrajectory()
 
+        # set frame
+        multi_dof_joint_traj.header.frame_id = self.traj.get_frame_id()
+        multi_dof_joint_traj.joint_names.append(self.traj.get_child_frame_id())
+
+        # set data
         # For certain rotation-based trajectories, we might keep the same reference
         # across the entire horizon
         if hasattr(self.traj, "use_constant_ref") and self.traj.use_constant_ref is True:
