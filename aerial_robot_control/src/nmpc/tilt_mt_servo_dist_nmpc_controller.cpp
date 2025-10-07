@@ -119,9 +119,9 @@ void nmpc::TiltMtServoDistNMPC::prepareNMPCParams()
   mpc_solver_ptr_->setParameters(p, idx_p_phys_end_ + 1);
 }
 
-std::vector<double> nmpc::TiltMtServoDistNMPC::meas2VecX(bool is_ee_centric)
+std::vector<double> nmpc::TiltMtServoDistNMPC::meas2VecX(bool is_modified_by_traj_frame)
 {
-  vector<double> bx0 = TiltMtServoNMPC::meas2VecX(is_ee_centric);
+  vector<double> bx0 = TiltMtServoNMPC::meas2VecX(is_modified_by_traj_frame);
 
   /* disturbance rejection */
   geometry_msgs::Vector3 external_force_w;     // default: 0, 0, 0

@@ -182,7 +182,7 @@ protected:
     return meas2VecX(false);
   }
 
-  virtual std::vector<double> meas2VecX(bool is_ee_centric);
+  virtual std::vector<double> meas2VecX(bool is_modified_by_traj_frame);
 
   // ensure the continuity of servo angles
   double ensureOneServoContinuity(double a_ref, int idx) const;

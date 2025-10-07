@@ -208,7 +208,7 @@ void nmpc::TiltMtServoThrustDistNMPC::allocateToXU(const tf::Vector3& ref_pos_i,
   }
 }
 
-std::vector<double> nmpc::TiltMtServoThrustDistNMPC::meas2VecX(bool is_ee_centric)
+std::vector<double> nmpc::TiltMtServoThrustDistNMPC::meas2VecX(bool is_modified_by_traj_frame)
 {
   /* disturbance rejection */
   geometry_msgs::Vector3 external_force_w;     // default: 0, 0, 0
@@ -220,7 +220,7 @@ std::vector<double> nmpc::TiltMtServoThrustDistNMPC::meas2VecX(bool is_ee_centri
     external_torque_cog = wrench_est_ptr_->getDistTorqueCOG();
   }
 
-  auto bx0 = TiltMtServoNMPC::meas2VecX(is_ee_centric);
+  auto bx0 = TiltMtServoNMPC::meas2VecX(is_modified_by_traj_frame);
 
   for (int i = 0; i < motor_num_; i++)
     bx0[13 + joint_num_ + i] = thrust_meas_[i];
