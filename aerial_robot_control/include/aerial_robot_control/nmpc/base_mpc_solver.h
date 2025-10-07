@@ -9,6 +9,7 @@
 #include <sstream>
 #include <vector>
 #include <iostream>
+#include <numeric>
 
 #include "acados/utils/math.h"
 #include "acados/utils/print.h"
@@ -149,49 +150,21 @@ public:
     ocp_nlp_solver_opts_set(nlp_config_, nlp_opts_, "rti_phase", &rti_phase);
   }
 
-  void setParamSparseOneStage(int stage, std::vector<int>& idx, std::vector<double>& p, bool if_check_len = true)
-  {
-    if (if_check_len)
-    {
-      if (idx.size() != p.size())
-        throw std::length_error("idx size is not equal to p size");
-    }
-
-    acadosUpdateParamsSparse(stage, idx, p, p.size());
-  }
-
-  void setParamSparseAllStages(std::vector<int>& idx, std::vector<double>& p)
-  {
-    if (idx.size() != p.size())
-      throw std::length_error("idx size is not equal to p size");
-
-    for (int i = 0; i < NN_ + 1; i++)
-      setParamSparseOneStage(i, idx, p, false);
-  }
-
   /* after 2025-3-30, the p includes physical params so should be set values during activate().
    * Too early cannot get the correct values. */
-  void setParameters(std::vector<double>& p, bool is_quat_in_p = true)
+  void setParameters(std::vector<double>& p, const int start_idx = 0)
   {
-    if (is_quat_in_p)
+    if (start_idx + p.size() > NP_)
     {
-      if (p.size() != NP_)
-        throw std::length_error("p size is not equal to NP_");
-
-      for (int i = 0; i < NN_ + 1; i++)
-        acadosUpdateParams(i, p);
+      std::stringstream ss;
+      ss << "start_idx + p size" << start_idx + p.size() << " is larger than NP_ = " << NP_;
+      throw std::length_error(ss.str());
     }
-    else
-    {
-      if (p.size() != NP_ - 4)
-        throw std::length_error("p size is not equal to NP_ - 4");
 
-      std::vector<int> index(NP_ - 4);
-      for (int j = 0; j < NP_ - 4; j++)
-        index[j] = j + 4;
+    std::vector<int> index(p.size());
+    std::iota(index.begin(), index.end(), start_idx);
 
-      setParamSparseAllStages(index, p);
-    }
+    setParamSparseAllStages(index, p);
   }
 
   void setReference(const std::vector<std::vector<double>>& xr, const std::vector<std::vector<double>>& ur,
@@ -545,6 +518,26 @@ protected:
   virtual inline void acadosPrintStats() = 0;
 
 private:
+  void setParamSparseOneStage(int stage, std::vector<int>& idx, std::vector<double>& p, bool if_check_len = true)
+  {
+    if (if_check_len)
+    {
+      if (idx.size() != p.size())
+        throw std::length_error("idx size is not equal to p size");
+    }
+
+    acadosUpdateParamsSparse(stage, idx, p, p.size());
+  }
+
+  void setParamSparseAllStages(std::vector<int>& idx, std::vector<double>& p)
+  {
+    if (idx.size() != p.size())
+      throw std::length_error("idx size is not equal to p size");
+
+    for (int i = 0; i < NN_ + 1; i++)
+      setParamSparseOneStage(i, idx, p, false);
+  }
+
   void setConstraintsValue(const std::string& constraint_type, int stage, std::vector<double> value,
                            bool is_check_len = true) const
   {

@@ -76,9 +76,6 @@ void nmpc::TiltMtServoImpNMPC::initNMPCCostW()
 
 void nmpc::TiltMtServoImpNMPC::setImpParams()
 {
-  vector<int> idx = { idx_p_dist_end_ + 1, idx_p_dist_end_ + 2, idx_p_dist_end_ + 3,
-                      idx_p_dist_end_ + 4, idx_p_dist_end_ + 5, idx_p_dist_end_ + 6 };
-
   auto imp_mpc_solver_ptr = boost::dynamic_pointer_cast<mpc_solver::TiltQdServoDistImpMdlMPCSolver>(mpc_solver_ptr_);
   if (!imp_mpc_solver_ptr)
   {
@@ -89,7 +86,7 @@ void nmpc::TiltMtServoImpNMPC::setImpParams()
   const double* pM = imp_mpc_solver_ptr->getpM();
   const double* oM = imp_mpc_solver_ptr->getoM();
   vector<double> p = { pM[0], pM[1], pM[2], oM[0], oM[1], oM[2] };
-  mpc_solver_ptr_->setParamSparseAllStages(idx, p);
+  mpc_solver_ptr_->setParameters(p, idx_p_dist_end_ + 1);
 
   idx_p_imp_end_ = idx_p_dist_end_ + 6;
 }

@@ -616,11 +616,7 @@ void nmpc::TiltMtServoNMPC::prepareNMPCParams()
   if (mpc_solver_ptr_->NP_ > 4 + 6)
   {
     std::vector<double> phys_p = PhysToNMPCParams();
-
-    std::vector<int> idx(phys_p.size());
-    std::iota(idx.begin(), idx.end(), idx_p_quat_end_ + 1);
-
-    mpc_solver_ptr_->setParamSparseAllStages(idx, phys_p);
+    mpc_solver_ptr_->setParameters(phys_p, idx_p_quat_end_ + 1);
   }
 }
 
