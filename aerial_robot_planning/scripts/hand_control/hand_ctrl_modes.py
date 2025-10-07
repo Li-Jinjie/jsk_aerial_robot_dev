@@ -204,6 +204,9 @@ class OperationMode(HandControlBaseMode):
         # ==================================
 
         multi_dof_joint_traj = MultiDOFJointTrajectory()
+        multi_dof_joint_traj.header.frame_id = "world"
+        multi_dof_joint_traj.joint_names.append("ee")
+
         t_has_started = rospy.Time.now().to_sec() - self.start_time
 
         for i in range(self.N_nmpc + 1):
@@ -442,6 +445,9 @@ class SphericalMode(HandControlBaseMode):
         ] + [self.hand_pose.pose_msg.pose.position.z]
 
         multi_dof_joint_traj = MultiDOFJointTrajectory()
+        multi_dof_joint_traj.header.frame_id = "world"
+        multi_dof_joint_traj.joint_names.append("ee")
+
         t_has_started = rospy.Time.now().to_sec() - self.start_time
 
         for i in range(self.N_nmpc + 1):
@@ -531,6 +537,9 @@ class CartesianMode(HandControlBaseMode):
             ]
 
         multi_dof_joint_traj = MultiDOFJointTrajectory()
+        multi_dof_joint_traj.header.frame_id = "world"
+        multi_dof_joint_traj.joint_names.append("ee")
+
         t_has_started = rospy.Time.now().to_sec() - self.start_time
 
         for i in range(self.N_nmpc + 1):
@@ -583,6 +592,9 @@ class LockingMode(HandControlBaseMode):
             ]
 
         multi_dof_joint_traj = MultiDOFJointTrajectory()
+        multi_dof_joint_traj.header.frame_id = "world"
+        multi_dof_joint_traj.joint_names.append("ee")
+
         t_has_started = rospy.Time.now().to_sec() - self.start_time
 
         for i in range(self.N_nmpc + 1):
