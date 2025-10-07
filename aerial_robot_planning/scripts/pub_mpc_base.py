@@ -23,7 +23,7 @@ class MPCPubBase(ABC):
       - Abstract methods for building the MultiDOFJointTrajectory and checking finish conditions
     """
 
-    def __init__(self, robot_name: str, node_name: str, is_calc_rmse=True):
+    def __init__(self, robot_name: str, node_name: str, odom_frame_id: str, is_calc_rmse=True):
         # Basic config
         self.robot_name = robot_name
         self.node_name = node_name
@@ -44,12 +44,20 @@ class MPCPubBase(ABC):
         # Store latest odometry here
         self.uav_odom = None
 
-        # check if the topic to /uav/ee_contact/odom is available
-        if topic_ready(f"/{robot_name}/uav/ee_contact/odom", Odometry, timeout=1.0):
+        # Subscribe to odometry
+        if odom_frame_id == "ee" and topic_ready(f"/{robot_name}/uav/ee_contact/odom", Odometry, timeout=1.0):
             rospy.loginfo(f"{self.namespace}/{self.node_name}: Using /{robot_name}/uav/ee_contact/odom for odometry.")
             self.odom_sub = rospy.Subscriber(f"/{robot_name}/uav/ee_contact/odom", Odometry, self._sub_odom_callback)
         else:
-            rospy.loginfo(f"{self.namespace}/{self.node_name}: Using /{robot_name}/uav/cog/odom for odometry.")
+            if odom_frame_id == "cog":
+                rospy.loginfo(f"{self.namespace}/{self.node_name}: Using /{robot_name}/uav/cog/odom for odometry.")
+            elif odom_frame_id == "ee":
+                rospy.logwarn(
+                    f"{self.namespace}/{self.node_name}: /{robot_name}/uav/ee_contact/odom not available, "
+                    f"falling back to /{robot_name}/uav/cog/odom."
+                )
+            else:
+                rospy.logwarn(f"unsupported odom_frame_id {odom_frame_id}, using cog instead.")
             self.odom_sub = rospy.Subscriber(f"/{robot_name}/uav/cog/odom", Odometry, self._sub_odom_callback)
 
         check_first_data_received(self, "uav_odom", robot_name)

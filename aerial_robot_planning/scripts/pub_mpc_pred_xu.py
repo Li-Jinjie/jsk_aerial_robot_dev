@@ -27,8 +27,8 @@ from util import read_csv_traj, check_traj_info
 # Derived Class: MPCPubPredXU
 ##########################################
 class MPCPubPredXU(MPCPubBase, ABC):
-    def __init__(self, robot_name: str, node_name: str):
-        super().__init__(robot_name=robot_name, node_name=node_name)
+    def __init__(self, robot_name: str, node_name: str, odom_frame_id: str, is_calc_rmse=True):
+        super().__init__(robot_name, node_name, odom_frame_id, is_calc_rmse)
         # Publisher for PredXU
         self.pub_ref_xu = rospy.Publisher(f"/{robot_name}/set_ref_x_u", PredXU, queue_size=3)
 
@@ -49,11 +49,12 @@ class MPCPubCSVPredXU(MPCPubPredXU):
     """
 
     def __init__(self, robot_name: str, file_path: str) -> None:
-        # Initialize parent classes
-        super().__init__(robot_name=robot_name, node_name="mpc_xu_pub_node")
-
-        # Load trajectory from a CSV and check dimensions
+        # Load trajectory from a CSV
         traj_robot, traj_frame_id, traj_child_frame_id, traj_data_df = read_csv_traj(file_path)
+
+        # Initialize parent classes
+        super().__init__(robot_name=robot_name, node_name="mpc_xu_pub_node", odom_frame_id=traj_child_frame_id)
+
         if traj_robot != self.robot_name:
             rospy.logwarn(
                 f"Warning: The robot name in the CSV file ({traj_robot}) does not match the selected robot ({robot_name})."

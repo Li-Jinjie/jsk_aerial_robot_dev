@@ -28,8 +28,8 @@ if current_path not in sys.path:
 # Derived Class: MPCPubJointTraj
 ##########################################
 class MPCPubJointTraj(MPCPubBase, ABC):
-    def __init__(self, robot_name: str, node_name: str, is_calc_rmse=True):
-        super().__init__(robot_name=robot_name, node_name=node_name, is_calc_rmse=is_calc_rmse)
+    def __init__(self, robot_name: str, node_name: str, odom_frame_id: str, is_calc_rmse=True):
+        super().__init__(robot_name, node_name, odom_frame_id, is_calc_rmse)
         # Publisher for reference trajectory
         self.pub_ref_traj = rospy.Publisher(f"/{robot_name}/set_ref_traj", MultiDOFJointTrajectory, queue_size=3)
         self.pub_fixed_rotor = rospy.Publisher(f"/{robot_name}/set_fixed_rotor", FixRotor, queue_size=3)
@@ -50,7 +50,7 @@ class MPCTrajPtPub(MPCPubJointTraj):
     """
 
     def __init__(self, robot_name: str, traj: BaseTraj):
-        super().__init__(robot_name=robot_name, node_name="mpc_traj_pt_pub")
+        super().__init__(robot_name=robot_name, node_name="mpc_traj_pt_pub", odom_frame_id=traj.get_child_frame_id())
         self.traj = traj
         rospy.loginfo(f"{self.namespace}/{self.node_name}: Using trajectory {str(self.traj)}")
 
@@ -143,7 +143,7 @@ class MPCSinglePtPub(MPCPubJointTraj):
     def __init__(self, robot_name: str, frame_id: str, child_frame_id: str, target_pose: Pose,
                  pos_tol=0.2, ang_tol=0.3, vel_tol=0.1, rate_tol=0.1):
         # fmt: on
-        super().__init__(robot_name=robot_name, node_name="mpc_single_pt_pub", is_calc_rmse=False)
+        super().__init__(robot_name=robot_name, node_name="mpc_single_pt_pub", odom_frame_id=child_frame_id, is_calc_rmse=False)
         self.target_pose = target_pose
         rospy.loginfo(
             f"{self.namespace}/{self.node_name}: \n"
