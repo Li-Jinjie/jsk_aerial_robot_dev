@@ -361,6 +361,9 @@ void nmpc::TiltMtServoNMPC::initAllocMat()
   alloc_mat_pinv_ = aerial_robot_model::pseudoinverse(alloc_mat_);
 }
 
+/* Note: The difference between this function and prepareNMPCParams() is:
+ * this function set idx for different physical parameters.
+ */
 void nmpc::TiltMtServoNMPC::initNMPCParams()
 {
   /* construct acados parameters */
@@ -371,21 +374,18 @@ void nmpc::TiltMtServoNMPC::initNMPCParams()
 
   int idx;
   // TODO: this condition is temporary for drones that don't pass in phys param (bi, tri, fix-qd)
-  if (mpc_solver_ptr_->NP_ > 4 + 6)
+  if (mpc_solver_ptr_->NP_ > 4 + 6)  // 4 for quaternion, 6 for disturbances
   {
     ROS_INFO("Set physical parameters for NMPC solver");
 
     std::vector<double> phys_p = PhysToNMPCParams();
     std::copy(phys_p.begin(), phys_p.end(), acados_p.begin() + idx_p_quat_end_ + 1);
-    idx = idx_p_quat_end_ + phys_p.size();
+    idx_p_phys_end_ = idx_p_quat_end_ + phys_p.size();
   }
   else
   {
-    idx = idx_p_quat_end_;
+    idx_p_phys_end_ = idx_p_quat_end_;
   }
-
-  // set idx_p_phys_end_ for setting other parameters later
-  idx_p_phys_end_ = idx;
 
   /* set acados parameters */
   mpc_solver_ptr_->setParameters(acados_p);
@@ -467,12 +467,25 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
   phys_p[idx] = t_servo_;
   idx++;
 
-  std::vector<double> contact_frame_p, contact_frame_q;
-  robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
+  std::vector<double> contact_frame_p = { 0.0, 0.0, 0.0 };
+  std::vector<double> contact_frame_q = { 1.0, 0.0, 0.0, 0.0 };
+  if (traj_child_frame_id_ == "cog")
+  {
+  }
+  else if (traj_child_frame_id_ == "ee")
+  {
+    if (robot_model_->hasFrame("ee_contact"))
+      robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
+    else
+      ROS_WARN_THROTTLE(5, "No frame named ee_contact in the robot model! The end-effector pose will be set to CoG.");
+  }
+  else
+  {
+    ROS_WARN_THROTTLE(5, "Unsupported traj_child_frame_id_! The end-effector pose will be set to CoG.");
+  }
 
   std::copy(contact_frame_p.begin(), contact_frame_p.end(), phys_p.begin() + idx);
   idx += static_cast<int>(contact_frame_p.size());
-
   std::copy(contact_frame_q.begin(), contact_frame_q.end(), phys_p.begin() + idx);
   idx += static_cast<int>(contact_frame_q.size());
 

@@ -105,6 +105,7 @@ protected:
 
   bool is_traj_tracking_ = false;  // TODO: tmp value. should be combined with inner traj. tracking in the future
   trajectory_msgs::MultiDOFJointTrajectory last_traj_msg_;
+  string traj_child_frame_id_ = "cog";
 
   aerial_robot_msgs::PredXU x_u_ref_;  // TODO: maybe we should remove x_u_ref_ and use xr_ & ur_ inside mpc_solver_ptr_
   spinal::FourAxisCommand flight_cmd_;
