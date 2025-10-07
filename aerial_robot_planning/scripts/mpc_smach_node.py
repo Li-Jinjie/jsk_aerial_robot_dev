@@ -150,6 +150,9 @@ class InitState(smach.State):
             rospy.loginfo(f"Using trajs.{traj_cls_list[userdata.traj_type].__name__} trajectory.")
             traj = traj_factory(userdata.traj_type, userdata.loop_num)
 
+            frame_id = traj.get_frame_id()
+            child_frame_id = traj.get_child_frame_id()
+
             x, y, z, vx, vy, vz, ax, ay, az = traj.get_3d_pt(0.0)
 
             try:
