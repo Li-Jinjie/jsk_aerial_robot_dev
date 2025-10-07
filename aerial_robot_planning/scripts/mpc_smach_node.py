@@ -181,7 +181,7 @@ class InitState(smach.State):
         )
 
         # Create the node instance
-        mpc_node = MPCSinglePtPub(userdata.robot_name, init_pose)
+        mpc_node = MPCSinglePtPub(userdata.robot_name, frame_id, child_frame_id, init_pose)
 
         # Wait here until the node signals it is finished or ROS shuts down
         while not rospy.is_shutdown():

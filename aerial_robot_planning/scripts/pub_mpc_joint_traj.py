@@ -134,7 +134,10 @@ class MPCSinglePtPub(MPCPubJointTraj):
     and checks if the robot has reached it within a certain error threshold.
     """
 
-    def __init__(self, robot_name: str, target_pose: Pose, pos_tol=0.2, ang_tol=0.3, vel_tol=0.1, rate_tol=0.1):
+    # fmt: off
+    def __init__(self, robot_name: str, frame_id: str, child_frame_id: str, target_pose: Pose,
+                 pos_tol=0.2, ang_tol=0.3, vel_tol=0.1, rate_tol=0.1):
+        # fmt: on
         super().__init__(robot_name=robot_name, node_name="mpc_single_pt_pub", is_calc_rmse=False)
         self.target_pose = target_pose
         rospy.loginfo(
@@ -144,6 +147,9 @@ class MPCSinglePtPub(MPCPubJointTraj):
             f"qw {self.target_pose.orientation.w}, qx {self.target_pose.orientation.x}, "
             f"qy {self.target_pose.orientation.y}, qz {self.target_pose.orientation.z}"
         )
+
+        self.frame_id = frame_id
+        self.child_frame_id = child_frame_id
 
         # Tolerances for considering the target "reached"
         self.pos_tol = pos_tol  # e.g. 0.1 m
@@ -159,6 +165,11 @@ class MPCSinglePtPub(MPCPubJointTraj):
         """
         traj_msg = MultiDOFJointTrajectory()
 
+        # set frame
+        traj_msg.header.frame_id = self.frame_id
+        traj_msg.joint_names.append(self.child_frame_id)
+
+        # set data
         x = self.target_pose.position.x
         y = self.target_pose.position.y
         z = self.target_pose.position.z
