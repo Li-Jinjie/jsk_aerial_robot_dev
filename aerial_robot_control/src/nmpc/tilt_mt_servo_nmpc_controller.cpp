@@ -789,10 +789,10 @@ void nmpc::TiltMtServoNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf:
     }
     rotor_idx = max_rotor_idx;
 
-    ROS_WARN(
-        "More than one rotor is below threshold and flip backwards! Select rotor %d with thrust %.2f as the "
-        "fixed rotor.",
-        rotor_idx, max_ft);
+    ROS_WARN_THROTTLE(1.0,
+                      "More than one rotor is below threshold and flip backwards! "
+                      "Select rotor %d with thrust %.2f as the fixed rotor.",
+                      rotor_idx, max_ft);
   }
   else
   {
