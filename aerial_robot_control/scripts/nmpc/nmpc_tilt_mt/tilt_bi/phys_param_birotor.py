@@ -1,45 +1,27 @@
-"""
-Created by li-jinjie on 24-10-17.
-"""
+# 2025-10-08 copy parameters to be independent of any ROS package
+# these parameters are used in GitHub action to ensure the correctness of the nmpc code
+# In real usage, these parameters will be reloaded from URDF.
 
-import os
-import yaml
-import rospkg
-
-# read parameters from yaml
-rospack = rospkg.RosPack()
-try:
-    param_path = os.path.join(rospack.get_path("gimbalrotor"), "config", "PhysParamBirotor.yaml")
-except rospkg.common.ResourceNotFound:  # non-ROS environment
-    # Fallback: construct absolute path from current file
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.abspath(os.path.join(this_dir, "../../../../.."))
-    param_path = os.path.join(project_root, "robots/gimbalrotor/config/PhysParamBirotor.yaml")
-
-with open(param_path, "r") as f:
-    param_dict = yaml.load(f, Loader=yaml.FullLoader)
-
-physical_params = param_dict["physical"]
-mass = physical_params["mass"]
-gravity = physical_params["gravity"]
-Ixx = physical_params["inertia_diag"][0]
-Iyy = physical_params["inertia_diag"][1]
-Izz = physical_params["inertia_diag"][2]
-dr1 = physical_params["dr1"]
-p1_b = physical_params["p1"]
-dr2 = physical_params["dr2"]
-p2_b = physical_params["p2"]
-kq_d_kt = physical_params["kq_d_kt"]
+mass = 1.44441  # sim: 1.44441 # kg
+gravity = 9.798  # sim: 9.80665 # m/s^2   Tokyo 9.798; in sim: 9.80665
+Ixx = 0.055429
+Iyy = 0.017873
+Izz = 0.067851
+dr1 = 1
+p1_b = [0.0, 0.2375, 0.12098]
+dr2 = -1
+p2_b = [0, -0.2375, 0.12098]
+kq_d_kt = 0.0172
 
 # servo parameters
 ## 1-ord
-t_servo = physical_params["t_servo"]  # time constant of servo
+t_servo = 0.15858  # time constant of servo
 
 ## 2-ord
-kps = physical_params["kps"]
-kds = physical_params["kds"]  # kds has included the damping ratio
+kps = 72.7570
+kds = 11.5368  # kds has included the damping ratio
 
-i_sxx = physical_params["servo_inertia_x"]
+i_sxx = 0.0036697  # 0.0036697 calculated from UDRF
 
 # concatenate the parameters to make a new list
 # fmt: off
