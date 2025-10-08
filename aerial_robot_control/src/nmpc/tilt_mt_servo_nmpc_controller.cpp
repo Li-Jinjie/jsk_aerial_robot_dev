@@ -85,7 +85,7 @@ void nmpc::TiltMtServoNMPC::activate()
   has_restored_vel_ = false;  // reset the flag, so that we can restore the velocity after hovering
 
   /* also for some commands that should be sent after takeoff */
-  // enable imu sending, only works in simulation. TODO: check its compatibility with real robot
+  // enable imu sending, only works in simulation. Without this part, the IMU reading in Gazebo in incorrect.
   spinal::FlightConfigCmd flight_config_cmd;
   flight_config_cmd.cmd = spinal::FlightConfigCmd::INTEGRATION_CONTROL_ON_CMD;
   pub_flight_config_cmd_spinal_.publish(flight_config_cmd);
@@ -93,7 +93,7 @@ void nmpc::TiltMtServoNMPC::activate()
 
 bool nmpc::TiltMtServoNMPC::update()
 {
-  if (!ControlBase::update())
+  if (!BaseMPC::update())
     return false;
 
   this->controlCore();
