@@ -1,36 +1,21 @@
-import yaml
-import os
-import rospkg
+# 2025-10-08 copy parameters to be independent of any ROS package
+# these parameters are used in GitHub action to ensure the correctness of the nmpc code
+# In real usage, these parameters will be reloaded from URDF.
 
-# read parameters from yaml
-rospack = rospkg.RosPack()
-
-try:
-    physical_param_path = os.path.join(rospack.get_path("mini_quadrotor"), "config", "FlightControlNMPCFullModel.yaml")
-except rospkg.common.ResourceNotFound:
-    # Fallback: construct absolute path from current file
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.abspath(os.path.join(this_dir, "../../../../.."))
-    physical_param_path = os.path.join(project_root, "robots/mini_quadrotor/config/FlightControlNMPCFullModel.yaml")
-
-with open(physical_param_path, "r") as f:
-    physical_param_dict = yaml.load(f, Loader=yaml.FullLoader)
-physical_params = physical_param_dict["physical"]
-
-mass = physical_params["mass"]
-gravity = physical_params["gravity"]
-Ixx = physical_params["inertia_diag"][0]
-Iyy = physical_params["inertia_diag"][1]
-Izz = physical_params["inertia_diag"][2]
-dr1 = physical_params["dr1"]
-dr2 = physical_params["dr2"]
-dr3 = physical_params["dr3"]
-dr4 = physical_params["dr4"]
-p1_b = physical_params["p1"]
-p2_b = physical_params["p2"]
-p3_b = physical_params["p3"]
-p4_b = physical_params["p4"]
-kq_d_kt = physical_params["kq_d_kt"]
+mass = 1.0564  # kg
+gravity = 9.798  # m/s^2
+Ixx = 0.00867032  # kg m^2
+Iyy = 0.00867103
+Izz = 0.00979117
+dr1 = -1
+dr2 = 1
+dr3 = -1
+dr4 = 1
+p1_b = [-0.0865752, -0.085, 0.0108557]
+p2_b = [0.0834248, -0.085, 0.0108557]
+p3_b = [0.0834248, 0.085, 0.0108557]
+p4_b = [-0.0865752, 0.085, 0.0108557]
+kq_d_kt = 0.011
 
 # concatenate the parameters to make a new list
 # fmt: off
