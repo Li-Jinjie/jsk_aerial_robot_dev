@@ -1,46 +1,30 @@
-import os
-import yaml
-import rospkg
+# 2025-10-08 copy parameters from PhysParamBeetleArt.yaml to be independent of beetle package
+# these parameters are used in GitHub action to ensure the correctness of the nmpc code
+# In real usage, these parameters will be reloaded from URDF.
 
-# Read parameters from configuration file in the robot's package
-rospack = rospkg.RosPack()
+mass = 2.773
+gravity = 9.798
+Ixx = 0.04170
+Iyy = 0.03945
+Izz = 0.07068
+dr1 = 1
+p1_b = [0.137712, 0.137882, 0.0297217]
+dr2 = -1
+p2_b = [-0.137745, 0.137882, 0.0297217]
+dr3 = 1
+p3_b = [-0.137745, -0.138284, 0.0297217]
+dr4 = -1
+p4_b = [0.137712, -0.138284, 0.0297217]
+kq_d_kt = 0.0153
 
-try:
-    physical_param_path = os.path.join(rospack.get_path("beetle"), "config", "PhysParamBeetleArt.yaml")
-except rospkg.common.ResourceNotFound:  # non-ROS environment
-    # Fallback: construct absolute path from current file
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.abspath(os.path.join(this_dir, "../../../../.."))
-    physical_param_path = os.path.join(project_root, "robots/beetle/config/PhysParamBeetleArt.yaml")
+t_servo = 0.085883  # Time constant of servo
+t_rotor = 0.0942  # Time constant of rotor
 
-
-with open(physical_param_path, "r") as f:
-    physical_param_dict = yaml.load(f, Loader=yaml.FullLoader)
-physical_params = physical_param_dict["physical"]
-
-mass = physical_params["mass"]
-gravity = physical_params["gravity"]
-Ixx = physical_params["inertia_diag"][0]
-Iyy = physical_params["inertia_diag"][1]
-Izz = physical_params["inertia_diag"][2]
-dr1 = physical_params["dr1"]
-p1_b = physical_params["p1"]
-dr2 = physical_params["dr2"]
-p2_b = physical_params["p2"]
-dr3 = physical_params["dr3"]
-p3_b = physical_params["p3"]
-dr4 = physical_params["dr4"]
-p4_b = physical_params["p4"]
-kq_d_kt = physical_params["kq_d_kt"]
-
-t_servo = physical_params["t_servo"]  # Time constant of servo
-t_rotor = physical_params["t_rotor"]  # Time constant of rotor
-
-c0 = physical_params["c0"]
-c1 = physical_params["c1"]
-c2 = physical_params["c2"]
-c3 = physical_params["c3"]
-c4 = physical_params["c4"]
+c0 = -0.00278
+c1 = -0.02147
+c2 = 0.08134
+c3 = 0.00470
+c4 = -0.02439
 
 # fmt: off
 # concatenate the parameters to make a new list
