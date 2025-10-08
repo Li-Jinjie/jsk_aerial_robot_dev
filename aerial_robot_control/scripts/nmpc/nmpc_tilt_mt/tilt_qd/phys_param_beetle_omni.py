@@ -1,46 +1,27 @@
-"""
- Created by li-jinjie on 24-10-5.
-"""
+# 2025-10-08 copy parameters to be independent of any ROS package
+# these parameters are used in GitHub action to ensure the correctness of the nmpc code
+# In real usage, these parameters will be reloaded from URDF.
 
-import yaml
-import os
-import rospkg
+mass = 3.0386
+gravity = 9.798
+Ixx = 0.0627958
+Iyy = 0.0620796
+Izz = 0.0948795
+dr1 = 1
+dr2 = -1
+dr3 = 1
+dr4 = -1
+p1_b = [0.194824, 0.194652, -0.00368224]
+p2_b = [-0.194837, 0.194652, -0.00368224]
+p3_b = [-0.194837, -0.195008, -0.00368224]
+p4_b = [0.194824, -0.195008, -0.00368224]
+kq_d_kt = 0.0165
 
-# read parameters from yaml
-rospack = rospkg.RosPack()
+t_servo = 0.0480  # time constant of servo
+t_rotor = 0.0942  # time constant of rotor
 
-try:
-    physical_param_path = os.path.join(rospack.get_path("beetle_omni"), "config", "PhysParamBeetleOmni.yaml")
-except rospkg.common.ResourceNotFound:  # non-ROS environment
-    # Fallback: construct absolute path from current file
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.abspath(os.path.join(this_dir, "../../../../.."))
-    physical_param_path = os.path.join(project_root, "robots/beetle_omni/config/PhysParamBeetleOmni.yaml")
-
-with open(physical_param_path, "r") as f:
-    physical_param_dict = yaml.load(f, Loader=yaml.FullLoader)
-physical_params = physical_param_dict["physical"]
-
-mass = physical_params["mass"]
-gravity = physical_params["gravity"]
-Ixx = physical_params["inertia_diag"][0]
-Iyy = physical_params["inertia_diag"][1]
-Izz = physical_params["inertia_diag"][2]
-dr1 = physical_params["dr1"]
-dr2 = physical_params["dr2"]
-dr3 = physical_params["dr3"]
-dr4 = physical_params["dr4"]
-p1_b = physical_params["p1"]
-p2_b = physical_params["p2"]
-p3_b = physical_params["p3"]
-p4_b = physical_params["p4"]
-kq_d_kt = physical_params["kq_d_kt"]
-
-t_servo = physical_params["t_servo"]  # time constant of servo
-t_rotor = physical_params["t_rotor"]  # time constant of rotor
-
-ball_effector_p = physical_params["ball_effector_p"]
-ball_effector_q = physical_params["ball_effector_q"]  # qw, qx, qy, qz
+ball_effector_p = [0, 0, 0.264]
+ball_effector_q = [1, 0, 0, 0]  # qw, qx, qy, qz
 
 # concatenate the parameters to make a new list
 # fmt: off
