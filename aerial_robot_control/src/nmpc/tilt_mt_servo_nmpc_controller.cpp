@@ -85,7 +85,7 @@ void nmpc::TiltMtServoNMPC::activate()
   has_restored_vel_ = false;  // reset the flag, so that we can restore the velocity after hovering
 
   /* also for some commands that should be sent after takeoff */
-  // enable imu sending, only works in simulation. TODO: check its compatibility with real robot
+  // enable imu sending, only works in simulation. Without this part, the IMU reading in Gazebo in incorrect.
   spinal::FlightConfigCmd flight_config_cmd;
   flight_config_cmd.cmd = spinal::FlightConfigCmd::INTEGRATION_CONTROL_ON_CMD;
   pub_flight_config_cmd_spinal_.publish(flight_config_cmd);
@@ -93,7 +93,7 @@ void nmpc::TiltMtServoNMPC::activate()
 
 bool nmpc::TiltMtServoNMPC::update()
 {
-  if (!ControlBase::update())
+  if (!BaseMPC::update())
     return false;
 
   this->controlCore();
@@ -161,6 +161,11 @@ void nmpc::TiltMtServoNMPC::initGeneralParams()
   getParam<double>(nmpc_nh, "T_samp", t_nmpc_samp_, 0.025);
   getParam<double>(nmpc_nh, "T_step", t_nmpc_step_, 0.1);
   getParam<double>(nmpc_nh, "T_horizon", t_nmpc_horizon_, 2.0);
+
+  if (t_nmpc_samp_ != 1 / ctrl_loop_du_)
+    throw std::runtime_error(
+        "The NMPC sampling time T_samp is not equal to the control loop time! Please set T_step to 1/ctrl_loop_du_ in "
+        "the config.");
 
   getParam<bool>(nmpc_nh, "is_attitude_ctrl", is_attitude_ctrl_, true);
   getParam<bool>(nmpc_nh, "is_body_rate_ctrl", is_body_rate_ctrl_, false);
@@ -784,10 +789,10 @@ void nmpc::TiltMtServoNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf:
     }
     rotor_idx = max_rotor_idx;
 
-    ROS_WARN(
-        "More than one rotor is below threshold and flip backwards! Select rotor %d with thrust %.2f as the "
-        "fixed rotor.",
-        rotor_idx, max_ft);
+    ROS_WARN_THROTTLE(1.0,
+                      "More than one rotor is below threshold and flip backwards! "
+                      "Select rotor %d with thrust %.2f as the fixed rotor.",
+                      rotor_idx, max_ft);
   }
   else
   {

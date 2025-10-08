@@ -21,6 +21,41 @@ namespace nmpc
 class BaseMPC : public ControlBase
 {
 public:
+  bool update() override
+  {
+    ros::Time now = ros::Time::now();
+
+    // init t_last_
+    if (t_last_.is_zero())
+    {
+      t_last_ = now;
+      return ControlBase::update();
+    }
+
+    const double dt = (now - t_last_).toSec();
+
+    // init dt_last_
+    if (dt_last_ == 0.0)
+    {
+      dt_last_ = dt;
+      return ControlBase::update();
+    }
+
+    // check the update rate
+    const double dt_average = (dt_last_ + dt) / 2.0;
+    const double tol = 0.11;
+    if (dt_average > 1 / ctrl_loop_du_ * (1 + tol) || dt_average < 1 / ctrl_loop_du_ * (1 - tol))
+    {
+      ROS_WARN("NMPC controller update rate is not stable (2 average): %.4f, expected: %.4f, tolerance: %.2f %%",
+               dt_average, 1 / ctrl_loop_du_, tol * 100);
+    }
+
+    dt_last_ = dt;
+    t_last_ = now;
+
+    return ControlBase::update();
+  }
+
 protected:
   // define MPC solver
   boost::shared_ptr<pluginlib::ClassLoader<aerial_robot_control::mpc_solver::BaseMPCSolver>> mpc_solver_loader_ptr_;
@@ -126,6 +161,10 @@ protected:
   virtual void sendCmd() = 0;
   // 5. viz the result in RVIZ
   virtual void callbackViz(const ros::TimerEvent& event) = 0;
+
+private:
+  double dt_last_ = 0.0;
+  ros::Time t_last_;
 };
 
 }  // namespace nmpc
