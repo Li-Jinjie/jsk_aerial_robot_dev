@@ -13,12 +13,21 @@ class BaseTraj:
         self.loop_num = loop_num
         self.use_constant_ref = False
 
+        self.frame_id = "world"
+        self.child_frame_id = "cog"
+
         self.t_total = None
 
     def check_finished(self, t: float) -> bool:
         if self.t_total is None:
             self.t_total = self.T * self.loop_num
         return t > self.t_total
+
+    def get_frame_id(self) -> str:
+        return self.frame_id
+
+    def get_child_frame_id(self) -> str:
+        return self.child_frame_id
 
     def get_3d_pt(self, t: float) -> Tuple[float, float, float, float, float, float, float, float, float]:
         x, y, z, vx, vy, vz, ax, ay, az = 0.0, 0.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
@@ -194,6 +203,8 @@ class SetPointTraj(BaseTraj):
 class PitchRotationTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 10  # total time for one full rotation cycle (0 to -2.5 and back to 0)
         self.omega = 2 * np.pi / self.T  # angular velocity
 
@@ -233,6 +244,8 @@ class PitchRotationTraj(BaseTraj):
 class PitchRotationFullTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 10  # total time for one full rotation cycle (0 to -2.5 and back to 0)
         self.omega = 2 * np.pi / self.T  # angular velocity
 
@@ -290,6 +303,8 @@ class PitchRotationFullTraj(BaseTraj):
 class PitchContinuousRotationTraj(BaseTrajwFixedRotor):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 20  # total time for one full rotation cycle (0 to -2.5 and back to 0)
 
     def get_3d_orientation(
@@ -367,6 +382,8 @@ class PitchRotationTrajOpposite(PitchRotationTraj):
 class Continuous45DegRotationTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 10  # total time for one full rotation cycle (0 to -2.5 and back to 0)
         self.omega = 2 * np.pi / self.T  # angular velocity
 
@@ -393,6 +410,8 @@ class Continuous45DegRotationTraj(BaseTraj):
 class RollRotationTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 10  # total time for one full rotation cycle (0 to -2.5 and back to 0)
         self.omega = 2 * np.pi / self.T  # angular velocity
 
@@ -432,6 +451,8 @@ class RollRotationTraj(BaseTraj):
 class RollRotationFullTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 10  # total time for one full rotation cycle (0 to -2.5 and back to 0)
         self.omega = 2 * np.pi / self.T  # angular velocity
 
@@ -497,6 +518,8 @@ class RollRotationTrajOpposite(RollRotationTraj):
 class RollRotationYaw045dTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 10  # total time for one full rotation cycle (0 to -2.5 and back to 0)
         self.omega = 2 * np.pi / self.T  # angular velocity
 
@@ -536,30 +559,13 @@ class RollRotationYaw045dTraj(BaseTraj):
 class PitchSetPtTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.t_converge = 8.0
-        self.pitch_values = [
-            0.0,
-            0.5,
-            1.0,
-            1.5,
-            2.0,
-            2.5,
-            2.0,
-            1.5,
-            1.0,
-            0.5,
-            0.0,
-            -0.5,
-            -1.0,
-            -1.5,
-            -2.0,
-            -2.5,
-            -2.0,
-            -1.5,
-            -1.0,
-            -0.5,
-            0.0,
-        ]
+        # fmt: off
+        self.pitch_values = [ 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 2.0, 1.5, 1.0, 0.5,
+            0.0, -0.5, -1.0, -1.5, -2.0, -2.5, -2.0, -1.5, -1.0, -0.5, 0.0, ]
+        # fmt: on
         self.T = len(self.pitch_values) * self.t_converge
 
     def get_3d_orientation(
@@ -583,6 +589,8 @@ class PitchSetPtTraj(BaseTraj):
 class YawRotationRoll090dTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 30  # total time for one full rotation cycle
         self.omega = 2 * np.pi / self.T  # angular velocity
 
@@ -612,6 +620,8 @@ class YawRotationRoll090dTraj(BaseTraj):
 class YawRotationRoll045dTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 30  # total time for one full rotation cycle
         self.omega = 2 * np.pi / self.T  # angular velocity
 
@@ -641,6 +651,8 @@ class YawRotationRoll045dTraj(BaseTraj):
 class YawRotationRoll135dTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.T = 30  # total time for one full rotation cycle
         self.omega = 2 * np.pi / self.T  # angular velocity
 
@@ -670,6 +682,8 @@ class YawRotationRoll135dTraj(BaseTraj):
 class SingularityPointTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
+        self.child_frame_id = "ee"
+
         self.att = np.array([0.0, 0.0, 0.0])
         self.att_rate = np.array([0.0, 0.0, 0.0])
         self.att_acc = np.array([0.0, 0.0, 0.0])
