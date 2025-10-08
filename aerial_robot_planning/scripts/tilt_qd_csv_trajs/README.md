@@ -9,14 +9,16 @@ Each CSV file contains a 3-line header followed by trajectory data:
 
 ```
 robot,beetle1
-frame,cog
+frame_id,world
+child_frame_id,cog
 time,px,py,pz,vx,vy,vz,qw,qx,qy,qz,wx,wy,wz,a1,a2,a3,a4,control effort,fc1,fc2,fc3,fc4,ac1,ac2,ac3,ac4
 ```
 
 **Header Lines:**
 1. `robot,<robot_name>` - Specifies the robot model (e.g., beetle1)
-2. `frame,<frame_type>` - Reference frame for the trajectory (e.g., cog for center of gravity, ee for end effector)
-3. Column headers - Describes each data column
+2. `frame_id,<reference_frame>` - Reference frame for the trajectory (e.g., world)
+3. `child_frame_id,<frame_type>` - Reference child_frame for the trajectory (e.g., cog for center of gravity, ee for end effector)
+4. Column headers - Describes each data column
 
 ### Data Columns (27 columns total)
 

@@ -16,6 +16,7 @@ from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectory
 from aerial_robot_msgs.msg import FixRotor
 
 from pub_mpc_base import MPCPubBase
+from trajs import BaseTraj
 
 # Insert current folder into path so we can import from "trajs" or other local files
 current_path = os.path.abspath(os.path.dirname(__file__))
@@ -27,8 +28,8 @@ if current_path not in sys.path:
 # Derived Class: MPCPubJointTraj
 ##########################################
 class MPCPubJointTraj(MPCPubBase, ABC):
-    def __init__(self, robot_name: str, node_name: str, is_calc_rmse=True):
-        super().__init__(robot_name=robot_name, node_name=node_name, is_calc_rmse=is_calc_rmse)
+    def __init__(self, robot_name: str, node_name: str, odom_frame_id: str, is_calc_rmse=True):
+        super().__init__(robot_name, node_name, odom_frame_id, is_calc_rmse)
         # Publisher for reference trajectory
         self.pub_ref_traj = rospy.Publisher(f"/{robot_name}/set_ref_traj", MultiDOFJointTrajectory, queue_size=3)
         self.pub_fixed_rotor = rospy.Publisher(f"/{robot_name}/set_fixed_rotor", FixRotor, queue_size=3)
@@ -36,7 +37,6 @@ class MPCPubJointTraj(MPCPubBase, ABC):
     def pub_trajectory_points(self, traj_msg: MultiDOFJointTrajectory):
         """Publish the MultiDOFJointTrajectory message."""
         traj_msg.header.stamp = rospy.Time.now()
-        traj_msg.header.frame_id = "map"
         self.pub_ref_traj.publish(traj_msg)
 
 
@@ -49,8 +49,8 @@ class MPCTrajPtPub(MPCPubJointTraj):
     to the NMPC controller, based on a 'traj' object (e.g. CircleTraj, etc.).
     """
 
-    def __init__(self, robot_name: str, traj):
-        super().__init__(robot_name=robot_name, node_name="mpc_traj_pt_pub")
+    def __init__(self, robot_name: str, traj: BaseTraj):
+        super().__init__(robot_name=robot_name, node_name="mpc_traj_pt_pub", odom_frame_id=traj.get_child_frame_id())
         self.traj = traj
         rospy.loginfo(f"{self.namespace}/{self.node_name}: Using trajectory {str(self.traj)}")
 
@@ -64,6 +64,11 @@ class MPCTrajPtPub(MPCPubJointTraj):
         """
         multi_dof_joint_traj = MultiDOFJointTrajectory()
 
+        # set frame
+        multi_dof_joint_traj.header.frame_id = self.traj.get_frame_id()
+        multi_dof_joint_traj.joint_names.append(self.traj.get_child_frame_id())
+
+        # set data
         # For certain rotation-based trajectories, we might keep the same reference
         # across the entire horizon
         if hasattr(self.traj, "use_constant_ref") and self.traj.use_constant_ref is True:
@@ -134,8 +139,11 @@ class MPCSinglePtPub(MPCPubJointTraj):
     and checks if the robot has reached it within a certain error threshold.
     """
 
-    def __init__(self, robot_name: str, target_pose: Pose, pos_tol=0.2, ang_tol=0.3, vel_tol=0.1, rate_tol=0.1):
-        super().__init__(robot_name=robot_name, node_name="mpc_single_pt_pub", is_calc_rmse=False)
+    # fmt: off
+    def __init__(self, robot_name: str, frame_id: str, child_frame_id: str, target_pose: Pose,
+                 pos_tol=0.2, ang_tol=0.3, vel_tol=0.1, rate_tol=0.1):
+        # fmt: on
+        super().__init__(robot_name=robot_name, node_name="mpc_single_pt_pub", odom_frame_id=child_frame_id, is_calc_rmse=False)
         self.target_pose = target_pose
         rospy.loginfo(
             f"{self.namespace}/{self.node_name}: \n"
@@ -144,6 +152,9 @@ class MPCSinglePtPub(MPCPubJointTraj):
             f"qw {self.target_pose.orientation.w}, qx {self.target_pose.orientation.x}, "
             f"qy {self.target_pose.orientation.y}, qz {self.target_pose.orientation.z}"
         )
+
+        self.frame_id = frame_id
+        self.child_frame_id = child_frame_id
 
         # Tolerances for considering the target "reached"
         self.pos_tol = pos_tol  # e.g. 0.1 m
@@ -159,6 +170,11 @@ class MPCSinglePtPub(MPCPubJointTraj):
         """
         traj_msg = MultiDOFJointTrajectory()
 
+        # set frame
+        traj_msg.header.frame_id = self.frame_id
+        traj_msg.joint_names.append(self.child_frame_id)
+
+        # set data
         x = self.target_pose.position.x
         y = self.target_pose.position.y
         z = self.target_pose.position.z
