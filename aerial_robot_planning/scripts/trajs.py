@@ -45,6 +45,7 @@ class BaseTraj:
 class BaseTrajwFixedRotor(BaseTraj):
     def __init__(self, loop_num: int = np.inf) -> None:
         super().__init__(loop_num)
+        self.hover_thrust = 7.5
         self.use_fix_rotor_flag = False
 
     def get_fixed_rotor(self, t: float):
@@ -735,39 +736,41 @@ class TestFixedRotorTraj(BaseTrajwFixedRotor):
 
     def get_fixed_rotor(self, t: float):
         rotor_id = 0
-        ft_fixed = 7.0
+        ft_fixed = self.hover_thrust
         alpha_fixed = 0.0
 
         if 0.0 >= t:
             self.use_fix_rotor_flag = False
 
         if self.t_converge >= t > 0.0:
-            ft_fixed = 1.0
+            ft_fixed += 1.0
             self.use_fix_rotor_flag = True
 
         if 2 * self.t_converge >= t > self.t_converge:
-            ft_fixed = 2.0
+            ft_fixed += 2.0
             self.use_fix_rotor_flag = True
 
         if 3 * self.t_converge >= t > 2 * self.t_converge:
-            ft_fixed = 3.0
+            ft_fixed += 3.0
             self.use_fix_rotor_flag = True
 
         if 4 * self.t_converge >= t > 3 * self.t_converge:
-            ft_fixed = 4.0
+            ft_fixed += 4.0
             self.use_fix_rotor_flag = True
 
         if 5 * self.t_converge >= t > 4 * self.t_converge:
-            ft_fixed = 5.0
+            ft_fixed += 5.0
             self.use_fix_rotor_flag = True
 
         if 6 * self.t_converge >= t > 5 * self.t_converge:
-            ft_fixed = 6.0
+            ft_fixed += 6.0
             self.use_fix_rotor_flag = True
 
         if 7 * self.t_converge >= t > 6 * self.t_converge:
-            ft_fixed = 7.0
+            ft_fixed += 7.0
             self.use_fix_rotor_flag = True
+
+        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
 
         if t > 7 * self.t_converge:
             self.use_fix_rotor_flag = False
@@ -814,19 +817,20 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwFixedRotor):
 
         raise ValueError(f"Unrecognized note token: {note!r}")
 
-    def get_fixed_rotor(self, t: float):
+    def get_fixed_rotor(self, t: float) -> Tuple[int, float, float]:
         rotor_id = 0
-        alpha_fixed = 0.0
 
         # Song finished or not yet started → no fixed rotor
         if t < 0.0 or t >= self.T:
             self.use_fix_rotor_flag = False
-            return rotor_id, self.min_thrust, alpha_fixed
+            return rotor_id, self.min_thrust, 0.0
 
         # Current beat index
         beat_idx = int(t / self.beat) % len(self.notes)
         note = self.notes[beat_idx]
-        ft_fixed = 13 - self._parse_note(note)
+        ft_fixed = self.hover_thrust + self._parse_note(note) - 5.0
+
+        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
 
         # Rest → disable flag
         self.use_fix_rotor_flag = ft_fixed != self.min_thrust
