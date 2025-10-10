@@ -548,58 +548,51 @@ void nmpc::TiltMtServoNMPC::sendCmd()
 
 void nmpc::TiltMtServoNMPC::prepareNMPCRef()
 {
-  /* if in trajectory tracking mode, the ref is set by callbackSetRefXU.
-   * So here we check if the traj info is still received. If not, we turn off the tracking mode */
-  if (is_traj_tracking_)
+  // TODO: wrap to a state machine
+  if (!is_traj_tracking_)
   {
-    double t_interval_sec = (ros::Time::now() - x_u_ref_.header.stamp).toSec();
-
-    double traj_switch_time = 0.1;  // second
-    double min_no_traj_time = 0.5;  // second
-
-    if (t_interval_sec <= traj_switch_time)
-      return;
-
-    // - for the switch between two trajectories, such as from single point tracking to traj
-    if (traj_switch_time < t_interval_sec && t_interval_sec <= min_no_traj_time)
-    {
-      last_traj_msg_.points.clear();  // every time end one traj, clear the traj msg
-      return;
-    }
-
-    // - for the general case that no traj msg is received for a long time
-    ROS_INFO("No traj msg for 0.5s. Trajectory tracking mode is off! Return to the hovering!");
-    is_traj_tracking_ = false;
-    traj_child_frame_id_ = "cog";  // reset to cog frame
-
-    tf::Vector3 current_pos = estimator_->getPos(Frame::COG, estimate_mode_);
-    tf::Vector3 current_rpy = estimator_->getEuler(Frame::COG, estimate_mode_);
-    navigator_->setTargetPosX(static_cast<float>(current_pos.x()));
-    navigator_->setTargetPosY(static_cast<float>(current_pos.y()));
-    navigator_->setTargetPosZ(static_cast<float>(current_pos.z()));
-    navigator_->setTargetVelX(0.0);
-    navigator_->setTargetVelY(0.0);
-    navigator_->setTargetVelZ(0.0);
-    navigator_->setTargetRoll(0.0);
-    navigator_->setTargetPitch(0.0);
-    navigator_->setTargetYaw(static_cast<float>(current_rpy.z()));
-    navigator_->setTargetOmegaX(0.0);
-    navigator_->setTargetOmegaY(0.0);
-    navigator_->setTargetOmegaZ(0.0);
+    setPointRefFromNavigator(true);
+    return;
   }
 
-  /* if not in tracking mode, we use point mode --> set target */
-  tf::Vector3 target_cog_pos_in_w = navigator_->getTargetPos();
-  tf::Vector3 target_cog_vel_in_w = navigator_->getTargetVel();
-  tf::Vector3 target_cog_rpy = navigator_->getTargetRPY();
-  tf::Quaternion target_cog_quat;
-  target_cog_quat.setRPY(target_cog_rpy.x(), target_cog_rpy.y(), target_cog_rpy.z());
-  tf::Vector3 target_cog_omega = navigator_->getTargetOmega();
+  /* if in trajectory tracking mode, the ref is set by callbackSetRefXU.
+   * So here we check if the traj info is still received. If not, we turn off the tracking mode */
+  double t_interval_sec = (ros::Time::now() - x_u_ref_.header.stamp).toSec();
 
-  setXrUrRef(target_cog_pos_in_w, target_cog_vel_in_w, tf::Vector3(0, 0, 0), target_cog_quat, target_cog_omega,
-             tf::Vector3(0, 0, 0), -1);
-  rosXU2VecXU(x_u_ref_, mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_);
-  mpc_solver_ptr_->setReference(mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_, true);
+  double traj_switch_time = 0.1;  // second
+  double min_no_traj_time = 0.5;  // second
+
+  if (t_interval_sec <= traj_switch_time)
+    return;
+
+  // - for the switch between two trajectories, such as from single point tracking to traj
+  if (traj_switch_time < t_interval_sec && t_interval_sec <= min_no_traj_time)
+  {
+    last_traj_msg_.points.clear();  // every time end one traj, clear the traj msg
+    return;
+  }
+
+  // - for the general case that no traj msg is received for a long time
+  ROS_WARN("No traj msg for 0.5s. Trajectory tracking mode is off! Return to the hovering!");
+  is_traj_tracking_ = false;
+  traj_child_frame_id_ = "cog";  // reset to cog frame
+
+  tf::Vector3 current_pos = estimator_->getPos(Frame::COG, estimate_mode_);
+  tf::Vector3 current_rpy = estimator_->getEuler(Frame::COG, estimate_mode_);
+  navigator_->setTargetPosX(static_cast<float>(current_pos.x()));
+  navigator_->setTargetPosY(static_cast<float>(current_pos.y()));
+  navigator_->setTargetPosZ(static_cast<float>(current_pos.z()));
+  navigator_->setTargetVelX(0.0);
+  navigator_->setTargetVelY(0.0);
+  navigator_->setTargetVelZ(0.0);
+  navigator_->setTargetRoll(0.0);
+  navigator_->setTargetPitch(0.0);
+  navigator_->setTargetYaw(static_cast<float>(current_rpy.z()));
+  navigator_->setTargetOmegaX(0.0);
+  navigator_->setTargetOmegaY(0.0);
+  navigator_->setTargetOmegaZ(0.0);
+
+  setPointRefFromNavigator(false);
 }
 
 void nmpc::TiltMtServoNMPC::prepareNMPCParams()
@@ -614,6 +607,26 @@ void nmpc::TiltMtServoNMPC::prepareNMPCParams()
   }
 }
 
+void nmpc::TiltMtServoNMPC::setPointRefFromNavigator(bool is_shifted_not_set_all)
+{
+  tf::Vector3 target_cog_pos_in_w = navigator_->getTargetPos();
+  tf::Vector3 target_cog_vel_in_w = navigator_->getTargetVel();
+  tf::Vector3 target_cog_rpy = navigator_->getTargetRPY();
+  tf::Quaternion target_cog_quat;
+  target_cog_quat.setRPY(target_cog_rpy.x(), target_cog_rpy.y(), target_cog_rpy.z());
+  tf::Vector3 target_cog_omega = navigator_->getTargetOmega();
+
+  if (is_shifted_not_set_all)
+    setXrUrRef(target_cog_pos_in_w, target_cog_vel_in_w, tf::Vector3(0, 0, 0), target_cog_quat, target_cog_omega,
+               tf::Vector3(0, 0, 0), -1);
+  else
+    setXrUrRef(target_cog_pos_in_w, target_cog_vel_in_w, tf::Vector3(0, 0, 0), target_cog_quat, target_cog_omega,
+               tf::Vector3(0, 0, 0), -2);
+
+  rosXU2VecXU(x_u_ref_, mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_);
+  mpc_solver_ptr_->setReference(mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_, true);
+}
+
 /**
  * @brief calXrUrRef: calculate the reference state and control input
  * @param ref_pos_i
@@ -622,8 +635,8 @@ void nmpc::TiltMtServoNMPC::prepareNMPCParams()
  * @param ref_quat_ib
  * @param ref_omega_b
  * @param ref_ang_acc_b
- * @param horizon_idx - set -1 for adding the target point to the end of the reference trajectory, 0 ~ NN for adding
- * the target point to the horizon_idx interval
+ * @param horizon_idx - set -1 for adding the target point to the end of the reference trajectory; 0 ~ NN for adding
+ * the target point to the horizon_idx interval; -2 for adding the target point to all points
  */
 void nmpc::TiltMtServoNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i,
                                        const tf::Vector3& ref_acc_i, const tf::Quaternion& ref_quat_ib,
@@ -677,6 +690,19 @@ void nmpc::TiltMtServoNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::V
     std::copy(x.begin(), x.begin() + NX, x_u_ref_.x.data.begin() + NX * (NN - 1));
     std::copy(u.begin(), u.begin() + NU, x_u_ref_.u.data.begin() + NU * (NN - 1));
 
+    std::copy(x.begin(), x.begin() + NX, x_u_ref_.x.data.begin() + NX * NN);
+
+    return;
+  }
+
+  if (horizon_idx == -2)
+  {
+    // Aim: set the target point to all points in the horizon
+    for (int i = 0; i < NN; i++)
+    {
+      std::copy(x.begin(), x.begin() + NX, x_u_ref_.x.data.begin() + NX * i);
+      std::copy(u.begin(), u.begin() + NU, x_u_ref_.u.data.begin() + NU * i);
+    }
     std::copy(x.begin(), x.begin() + NX, x_u_ref_.x.data.begin() + NX * NN);
 
     return;

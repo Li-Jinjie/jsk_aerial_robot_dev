@@ -154,6 +154,8 @@ protected:
   // controlCore()
   void prepareNMPCRef();
   virtual void prepareNMPCParams();
+
+  void setPointRefFromNavigator(bool is_shifted_not_set_all);
   void setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i, const tf::Vector3& ref_acc_i,
                   const tf::Quaternion& ref_quat_ib, const tf::Vector3& ref_omega_b, const tf::Vector3& ref_ang_acc_b,
                   const int& horizon_idx);
