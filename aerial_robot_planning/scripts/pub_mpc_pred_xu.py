@@ -101,7 +101,8 @@ class MPCPubCSVPredXU(MPCPubPredXU):
                 input_str = input("Invalid input. Please press 'Enter' to continue or 'q' to quit...")
 
         # Adjust your control inputs if needed
-        self.u_traj[:, 4:8] = self.x_traj[:, 13:17]
+        # self.u_traj[:, 4:8] = self.x_traj[:, 13:17]
+        self.u_traj[:, 4:8] = np.zeros((self.u_traj.shape[0], 4))  # servo control to zeros
 
         self.start_timer()
 
