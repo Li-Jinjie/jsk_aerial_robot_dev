@@ -126,25 +126,22 @@ protected:
   double vel_max_, vel_min_, vel_limit_takeoff_;
 
   /* initialize() */
-  virtual void initPlugins() {};
-  virtual void initGeneralParams();
-  virtual void initNMPCCostW();
-  virtual void initNMPCConstraints();
+  void initGeneralParams() override;
+  void initNMPCCostW() override;
+  void initNMPCConstraints() override;
+
   void setControlMode();
   virtual inline void initActuatorStates()
   {
     joint_angles_.resize(joint_num_, 0.0);
   }
 
-  /* reset() */
-  virtual void resetPlugins() {};
-
   /* activate() */
+  void initNMPCParams() override;
+
   virtual void initAllocMat();
-  virtual void initNMPCParams();
   void updateInertialParams();
   std::vector<double> PhysToNMPCParams() const;
-
   void modifyVelConstraints(double vel_min, double vel_max) const;
 
   /* update() */
@@ -152,8 +149,8 @@ protected:
   void sendCmd() override;
 
   // controlCore()
-  void prepareNMPCRef();
-  virtual void prepareNMPCParams();
+  void prepareNMPCRef() override;
+  void prepareNMPCParams() override;
 
   void setPointRefFromNavigator(bool is_shifted_not_set_all);
   void setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i, const tf::Vector3& ref_acc_i,

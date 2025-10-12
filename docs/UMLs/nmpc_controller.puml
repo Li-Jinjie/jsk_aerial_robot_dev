@@ -15,14 +15,25 @@ abstract class aerial_robot_control::ControlBase {
 
 abstract class aerial_robot_control::nmpc::BaseMPC extends aerial_robot_control::ControlBase {
     # mpc_solver_ptr_
-    # initPredXU()
-    # initMPCSolverPtr() = 0
-    # callbackSetRefTraj() = 0
-    # rosXU2VecXU()
+    + initialize()
+    + activate()
+    + update()
+    + reset()
+    # initPlugins() {}
+    # initGeneralParams() = 0
+    # initNMPCCostW() = 0
+    # initNMPCConstraints() = 0
+    # initNMPCParams() = 0
+    # prepareNMPCRef() = 0
+    # prepareNMPCParams() = 0
+    # callbackSetRefXU() = 0
     # meas2VecX() = 0
     # controlCore() = 0
     # sendCmd() = 0
     # callbackViz() = 0
+    # resetPlugins() {}
+    # initPredXU()
+    # rosXU2VecXU()
 }
 
 class aerial_robot_control::nmpc::FixQdNMPC extends aerial_robot_control::nmpc::TiltQdServoNMPC {
@@ -44,15 +55,20 @@ class aerial_robot_control::nmpc::TiltQdServoNMPC extends aerial_robot_control::
 'x_dim = 17, u_dim = 8, p_dim = 4'
     + TiltQdServoNMPC()
     + ~TiltQdServoNMPC()
+    + activate()
     + initialize()
     + update()
     + reset()
-    # initMPCSolverPtr()
-    # initAllocMat()
-    # initParams()
-    # initCostW()
+    # initGeneralParams()
+    # initNMPCCostW()
+    # initNMPCConstraints()
     # setControlMode()
-    # initJointStates()
+    # initActuatorStates()
+    # initNMPCParams()
+    # initAllocMat()
+    # updateInertialParams()
+    # PhysToNMPCParams()
+    # modifyVelConstraints()
     # controlCore()
     # sendCmd()
     # prepareNMPCRef()
