@@ -136,9 +136,6 @@ protected:
     joint_angles_.resize(joint_num_, 0.0);
   }
 
-  /* reset() */
-  virtual void resetPlugins() {};
-
   /* activate() */
   void initNMPCParams() override;
 

@@ -28,9 +28,9 @@ public:
                   boost::shared_ptr<aerial_robot_model::RobotModel> robot_model,
                   boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
                   boost::shared_ptr<aerial_robot_navigation::BaseNavigator> navigator, double ctrl_loop_du) override;
-
   void activate() override;
   bool update() override;
+  void reset() override;
 
 protected:
   // ----------- MPC solver -----------
@@ -53,6 +53,9 @@ protected:
   virtual void controlCore() = 0;
   virtual void sendCmd() = 0;
   virtual void callbackViz(const ros::TimerEvent& event) = 0;
+
+  // ----------- reset functions -----------
+  virtual void resetPlugins() {};
 
   // ----------- Helper functions -----------
   static void initPredXU(aerial_robot_msgs::PredXU& x_u, int nn, int nx, int nu);

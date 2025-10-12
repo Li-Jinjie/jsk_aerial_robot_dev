@@ -96,6 +96,13 @@ bool BaseMPC::update()
   return ControlBase::update();
 }
 
+void BaseMPC::reset()
+{
+  resetPlugins();
+
+  // Needs to be done: reset the mpc_solver with data
+}
+
 void BaseMPC::initPredXU(aerial_robot_msgs::PredXU& x_u, int nn, int nx, int nu)
 {
   // state
