@@ -92,6 +92,29 @@ class MPCPubBase(ABC):
 
     def _timer_callback(self, timer_event: rospy.timer.TimerEvent):
         """Common timer callback that handles frequency checking and calls user-defined steps."""
+        # 0) Check if finished. If so, shutdown the timer and return.
+        if self.is_finished:
+            rospy.loginfo(f"{self.namespace}/{self.node_name}: is_finished is set to True!")
+
+            if hasattr(self, "track_err_calc"):
+                # Calculate RMSE of tracking error
+                pos_rmse_norm, pos_rmse, ang_rmse_norm, ang_rmse = self.track_err_calc.get_rmse_error()
+
+                rospy.loginfo(
+                    f"\033[1;36m{self.namespace}/{self.node_name}: RMSE of tracking error: \n"
+                    f"pos_err_norm = {pos_rmse_norm:.3f} m, \n"
+                    f"pos_err = {pos_rmse[0]:.3f} m, {pos_rmse[1]:.3f} m, {pos_rmse[2]:.3f} m, \n"
+                    f"ang_err_norm = {ang_rmse_norm:.3f} deg, \n"
+                    f"ang_err = {ang_rmse[0]:.3f} deg, {ang_rmse[1]:.3f} deg, {ang_rmse[2]:.3f} deg\033[0m"
+                )  # cyan highlight
+
+                self.track_err_calc.reset()
+
+            # Shutdown the timer
+            self.tmr_pt_pub.shutdown()
+
+            return
+
         # 1) Check frequency
         if (timer_event.last_duration is not None) and (self.ts_pt_pub < timer_event.last_duration):
             rospy.logwarn(
@@ -118,28 +141,7 @@ class MPCPubBase(ABC):
         # 3) Publish
         self.pub_trajectory_points(traj_msg)
 
-        # 4) Check if done from a child-class method
-        # is_finished can be also set by other function to quit, so we need to check it first
-        if self.is_finished:
-            rospy.loginfo(f"{self.namespace}/{self.node_name}: is_finished is set to True!")
-
-            if hasattr(self, "track_err_calc"):
-                # Calculate RMSE of tracking error
-                pos_rmse_norm, pos_rmse, ang_rmse_norm, ang_rmse = self.track_err_calc.get_rmse_error()
-
-                rospy.loginfo(
-                    f"\033[1;36m{self.namespace}/{self.node_name}: RMSE of tracking error: \n"
-                    f"pos_err_norm = {pos_rmse_norm:.3f} m, \n"
-                    f"pos_err = {pos_rmse[0]:.3f} m, {pos_rmse[1]:.3f} m, {pos_rmse[2]:.3f} m, \n"
-                    f"ang_err_norm = {ang_rmse_norm:.3f} deg, \n"
-                    f"ang_err = {ang_rmse[0]:.3f} deg, {ang_rmse[1]:.3f} deg, {ang_rmse[2]:.3f} deg\033[0m"
-                )  # cyan highlight
-
-                self.track_err_calc.reset()
-
-            # Shutdown the timer
-            self.tmr_pt_pub.shutdown()
-
+        # 4) Check if done from an overload method
         self.is_finished = self.check_finished(t_has_started)
 
     @abstractmethod
