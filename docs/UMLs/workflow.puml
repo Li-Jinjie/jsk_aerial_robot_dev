@@ -15,8 +15,8 @@ participant RViz
 participant Terminal
 end box
 
-box "Onboard PC\n(Jetson NX)" #LightGreen
-participant "Nav" as Nav
+box "Onboard PC\n(VIM 4 + NMPC Control)" #LightGreen
+participant "Planning" as Nav
 participant "Control" as Ctl
 participant "Estimator" as Est
 end box
@@ -33,16 +33,20 @@ box Gazebo (Laptop) #Aliceblue
 
 end box
 
-Est ->> Est: 100Hz
+Est ->> Est: 200Hz
 
-loop 40Hz
+loop 100Hz
     Est ->> Ctl: estimator_->getState()
 end loop
 
-Nav ->> Ctl: target_pos/vel/acc
-loop 10Hz
-    Ctl -> Spinal: angles and thrust\nspinal/FourAxisCommand.msg
+loop 50Hz
+    Nav ->> Ctl: Traj
 end loop
-Spinal -> ESC: PWM
+
+
+loop 100Hz
+    Ctl -> Spinal: Thrust and Servo Angles
+end loop
+Spinal -> ESC: DShot & Angle
 
 @enduml
