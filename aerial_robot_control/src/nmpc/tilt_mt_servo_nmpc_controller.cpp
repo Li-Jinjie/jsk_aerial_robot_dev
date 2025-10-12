@@ -573,9 +573,11 @@ void nmpc::TiltMtServoNMPC::prepareNMPCRef()
   }
 
   // - for the general case that no traj msg is received for a long time
-  ROS_WARN("No traj msg for 0.5s. Trajectory tracking mode is off! Return to the hovering!");
   is_traj_tracking_ = false;
-  traj_child_frame_id_ = "cog";  // reset to cog frame
+  traj_child_frame_id_ = "cog";
+  ROS_INFO_STREAM(
+      "No traj msg for 0.5s. Trajectory tracking mode is off! Return to the hovering! The child frame is set to "
+      << traj_child_frame_id_ << ".");
 
   tf::Vector3 current_pos = estimator_->getPos(Frame::COG, estimate_mode_);
   tf::Vector3 current_rpy = estimator_->getEuler(Frame::COG, estimate_mode_);
@@ -964,9 +966,9 @@ void nmpc::TiltMtServoNMPC::callbackSetRefXU(const aerial_robot_msgs::PredXUCons
   /* switch tracking mode */
   if (!is_traj_tracking_)
   {
-    ROS_INFO("Trajectory tracking mode is on!");
     is_traj_tracking_ = true;
     traj_child_frame_id_ = msg->child_frame_id;
+    ROS_INFO_STREAM("Trajectory tracking mode is on! The child frame is set to " << traj_child_frame_id_ << ".");
   }
 
   /* receive info */
