@@ -114,16 +114,14 @@ void nmpc::TiltMtServoDistNMPC::prepareNMPCParams()
   auto mdl_error_force_w = wrench_est_i_term_.getDistForceW();
   auto mdl_error_torque_cog = wrench_est_i_term_.getDistTorqueCOG();
 
-  vector<int> idx = { idx_p_phys_end_ + 1, idx_p_phys_end_ + 2, idx_p_phys_end_ + 3,
-                      idx_p_phys_end_ + 4, idx_p_phys_end_ + 5, idx_p_phys_end_ + 6 };
   vector<double> p = { mdl_error_force_w.x,    mdl_error_force_w.y,    mdl_error_force_w.z,
                        mdl_error_torque_cog.x, mdl_error_torque_cog.y, mdl_error_torque_cog.z };
-  mpc_solver_ptr_->setParamSparseAllStages(idx, p);
+  mpc_solver_ptr_->setParameters(p, idx_p_phys_end_ + 1);
 }
 
-std::vector<double> nmpc::TiltMtServoDistNMPC::meas2VecX(bool is_ee_centric)
+std::vector<double> nmpc::TiltMtServoDistNMPC::meas2VecX(bool is_modified_by_traj_frame)
 {
-  vector<double> bx0 = TiltMtServoNMPC::meas2VecX(is_ee_centric);
+  vector<double> bx0 = TiltMtServoNMPC::meas2VecX(is_modified_by_traj_frame);
 
   /* disturbance rejection */
   geometry_msgs::Vector3 external_force_w;     // default: 0, 0, 0

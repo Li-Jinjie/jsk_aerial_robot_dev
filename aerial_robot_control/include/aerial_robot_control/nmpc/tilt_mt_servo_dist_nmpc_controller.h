@@ -49,7 +49,7 @@ protected:
 
   void prepareNMPCParams() override;
 
-  std::vector<double> meas2VecX(bool is_ee_centric) override;
+  std::vector<double> meas2VecX(bool is_modified_by_traj_frame) override;
 
   void initAllocMat() override;
 

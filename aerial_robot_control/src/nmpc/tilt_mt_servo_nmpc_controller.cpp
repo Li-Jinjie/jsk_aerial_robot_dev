@@ -109,19 +109,19 @@ void nmpc::TiltMtServoNMPC::reset()
   resetPlugins();
 
   // reset x_u_ref_
-  std::vector<double> x_vec_ee = meas2VecX(true);
+  std::vector<double> xr_vec = meas2VecX(true);
   std::vector<double> u_vec(mpc_solver_ptr_->NU_, 0);
 
   int &NX = mpc_solver_ptr_->NX_, &NU = mpc_solver_ptr_->NU_, &NN = mpc_solver_ptr_->NN_;
   for (int i = 0; i < mpc_solver_ptr_->NN_; i++)
   {
-    std::copy(x_vec_ee.begin(), x_vec_ee.begin() + NX, x_u_ref_.x.data.begin() + NX * i);
+    std::copy(xr_vec.begin(), xr_vec.begin() + NX, x_u_ref_.x.data.begin() + NX * i);
     std::copy(u_vec.begin(), u_vec.begin() + NU, x_u_ref_.u.data.begin() + NU * i);
   }
-  std::copy(x_vec_ee.begin(), x_vec_ee.begin() + NX, x_u_ref_.x.data.begin() + NX * NN);
+  std::copy(xr_vec.begin(), xr_vec.begin() + NX, x_u_ref_.x.data.begin() + NX * NN);
 
   // reset mpc solver
-  mpc_solver_ptr_->resetXrUrByX0U0(x_vec_ee, u_vec);
+  mpc_solver_ptr_->resetXrUrByX0U0(xr_vec, u_vec);
 
   std::vector<double> x_vec = meas2VecX();
   mpc_solver_ptr_->resetSolverByX0U0(x_vec, u_vec);
@@ -361,6 +361,9 @@ void nmpc::TiltMtServoNMPC::initAllocMat()
   alloc_mat_pinv_ = aerial_robot_model::pseudoinverse(alloc_mat_);
 }
 
+/* Note: The difference between this function and prepareNMPCParams() is:
+ * this function set idx for different physical parameters.
+ */
 void nmpc::TiltMtServoNMPC::initNMPCParams()
 {
   /* construct acados parameters */
@@ -371,21 +374,18 @@ void nmpc::TiltMtServoNMPC::initNMPCParams()
 
   int idx;
   // TODO: this condition is temporary for drones that don't pass in phys param (bi, tri, fix-qd)
-  if (mpc_solver_ptr_->NP_ > 4 + 6)
+  if (mpc_solver_ptr_->NP_ > 4 + 6)  // 4 for quaternion, 6 for disturbances
   {
     ROS_INFO("Set physical parameters for NMPC solver");
 
     std::vector<double> phys_p = PhysToNMPCParams();
     std::copy(phys_p.begin(), phys_p.end(), acados_p.begin() + idx_p_quat_end_ + 1);
-    idx = idx_p_quat_end_ + phys_p.size();
+    idx_p_phys_end_ = idx_p_quat_end_ + phys_p.size();
   }
   else
   {
-    idx = idx_p_quat_end_;
+    idx_p_phys_end_ = idx_p_quat_end_;
   }
-
-  // set idx_p_phys_end_ for setting other parameters later
-  idx_p_phys_end_ = idx;
 
   /* set acados parameters */
   mpc_solver_ptr_->setParameters(acados_p);
@@ -467,12 +467,25 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
   phys_p[idx] = t_servo_;
   idx++;
 
-  std::vector<double> contact_frame_p, contact_frame_q;
-  robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
+  std::vector<double> contact_frame_p = { 0.0, 0.0, 0.0 };
+  std::vector<double> contact_frame_q = { 1.0, 0.0, 0.0, 0.0 };
+  if (traj_child_frame_id_ == "cog")
+  {
+  }
+  else if (traj_child_frame_id_ == "ee")
+  {
+    if (robot_model_->hasFrame("ee_contact"))
+      robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
+    else
+      ROS_WARN_THROTTLE(5, "No frame named ee_contact in the robot model! The end-effector pose will be set to CoG.");
+  }
+  else
+  {
+    ROS_WARN_THROTTLE(5, "Unsupported traj_child_frame_id_! The end-effector pose will be set to CoG.");
+  }
 
   std::copy(contact_frame_p.begin(), contact_frame_p.end(), phys_p.begin() + idx);
   idx += static_cast<int>(contact_frame_p.size());
-
   std::copy(contact_frame_q.begin(), contact_frame_q.end(), phys_p.begin() + idx);
   idx += static_cast<int>(contact_frame_q.size());
 
@@ -535,77 +548,53 @@ void nmpc::TiltMtServoNMPC::sendCmd()
 
 void nmpc::TiltMtServoNMPC::prepareNMPCRef()
 {
-  /* if in trajectory tracking mode, the ref is set by callbackSetRefXU.
-   * So here we check if the traj info is still received. If not, we turn off the tracking mode */
-  if (is_traj_tracking_)
+  // TODO: wrap to a state machine
+  if (!is_traj_tracking_)
   {
-    if (ros::Time::now() - x_u_ref_.header.stamp > ros::Duration(0.5))
-    {
-      ROS_INFO("No traj msg for 0.5s. Trajectory tracking mode is off! Return to the hovering!");
-      is_traj_tracking_ = false;
-      tf::Vector3 current_pos = estimator_->getPos(Frame::COG, estimate_mode_);
-      tf::Vector3 current_rpy = estimator_->getEuler(Frame::COG, estimate_mode_);
-
-      navigator_->setTargetPosX((float)current_pos.x());
-      navigator_->setTargetPosY((float)current_pos.y());
-      navigator_->setTargetPosZ((float)current_pos.z());
-      navigator_->setTargetVelX(0.0);
-      navigator_->setTargetVelY(0.0);
-      navigator_->setTargetVelZ(0.0);
-      navigator_->setTargetRoll(0.0);
-      navigator_->setTargetPitch(0.0);
-      navigator_->setTargetYaw((float)current_rpy.z());
-      navigator_->setTargetOmegaX(0.0);
-      navigator_->setTargetOmegaY(0.0);
-      navigator_->setTargetOmegaZ(0.0);
-    }
-    else if (ros::Time::now() - x_u_ref_.header.stamp > ros::Duration(0.1))
-    {
-      ROS_INFO_THROTTLE(1, "No traj msg for 0.1s. Try to track current pose.");
-      tf::Vector3 current_pos = estimator_->getPos(Frame::COG, estimate_mode_);
-      tf::Vector3 current_rpy = estimator_->getEuler(Frame::COG, estimate_mode_);
-
-      navigator_->setTargetPosX((float)current_pos.x());
-      navigator_->setTargetPosY((float)current_pos.y());
-      navigator_->setTargetPosZ((float)current_pos.z());
-      navigator_->setTargetVelX(0.0);
-      navigator_->setTargetVelY(0.0);
-      navigator_->setTargetVelZ(0.0);
-      navigator_->setTargetRoll((float)current_rpy.x());
-      navigator_->setTargetPitch((float)current_rpy.y());
-      navigator_->setTargetYaw((float)current_rpy.z());
-      navigator_->setTargetOmegaX(0.0);
-      navigator_->setTargetOmegaY(0.0);
-      navigator_->setTargetOmegaZ(0.0);
-
-      last_traj_msg_.points.clear();  // every time end the traj tracking, clear the traj msg
-    }
-
+    setPointRefFromNavigator(true);
     return;
   }
 
-  /* if not in tracking mode, we use point mode --> set target */
-  // Added on 2025-07-17: Note: in this mode we should always track the CoG point. So if the reference of NMPC
-  // is assumed in tool frame, we need to do a conversion. On the contrary, for traj. tracking, we directly track tool
-  // frame.
-  tf::Vector3 target_cog_pos_in_w = navigator_->getTargetPos();
-  tf::Vector3 target_cog_vel_in_w = navigator_->getTargetVel();
-  tf::Vector3 target_cog_rpy = navigator_->getTargetRPY();
-  tf::Quaternion target_cog_quat;
-  target_cog_quat.setRPY(target_cog_rpy.x(), target_cog_rpy.y(), target_cog_rpy.z());
-  tf::Vector3 target_cog_omega = navigator_->getTargetOmega();
+  /* if in trajectory tracking mode, the ref is set by callbackSetRefXU.
+   * So here we check if the traj info is still received. If not, we turn off the tracking mode */
+  double t_interval_sec = (ros::Time::now() - x_u_ref_.header.stamp).toSec();
 
-  // make conversion
-  tf::Vector3 target_ee_pos_in_w, target_ee_vel_in_w, target_ee_omega;
-  tf::Quaternion target_ee_quat;
-  robot_model_->convertFromCoGToEEContact(target_cog_pos_in_w, target_cog_vel_in_w, target_cog_quat, target_cog_omega,
-                                          target_ee_pos_in_w, target_ee_vel_in_w, target_ee_quat, target_ee_omega);
+  double traj_switch_time = 0.1;  // second
+  double min_no_traj_time = 0.5;  // second
 
-  // set the reference state and control input
-  setXrUrRef(target_ee_pos_in_w, target_ee_vel_in_w, tf::Vector3(0, 0, 0), target_ee_quat, target_ee_omega,
-             tf::Vector3(0, 0, 0), -1);
-  rosXU2VecXU(x_u_ref_, mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_);
-  mpc_solver_ptr_->setReference(mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_, true);
+  if (t_interval_sec <= traj_switch_time)
+    return;
+
+  // - for the switch between two trajectories, such as from single point tracking to traj
+  if (traj_switch_time < t_interval_sec && t_interval_sec <= min_no_traj_time)
+  {
+    last_traj_msg_.points.clear();  // every time end one traj, clear the traj msg
+    return;
+  }
+
+  // - for the general case that no traj msg is received for a long time
+  is_traj_tracking_ = false;
+  traj_child_frame_id_ = "cog";
+  ROS_INFO_STREAM(
+      "No traj msg for 0.5s. Trajectory tracking mode is off! Return to the hovering! The child frame is set to "
+      << traj_child_frame_id_ << ".");
+
+  tf::Vector3 current_pos = estimator_->getPos(Frame::COG, estimate_mode_);
+  tf::Vector3 current_rpy = estimator_->getEuler(Frame::COG, estimate_mode_);
+  navigator_->setTargetPosX(static_cast<float>(current_pos.x()));
+  navigator_->setTargetPosY(static_cast<float>(current_pos.y()));
+  navigator_->setTargetPosZ(static_cast<float>(current_pos.z()));
+  navigator_->setTargetVelX(0.0);
+  navigator_->setTargetVelY(0.0);
+  navigator_->setTargetVelZ(0.0);
+  navigator_->setTargetRoll(0.0);
+  navigator_->setTargetPitch(0.0);
+  navigator_->setTargetYaw(static_cast<float>(current_rpy.z()));
+  navigator_->setTargetOmegaX(0.0);
+  navigator_->setTargetOmegaY(0.0);
+  navigator_->setTargetOmegaZ(0.0);
+
+  setPointRefFromNavigator(false);
 }
 
 void nmpc::TiltMtServoNMPC::prepareNMPCParams()
@@ -616,12 +605,28 @@ void nmpc::TiltMtServoNMPC::prepareNMPCParams()
   if (mpc_solver_ptr_->NP_ > 4 + 6)
   {
     std::vector<double> phys_p = PhysToNMPCParams();
-
-    std::vector<int> idx(phys_p.size());
-    std::iota(idx.begin(), idx.end(), idx_p_quat_end_ + 1);
-
-    mpc_solver_ptr_->setParamSparseAllStages(idx, phys_p);
+    mpc_solver_ptr_->setParameters(phys_p, idx_p_quat_end_ + 1);
   }
+}
+
+void nmpc::TiltMtServoNMPC::setPointRefFromNavigator(bool is_shifted_not_set_all)
+{
+  tf::Vector3 target_cog_pos_in_w = navigator_->getTargetPos();
+  tf::Vector3 target_cog_vel_in_w = navigator_->getTargetVel();
+  tf::Vector3 target_cog_rpy = navigator_->getTargetRPY();
+  tf::Quaternion target_cog_quat;
+  target_cog_quat.setRPY(target_cog_rpy.x(), target_cog_rpy.y(), target_cog_rpy.z());
+  tf::Vector3 target_cog_omega = navigator_->getTargetOmega();
+
+  if (is_shifted_not_set_all)
+    setXrUrRef(target_cog_pos_in_w, target_cog_vel_in_w, tf::Vector3(0, 0, 0), target_cog_quat, target_cog_omega,
+               tf::Vector3(0, 0, 0), -1);
+  else
+    setXrUrRef(target_cog_pos_in_w, target_cog_vel_in_w, tf::Vector3(0, 0, 0), target_cog_quat, target_cog_omega,
+               tf::Vector3(0, 0, 0), -2);
+
+  rosXU2VecXU(x_u_ref_, mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_);
+  mpc_solver_ptr_->setReference(mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_, true);
 }
 
 /**
@@ -632,8 +637,8 @@ void nmpc::TiltMtServoNMPC::prepareNMPCParams()
  * @param ref_quat_ib
  * @param ref_omega_b
  * @param ref_ang_acc_b
- * @param horizon_idx - set -1 for adding the target point to the end of the reference trajectory, 0 ~ NN for adding
- * the target point to the horizon_idx interval
+ * @param horizon_idx - set -1 for adding the target point to the end of the reference trajectory; 0 ~ NN for adding
+ * the target point to the horizon_idx interval; -2 for adding the target point to all points
  */
 void nmpc::TiltMtServoNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i,
                                        const tf::Vector3& ref_acc_i, const tf::Quaternion& ref_quat_ib,
@@ -687,6 +692,19 @@ void nmpc::TiltMtServoNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::V
     std::copy(x.begin(), x.begin() + NX, x_u_ref_.x.data.begin() + NX * (NN - 1));
     std::copy(u.begin(), u.begin() + NU, x_u_ref_.u.data.begin() + NU * (NN - 1));
 
+    std::copy(x.begin(), x.begin() + NX, x_u_ref_.x.data.begin() + NX * NN);
+
+    return;
+  }
+
+  if (horizon_idx == -2)
+  {
+    // Aim: set the target point to all points in the horizon
+    for (int i = 0; i < NN; i++)
+    {
+      std::copy(x.begin(), x.begin() + NX, x_u_ref_.x.data.begin() + NX * i);
+      std::copy(u.begin(), u.begin() + NU, x_u_ref_.u.data.begin() + NU * i);
+    }
     std::copy(x.begin(), x.begin() + NX, x_u_ref_.x.data.begin() + NX * NN);
 
     return;
@@ -948,8 +966,9 @@ void nmpc::TiltMtServoNMPC::callbackSetRefXU(const aerial_robot_msgs::PredXUCons
   /* switch tracking mode */
   if (!is_traj_tracking_)
   {
-    ROS_INFO("Trajectory tracking mode is on!");
     is_traj_tracking_ = true;
+    traj_child_frame_id_ = msg->child_frame_id;
+    ROS_INFO_STREAM("Trajectory tracking mode is on! The child frame is set to " << traj_child_frame_id_ << ".");
   }
 
   /* receive info */
@@ -1003,6 +1022,7 @@ void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJo
   }
 
   x_u_ref_.header.stamp = msg->header.stamp;
+  x_u_ref_.child_frame_id = msg->joint_names[0];
   callbackSetRefXU(boost::make_shared<const aerial_robot_msgs::PredXU>(x_u_ref_));
 
   last_traj_msg_ = *msg;
@@ -1131,7 +1151,7 @@ double nmpc::TiltMtServoNMPC::getCommand(int idx_u, double T_horizon) const
          T_horizon / t_nmpc_step_ * (mpc_solver_ptr_->uo_.at(1).at(idx_u) - mpc_solver_ptr_->uo_.at(0).at(idx_u));
 }
 
-std::vector<double> nmpc::TiltMtServoNMPC::meas2VecX(bool is_ee_centric)
+std::vector<double> nmpc::TiltMtServoNMPC::meas2VecX(bool is_modified_by_traj_frame)
 {
   vector<double> bx0(mpc_solver_ptr_->NBX0_, 0);
 
@@ -1152,18 +1172,25 @@ std::vector<double> nmpc::TiltMtServoNMPC::meas2VecX(bool is_ee_centric)
   quat_prev_ = quat;
 
   // === for reference, we may need to convert the position and velocity to the end-effector frame ===
-  if (is_ee_centric)
+  if (is_modified_by_traj_frame && traj_child_frame_id_ != "cog")
   {
-    // convert the position and velocity from CoG to end-effector frame
-    tf::Vector3 target_pos, target_ee_vel, target_ee_omega;
-    tf::Quaternion target_ee_quat;
-    robot_model_->convertFromCoGToEEContact(pos, vel, quat, ang_vel, target_pos, target_ee_vel, target_ee_quat,
-                                            target_ee_omega);
+    if (traj_child_frame_id_ == "ee")
+    {
+      // convert the position and velocity from CoG to end-effector frame
+      tf::Vector3 target_ee_pos, target_ee_vel, target_ee_omega;
+      tf::Quaternion target_ee_quat;
+      robot_model_->convertFromCoGToEEContact(pos, vel, quat, ang_vel, target_ee_pos, target_ee_vel, target_ee_quat,
+                                              target_ee_omega);
 
-    pos = target_pos;
-    vel = target_ee_vel;
-    quat = target_ee_quat;
-    ang_vel = target_ee_omega;
+      pos = target_ee_pos;
+      vel = target_ee_vel;
+      quat = target_ee_quat;
+      ang_vel = target_ee_omega;
+    }
+    else
+    {
+      ROS_WARN("Unsupported traj_child_frame_id_. Only support cog or ee. Use cog information instead!");
+    }
   }
 
   // === fill the vector ===

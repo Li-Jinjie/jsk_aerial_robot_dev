@@ -105,6 +105,7 @@ protected:
 
   bool is_traj_tracking_ = false;  // TODO: tmp value. should be combined with inner traj. tracking in the future
   trajectory_msgs::MultiDOFJointTrajectory last_traj_msg_;
+  string traj_child_frame_id_ = "cog";
 
   aerial_robot_msgs::PredXU x_u_ref_;  // TODO: maybe we should remove x_u_ref_ and use xr_ & ur_ inside mpc_solver_ptr_
   spinal::FourAxisCommand flight_cmd_;
@@ -153,6 +154,8 @@ protected:
   // controlCore()
   void prepareNMPCRef();
   virtual void prepareNMPCParams();
+
+  void setPointRefFromNavigator(bool is_shifted_not_set_all);
   void setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i, const tf::Vector3& ref_acc_i,
                   const tf::Quaternion& ref_quat_ib, const tf::Vector3& ref_omega_b, const tf::Vector3& ref_ang_acc_b,
                   const int& horizon_idx);
@@ -181,7 +184,7 @@ protected:
     return meas2VecX(false);
   }
 
-  virtual std::vector<double> meas2VecX(bool is_ee_centric);
+  virtual std::vector<double> meas2VecX(bool is_modified_by_traj_frame);
 
   // ensure the continuity of servo angles
   double ensureOneServoContinuity(double a_ref, int idx) const;
