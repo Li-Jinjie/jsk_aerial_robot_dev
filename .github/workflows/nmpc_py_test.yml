@@ -3,9 +3,13 @@ name: acados-python-tests
 on:
   push:
     branches: [main, master, develop/MPC_tilt_mt]
+    paths:
+      - 'aerial_robot_control/scripts/nmpc/**'
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, master, develop/MPC_tilt_mt]
+    paths:
+      - 'aerial_robot_control/scripts/nmpc/**'
 
 permissions: read-all
 
