@@ -98,6 +98,8 @@ bool BaseMPC::update()
 
 void BaseMPC::reset()
 {
+  ControlBase::reset();
+
   resetPlugins();
 
   // Needs to be done: reset the mpc_solver with data
