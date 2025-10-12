@@ -18,7 +18,7 @@ SAMPLE_RATE = 44100
 # Default buffer duration (not strictly used anymore)
 BUFFER_DURATION = 0.05
 
-RPM_MAX = 20000.0  # Maximum RPM for normalization
+RPM_MAX = 11000.0  # Maximum RPM for normalization
 
 
 # ==========================================================
@@ -42,24 +42,33 @@ def esc_callback(msg):
 # ==========================================================
 def generate_audio_buffer(frames):
     """
-    Generate an audio buffer that matches the required number of frames.
-    Each rotor contributes a sine wave at frequency rpm/60 Hz.
+    Generate an audio buffer with harmonic components and loudness scaling.
     """
     with data_lock:
         freqs = [rpm / 60.0 for rpm in current_rpms]
+        rpms = current_rpms.copy()
 
     t = np.arange(frames) / SAMPLE_RATE
     wave = np.zeros_like(t)
 
-    for f in freqs:
-        if f > 0:
-            wave += np.sin(2 * np.pi * f * t)
+    # Harmonic weights
+    A1 = 1.0  # fundamental
+    A2 = 0.3  # 2nd harmonic
+    A3 = 0.15  # 3rd harmonic
 
+    for f, rpm in zip(freqs, rpms):
+        if f > 0:
+            # Calculate volume based on RPM
+            volume = 0.05 + 0.25 * min(rpm / RPM_MAX, 1.0)
+
+            # Add fundamental and harmonics
+            wave += volume * (
+                A1 * np.sin(2 * np.pi * f * t) + A2 * np.sin(2 * np.pi * 2 * f * t) + A3 * np.sin(2 * np.pi * 3 * f * t)
+            )
+
+    # Normalize to avoid clipping
     if len(freqs) > 0:
         wave /= len(freqs)
-
-    volume = 0.2
-    wave *= volume
 
     return wave.astype(np.float32)
 
