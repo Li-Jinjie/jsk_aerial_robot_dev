@@ -12,7 +12,9 @@ repos:
       - id: check-json
       - id: check-xml
       - id: end-of-file-fixer
+        exclude: \.(jpg|jpeg|png|svg|npz|bin)$
       - id: trailing-whitespace
+        exclude: \.(jpg|jpeg|png|svg|npz|bin)$
       - id: check-added-large-files
         args: [--maxkb=10000]
       - id: check-merge-conflict
