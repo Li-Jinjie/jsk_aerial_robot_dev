@@ -360,6 +360,56 @@
 
   <!-- ############# DJI OSMO Action 4 ############# -->
   <xacro:if value="${end_effector == 'osmo'}">
+    <!-- Contact frame at the bristle tip, required by the outer framework -->
+    <joint name="osmo_to_ee_contact" type="fixed">
+      <parent link="osmo"/>
+      <child link="ee_contact"/>
+      <origin xyz="0 0 0.045" rpy="0 0 0"/>
+    </joint>
+
+    <!-- 1) Optical frame (REP-105): x right, y down, z forward -->
+    <!-- Tip: move xyz to the actual lens center relative to the 'osmo' link -->
+    <link name="osmo_color_optical_frame"/>
+    <joint name="osmo_color_optical_joint" type="fixed">
+      <parent link="osmo"/>
+      <child  link="osmo_color_optical_frame"/>
+      <origin xyz="0.00 0.00 0.045" rpy="3.141593 -1.570796 0"/>
+    </joint>
+
+    <!-- 2) Gazebo Classic sensor + ROS plugin -->
+    <gazebo reference="osmo_color_optical_frame">
+      <sensor type="camera" name="osmo_rgb_sensor">
+        <!-- The pose of camera must be independently set, better align to osmo_color_optical_frame -->
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+
+        <camera name="osmo_rgb">
+          <!-- Horizontal FOV and intrinsics: adjust as you like -->
+          <horizontal_fov>1.047</horizontal_fov> <!-- ~60 deg -->
+          <image>
+            <width>1280</width>
+            <height>720</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>50.0</far>
+          </clip>
+        </camera>
+
+        <plugin name="osmo_rgb_plugin" filename="libgazebo_ros_camera.so">
+          <ros>
+            <namespace>/</namespace>
+          </ros>
+          <frame_name>osmo_color_optical_frame</frame_name>
+          <camera_name>osmo/color</camera_name>
+          <hack_baseline>0.0</hack_baseline>
+          <publish_rate>30</publish_rate>
+        </plugin>
+      </sensor>
+    </gazebo>
+
+    <!-- 3) OSMO link and joints -->
     <link name="osmo">
       <inertial>
         <origin xyz="-0.01764 0.02342 0.01321" rpy="0 0 0"/>
@@ -374,19 +424,12 @@
         </geometry>
       </visual>
     </link>
-
     <joint name="ee_mount_to_osmo" type="fixed">
       <parent link="ee_mount"/>
       <child link="osmo"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
 
-    <!-- Contact frame at the bristle tip -->
-    <joint name="osmo_to_ee_contact" type="fixed">
-      <parent link="osmo"/>
-      <child link="ee_contact"/>
-      <origin xyz="0 0 0.045" rpy="0 0 0"/>
-    </joint>
   </xacro:if>
 
 </robot>
