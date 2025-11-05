@@ -8,6 +8,8 @@ import sys
 import os
 import numpy as np
 import rospy
+import rospkg
+import yaml
 from abc import ABC, abstractmethod
 
 from std_msgs.msg import MultiArrayDimension
@@ -48,7 +50,7 @@ class MPCPubCSVPredXU(MPCPubPredXU):
     PredXU messages at the rate defined by the base class (~50Hz).
     """
 
-    def __init__(self, robot_name: str, file_path: str) -> None:
+    def __init__(self, robot_name: str, file_path: str, u_mode: int = 0) -> None:
         # Load trajectory from a CSV
         traj_robot, traj_frame_id, traj_child_frame_id, traj_data_df = read_csv_traj(file_path)
 
@@ -72,8 +74,21 @@ class MPCPubCSVPredXU(MPCPubPredXU):
         # Get all columns between "time" and "control effort" (exclusive)
         self.x_traj = traj_data_df.iloc[:, time_id + 1 : effort_id].to_numpy()
 
-        # Get all columns after "control effort"
+        # Get all columns after "control effort" and do some modifications based on u_mode
         self.u_traj = traj_data_df.iloc[:, effort_id + 1 :].to_numpy()
+        if u_mode == 0:
+            self.u_traj[:, 4:8] = np.zeros((self.u_traj.shape[0], 4))  # servo control to zeros
+        elif u_mode == 1:
+            self.u_traj[:, 0:4] = np.zeros((self.u_traj.shape[0], 4))  # thrust control to zeros
+        elif u_mode == 2:
+            self.u_traj[:, 0:8] = np.zeros((self.u_traj.shape[0], 8))  # all control to zeros
+        elif u_mode == 3:
+            self.u_traj[:, 0:4] = np.ones((self.u_traj.shape[0], 4)) * 7.5  # thrust control to hover
+            self.u_traj[:, 4:8] = np.zeros((self.u_traj.shape[0], 4))  # servo control to zeros
+        elif u_mode == 4:
+            pass
+        else:
+            raise ValueError(f"Invalid u_mode: {u_mode}. Supported modes are 0, 1, 2, 3, and 4.")
 
         if self.x_traj.shape[1] != self.nx - 6 or self.u_traj.shape[1] != self.nu:  # 6 for external wrench
             raise ValueError(
@@ -99,9 +114,6 @@ class MPCPubCSVPredXU(MPCPubPredXU):
                 break
             else:
                 input_str = input("Invalid input. Please press 'Enter' to continue or 'q' to quit...")
-
-        # Adjust your control inputs if needed
-        self.u_traj[:, 4:8] = self.x_traj[:, 13:17]
 
         self.start_timer()
 

@@ -1,0 +1,10 @@
+viz:
+  has_0066_viz: true  # Whether to use the 0066 visualization tool
+  hand_markers_viz_type: 0  # 0: no viz; 1: viz type 1； 2： viz type 2
+
+xu_traj:
+  u_mode: 0
+  # 0: servo control to zeros
+  # 1: thrust control to zeros
+  # 2: all control to zeros
+  # 3: thrust control to hover and servo control to zeros

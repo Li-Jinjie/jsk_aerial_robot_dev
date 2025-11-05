@@ -6,9 +6,11 @@ import os
 import sys
 import argparse
 import rospy
+import rospkg
 import smach
 import smach_ros
 import numpy as np
+import yaml
 import inspect
 
 # Insert current folder into path so we can import from "trajs" or other local files
@@ -20,6 +22,16 @@ from pub_mpc_joint_traj import MPCTrajPtPub, MPCSinglePtPub
 from pub_mpc_pred_xu import MPCPubCSVPredXU
 from geometry_msgs.msg import Pose, Quaternion, Vector3
 from util import read_csv_traj, pub_0066_wall_rviz, pub_hand_markers_rviz
+
+# === load smach config from the ROS package ===
+ros_pack = rospkg.RosPack()
+try:
+    config_path = os.path.join(ros_pack.get_path("aerial_robot_planning"), "config", "Smach.yaml")
+except rospkg.ResourceNotFound:
+    raise RuntimeError("Package 'aerial_robot_planning' not found! Make sure your ROS workspace is sourced.")
+
+with open(config_path, "r") as f:
+    smach_config = yaml.load(f, Loader=yaml.FullLoader)
 
 # === analytical trajectory ===
 import trajs
@@ -224,7 +236,9 @@ class TrackState(smach.State):
         else:
             csv_file = csv_files[userdata.traj_type - len(traj_cls_list)]
             rospy.loginfo(f"Using CSV file: {csv_file}")
-            mpc_node = MPCPubCSVPredXU(userdata.robot_name, os.path.join(csv_folder_path, csv_file))
+            mpc_node = MPCPubCSVPredXU(
+                userdata.robot_name, os.path.join(csv_folder_path, csv_file), u_mode=smach_config["xu_traj"]["u_mode"]
+            )
 
         # Wait here until the node signals it is finished or ROS shuts down
         while not rospy.is_shutdown():
@@ -252,8 +266,8 @@ def main(args):
         return
 
     # visualize in RViz
-    pub_0066_wall_rviz(not args.has_0066_viz)
-    pub_hand_markers_rviz(args.hand_markers_viz_type)
+    pub_0066_wall_rviz(not smach_config["viz"]["has_0066_viz"])
+    pub_hand_markers_rviz(smach_config["viz"]["hand_markers_viz_type"])
 
     # Create a top-level SMACH state machine
     sm = smach.StateMachine(outcomes=["DONE"])
@@ -303,16 +317,6 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SMACH-based MPC Trajectory Publisher")
     parser.add_argument("robot_name", type=str, help="Robot name, e.g., beetle1, gimbalrotors")
-    parser.add_argument(
-        "--has_0066_viz",
-        "-6",
-        action="store_true",
-        default=False,
-        help="Whether to visualize the 0066 flight range (default: False)",
-    )
-    parser.add_argument(
-        "--hand_markers_viz_type", "-v", type=int, default=0, help="0: no viz; 1: viz type 1 (default: 0)"
-    )
 
     args = parser.parse_args()
     main(args)
