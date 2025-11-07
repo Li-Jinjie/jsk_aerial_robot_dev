@@ -373,7 +373,7 @@
     <joint name="osmo_color_optical_joint" type="fixed">
       <parent link="osmo"/>
       <child  link="osmo_color_optical_frame"/>
-      <origin xyz="0.00 0.00 0.045" rpy="3.141593 -1.570796 0"/>
+      <origin xyz="0.00 0.00 0.045" rpy="0 -1.570796 0"/>
     </joint>
 
     <!-- 2) Gazebo Classic sensor + ROS plugin -->
