@@ -41,3 +41,11 @@ repos:
     rev: v0.17.2
     hooks:
       - id: yamlfmt
+
+  # Shell Scripts -------------------------------------------------------------
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.10.0-1
+    hooks:
+      - id: shfmt
+        name: shfmt (bash formatter)
+        args: ["-i", "2", "-ci", "-sr"]
