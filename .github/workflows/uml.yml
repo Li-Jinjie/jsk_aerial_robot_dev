@@ -1,19 +1,36 @@
 name: generate plantuml
-on: push
+
+on:
+  push:
+    paths:
+      - '**/*.puml'
+      - '**/*.plantuml'
+      - '**/*.uml'
+  pull_request:
+    paths:
+      - '**/*.puml'
+      - '**/*.plantuml'
+      - '**/*.uml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   generate_plantuml:
     runs-on: ubuntu-latest
     name: plantuml
     steps:
-      - name: checkout
-        uses: actions/checkout@v1
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - name: plantuml
+
+      - name: Generate PlantUML diagrams
         id: plantuml
         uses: grassedge/generate-plantuml-action@v1.5
         with:
-          path: docs/UMLs
+          path: .
           message: "Render PlantUML files"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
