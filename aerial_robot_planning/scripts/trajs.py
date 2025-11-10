@@ -5,6 +5,8 @@ Created by li-jinjie on 24-1-5.
 import numpy as np
 from typing import Tuple
 import tf_conversions as tf
+import rospy
+from std_msgs.msg import Float32
 
 
 class BaseTraj:
@@ -886,8 +888,6 @@ class TestThrustFrequencyTraj(BaseTrajwFixedRotor):
 
         # mapping of thrust
         self.note2thrust = {
-            "E4": 5.00,
-            "F4": 5.84,
             "G4": 7.75,
             "A4": 9.96,
             "B4": 12.54,
@@ -897,8 +897,6 @@ class TestThrustFrequencyTraj(BaseTrajwFixedRotor):
 
         # sequence
         self.sequence = [
-            ("E4", 3.0),
-            ("F4", 3.0),
             ("G4", 3.0),
             ("A4", 3.0),
             ("B4", 3.0),
@@ -948,17 +946,11 @@ class TestThrustFrequencyTraj(BaseTrajwFixedRotor):
         freq = self.thrust_to_freq(ft_fixed)
         self.freq_pub.publish(freq)
 
+        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
+
         self.use_fix_rotor_flag = True
+
         return rotor_id, ft_fixed, alpha_fixed
-
-    def get_desired_state(self, t: float):
-        pos = np.array([0.0, 0.0, 1.2])
-        vel = np.zeros(3)
-        acc = np.zeros(3)
-        quat = np.array([1.0, 0.0, 0.0, 0.0])
-
-        rotor_id, ft_fixed, alpha_fixed = self.get_fixed_rotor(t)
-        return pos, vel, acc, quat
 
 
 class IncreasingFixedRotorTraj(BaseTrajwFixedRotor):
