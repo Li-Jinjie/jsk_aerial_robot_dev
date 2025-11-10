@@ -780,24 +780,19 @@ class TestFixedRotorTraj(BaseTrajwFixedRotor):
         return rotor_id, ft_fixed, alpha_fixed
 
 
-import numpy as np
-import rospy
-from std_msgs.msg import Float32
-
-
 class HappyBirthdayFixedRotorTraj(BaseTrajwFixedRotor):
     def __init__(self, loop_num: int = 1) -> None:
         super().__init__(loop_num)
 
         self.note2thrust = {
-            "e": 5.00,
-            "f": 6.78,
-            "g": 8.83,
-            "a": 9.98,
-            "b": 12.56,
-            "c": 15.56,
-            "d": 17.25,
-            "e2": 21.05,
+            "e": 7.75,
+            "f": 9.96,
+            "g": 12.54,
+            "a": 13.97,
+            "b": 17.22,
+            "c": 21.05,
+            # "d": 25.29,
+            # "e2": 27.81,
         }
 
         self.sequence = [
@@ -811,17 +806,17 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwFixedRotor):
             ("e", 1.0),
             ("b", 1.0),
             ("a", 2.0),
-            ("e", 1.0),
-            ("e", 1.0),  # e2 could be a little dangerous
-            ("c", 1.0),
-            ("a", 1.0),
-            ("g", 1.0),
-            ("f", 2.5),
-            ("d", 1.0),
-            ("c", 1.0),
-            ("a", 1.0),
-            ("b", 1.0),
-            ("a", 1.0),
+            # ("e", 1.0),
+            # ("e", 1.0),  # e2 could be a little dangerous
+            # ("c", 1.0),
+            # ("a", 1.0),
+            # ("g", 1.0),
+            # ("f", 2.5),
+            # ("a", 1.0),
+            # ("c", 1.0),
+            # ("a", 1.0),
+            # ("b", 1.0),
+            # ("a", 2.0),
         ]
 
         # calculate the full playing time
@@ -850,7 +845,6 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwFixedRotor):
 
     def get_fixed_rotor(self, t: float):
         rotor_id = 0
-        alpha_fixed = 0.0
 
         # repeat the music
         t_mod = t % self.period
@@ -869,17 +863,10 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwFixedRotor):
 
         # rospy.loginfo(f"[DEBUG] t={t_mod:.2f}s, note={note}, ft={ft_fixed:.2f}N, freq={freq:.2f}Hz")
 
+        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
+
         self.use_fix_rotor_flag = True
         return rotor_id, ft_fixed, alpha_fixed
-
-    def get_desired_state(self, t: float):
-        pos = np.array([0.0, 0.0, 1.2])
-        vel = np.zeros(3)
-        acc = np.zeros(3)
-        quat = np.array([1.0, 0.0, 0.0, 0.0])
-
-        rotor_id, ft_fixed, alpha_fixed = self.get_fixed_rotor(t)
-        return pos, vel, acc, quat
 
 
 class TestThrustFrequencyTraj(BaseTrajwFixedRotor):
@@ -982,7 +969,7 @@ class IncreasingFixedRotorTraj(BaseTrajwFixedRotor):
     def get_fixed_rotor(self, t: float):
         rotor_id = 0
 
-        # 12 second period
+        # 12 seconds period
         t_mod = t % self.period
 
         # calculate the thrust for each period
