@@ -45,6 +45,7 @@ class BaseTraj:
 class BaseTrajwFixedRotor(BaseTraj):
     def __init__(self, loop_num: int = np.inf) -> None:
         super().__init__(loop_num)
+        self.hover_thrust = 7.5
         self.use_fix_rotor_flag = False
 
     def get_fixed_rotor(self, t: float):
@@ -735,39 +736,41 @@ class TestFixedRotorTraj(BaseTrajwFixedRotor):
 
     def get_fixed_rotor(self, t: float):
         rotor_id = 0
-        ft_fixed = 7.0
+        ft_fixed = self.hover_thrust
         alpha_fixed = 0.0
 
         if 0.0 >= t:
             self.use_fix_rotor_flag = False
 
         if self.t_converge >= t > 0.0:
-            ft_fixed = 1.0
+            ft_fixed += 1.0
             self.use_fix_rotor_flag = True
 
         if 2 * self.t_converge >= t > self.t_converge:
-            ft_fixed = 2.0
+            ft_fixed += 2.0
             self.use_fix_rotor_flag = True
 
         if 3 * self.t_converge >= t > 2 * self.t_converge:
-            ft_fixed = 3.0
+            ft_fixed += 3.0
             self.use_fix_rotor_flag = True
 
         if 4 * self.t_converge >= t > 3 * self.t_converge:
-            ft_fixed = 4.0
+            ft_fixed += 4.0
             self.use_fix_rotor_flag = True
 
         if 5 * self.t_converge >= t > 4 * self.t_converge:
-            ft_fixed = 5.0
+            ft_fixed += 5.0
             self.use_fix_rotor_flag = True
 
         if 6 * self.t_converge >= t > 5 * self.t_converge:
-            ft_fixed = 6.0
+            ft_fixed += 6.0
             self.use_fix_rotor_flag = True
 
         if 7 * self.t_converge >= t > 6 * self.t_converge:
-            ft_fixed = 7.0
+            ft_fixed += 7.0
             self.use_fix_rotor_flag = True
+
+        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
 
         if t > 7 * self.t_converge:
             self.use_fix_rotor_flag = False
