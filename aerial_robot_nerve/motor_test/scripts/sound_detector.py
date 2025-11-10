@@ -30,8 +30,7 @@ pub = rospy.Publisher("/sound_found", String, queue_size=1)
 
 def detect_sound(indata):
     """
-    音声入力データから周波数成分を解析し、
-    対象周波数帯が一定時間続いたらトピックをPublish。
+    publish aew topic when a certain frequency range is detected in audio file。
     """
     global detected_start
 
