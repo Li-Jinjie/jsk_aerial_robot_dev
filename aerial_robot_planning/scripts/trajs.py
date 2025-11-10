@@ -981,7 +981,6 @@ class IncreasingFixedRotorTraj(BaseTrajwFixedRotor):
 
     def get_fixed_rotor(self, t: float):
         rotor_id = 0
-        alpha_fixed = 0.0
 
         # 12 second period
         t_mod = t % self.period
@@ -1002,17 +1001,10 @@ class IncreasingFixedRotorTraj(BaseTrajwFixedRotor):
 
         # rospy.loginfo(f"[DEBUG] t={t_mod:.2f}s, ft_fixed={ft_fixed:.2f}N, freq={freq:.2f}Hz")
 
+        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
+
         self.use_fix_rotor_flag = True
         return rotor_id, ft_fixed, alpha_fixed
-
-    def get_desired_state(self, t: float):
-        pos = np.array([0.0, 0.0, 1.2])
-        vel = np.zeros(3)
-        acc = np.zeros(3)
-        quat = np.array([1.0, 0.0, 0.0, 0.0])
-
-        rotor_id, ft_fixed, alpha_fixed = self.get_fixed_rotor(t)
-        return pos, vel, acc, quat
 
 
 class InfinitePitchNeg90deg(BaseTraj):
