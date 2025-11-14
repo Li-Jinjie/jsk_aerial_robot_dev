@@ -385,10 +385,11 @@
 
         <camera name="osmo_rgb">
           <!-- Horizontal FOV and intrinsics: adjust as you like -->
-          <horizontal_fov>1.047</horizontal_fov> <!-- ~60 deg -->
+          <horizontal_fov>1.7663</horizontal_fov> <!-- 2 arctan (3840 / (2 * 1577.1)) -->
           <image>
-            <width>1280</width>
-            <height>720</height>
+          <!--  original: 2160 * 3840-->
+            <width>1920</width>
+            <height>1080</height>
             <format>R8G8B8</format>
           </image>
           <clip>
@@ -398,13 +399,25 @@
         </camera>
 
         <plugin name="osmo_rgb_plugin" filename="libgazebo_ros_camera.so">
-          <ros>
-            <namespace>/</namespace>
-          </ros>
-          <frame_name>osmo_color_optical_frame</frame_name>
-          <camera_name>osmo/color</camera_name>
-          <hack_baseline>0.0</hack_baseline>
-          <publish_rate>30</publish_rate>
+          <frameName>osmo_color_optical_frame</frameName>
+          <cameraName>osmo/color</cameraName>
+          <updateRate>30</updateRate>
+
+          <focalLength>788.55</focalLength>      <!-- ≈ fx, also used for fy  1577.1 * 0.5 = 788.55 -->
+          <Cx>961.05</Cx>                        <!-- PrincipalPoint(1) 1922.1 * 0.5 = 961.05 -->
+          <Cy>531.55</Cy>                        <!-- PrincipalPoint(2) 1063.1 * 0.5 = 531.55 -->
+
+          <!-- Distortion D = [k1 k2 t1 t2 k3] -->
+          <distortionK1>0.0030</distortionK1>    <!-- RadialDistortion(1) -->
+          <distortionK2>-0.0124</distortionK2>   <!-- RadialDistortion(2) -->
+          <distortionK3>0.0</distortionK3>       <!-- no k3 from MATLAB -->
+          <distortionT1>0.0</distortionT1>       <!-- TangentialDistortion(1) -->
+          <distortionT2>0.0</distortionT2>       <!-- TangentialDistortion(2) -->
+
+          <!-- Optional extras -->
+          <hackBaseline>0.0</hackBaseline>       <!-- non-stereo -->
+          <borderCrop>true</borderCrop>          <!-- default behavior -->
+          <autoDistortion>false</autoDistortion> <!-- use above coefficients -->
         </plugin>
       </sensor>
     </gazebo>
