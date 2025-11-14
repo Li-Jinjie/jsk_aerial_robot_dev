@@ -57,6 +57,51 @@ class BaseTrajwFixedRotor(BaseTraj):
         return rotor_id, ft_fixed, alpha_fixed
 
 
+class BaseTrajwSound(BaseTrajwFixedRotor):
+    def __init__(self, loop_num: int = np.inf):
+        super().__init__(loop_num)
+
+        # thrust of each musical note
+        self.note2thrust = {
+            "c": 21.05,
+            "d": 25.29,
+            "e": 7.75,
+            "f": 9.96,
+            "g": 12.54,
+            "a": 13.97,
+            "b": 17.22,
+            "e2": 27.81,
+        }
+
+        self.freq_pub = rospy.Publisher("sound/fixed_rotor_frequency", Float32, queue_size=10)
+
+    def thrust_to_freq(self, f):
+        a = 0.0000161
+        b = 0.0327
+        c = -7.54 - f
+        disc = b**2 - 4 * a * c
+        if disc < 0:
+            rospy.logwarn(f"Invalid thrust value f={f}, cannot compute frequency")
+            return 0.0
+        return (-b + np.sqrt(disc)) / (2 * a)
+
+    def get_fixed_rotor(self, t: float):
+        rotor_id = 0
+
+        ft_fixed = self.compute_thrust_at_time(t)
+
+        freq = self.thrust_to_freq(ft_fixed)
+        self.freq_pub.publish(freq)
+
+        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
+        self.use_fix_rotor_flag = True
+
+        return rotor_id, ft_fixed, alpha_fixed
+
+    def compute_thrust_at_time(self, t: float) -> float:
+        raise NotImplementedError
+
+
 class CircleTraj(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
@@ -780,20 +825,9 @@ class TestFixedRotorTraj(BaseTrajwFixedRotor):
         return rotor_id, ft_fixed, alpha_fixed
 
 
-class HappyBirthdayFixedRotorTraj(BaseTrajwFixedRotor):
-    def __init__(self, loop_num: int = 1) -> None:
+class HappyBirthdayFixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
         super().__init__(loop_num)
-
-        self.note2thrust = {
-            "e": 7.75,
-            "f": 9.96,
-            "g": 12.54,
-            "a": 13.97,
-            "b": 17.22,
-            "c": 21.05,
-            # "d": 25.29,
-            # "e2": 27.81,
-        }
 
         self.sequence = [
             ("e", 1.0),
@@ -806,192 +840,48 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwFixedRotor):
             ("e", 1.0),
             ("b", 1.0),
             ("a", 2.0),
-            # ("e", 1.0),
-            # ("e", 1.0),  # e2 could be a little dangerous
-            # ("c", 1.0),
-            # ("a", 1.0),
-            # ("g", 1.0),
-            # ("f", 2.5),
-            # ("a", 1.0),
-            # ("c", 1.0),
-            # ("a", 1.0),
-            # ("b", 1.0),
-            # ("a", 2.0),
         ]
 
-        # calculate the full playing time
         self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
-        self.T = self.beat_times[-1]  # duration
-        self.loop_num = loop_num
+        self.T = self.beat_times[-1]
         self.period = self.T
         self.min_thrust = 0.5
-        self.use_fix_rotor_flag = True
-        self.is_ready = True
 
-        # new topic to publish the frequency
-        self.freq_pub = rospy.Publisher("/fixed_rotor_frequency", Float32, queue_size=10)
-
-    def thrust_to_freq(self, f):
-        """calculate the frequency from the thrust"""
-        a = 0.0000161
-        b = 0.0327
-        c = -7.54 - f
-        disc = b**2 - 4 * a * c
-        if disc < 0:
-            rospy.logwarn(f"Invalid thrust value f={f}, cannot compute frequency")
-            return 0.0
-        h = (-b + np.sqrt(disc)) / (2 * a)
-        return h
-
-    def get_fixed_rotor(self, t: float):
-        rotor_id = 0
-
-        # repeat the music
+    def compute_thrust_at_time(self, t: float) -> float:
         t_mod = t % self.period
-
-        # obtain the current note index
         idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
         if idx >= len(self.sequence):
-            ft_fixed = self.min_thrust
-        else:
-            note, _ = self.sequence[idx]
-            ft_fixed = self.note2thrust[note]
+            return self.min_thrust
 
-        # publish the frequency
-        freq = self.thrust_to_freq(ft_fixed)
-        self.freq_pub.publish(freq)
-
-        # rospy.loginfo(f"[DEBUG] t={t_mod:.2f}s, note={note}, ft={ft_fixed:.2f}N, freq={freq:.2f}Hz")
-
-        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
-
-        self.use_fix_rotor_flag = True
-        return rotor_id, ft_fixed, alpha_fixed
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
 
 
 class TestThrustFrequencyTraj(BaseTrajwFixedRotor):
-    def __init__(self, loop_num: int = 1) -> None:
+    def __init__(self, loop_num: int = 1):
         super().__init__(loop_num)
 
-        # mapping of thrust
-        self.note2thrust = {
-            "G4": 7.75,
-            "A4": 9.96,
-            "B4": 12.54,
-            "C5": 13.97,
-            "D5": 17.22,
-        }
-
-        # sequence
         self.sequence = [
-            ("G4", 3.0),
-            ("A4", 3.0),
-            ("B4", 3.0),
-            ("C5", 3.0),
-            ("D5", 3.0),
+            ("g", 3.0),
+            ("a", 3.0),
+            ("b", 3.0),
+            ("c", 3.0),
+            ("d", 3.0),
         ]
 
-        # set total play time
         self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
         self.T = self.beat_times[-1]
-        self.loop_num = loop_num
         self.period = self.T
         self.min_thrust = 0.5
-        self.use_fix_rotor_flag = True
-        self.is_ready = True
 
-        # Publish frequency as topic
-        self.freq_pub = rospy.Publisher("/fixed_rotor_frequency", Float32, queue_size=10)
-
-    def thrust_to_freq(self, f):
-        """calculate frequency from current thrust"""
-        a = 0.0000161
-        b = 0.0327
-        c = -7.54 - f
-        disc = b**2 - 4 * a * c
-        if disc < 0:
-            rospy.logwarn(f"Invalid thrust value f={f}, cannot compute frequency")
-            return 0.0
-        h = (-b + np.sqrt(disc)) / (2 * a)
-        return h
-
-    def get_fixed_rotor(self, t: float):
-        rotor_id = 0
-        alpha_fixed = 0.0
-
-        # repeat
+    def compute_thrust_at_time(self, t: float) -> float:
         t_mod = t % self.period
-
-        # find current sound
         idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
         if idx >= len(self.sequence):
-            ft_fixed = self.min_thrust
-        else:
-            note, _ = self.sequence[idx]
-            ft_fixed = self.note2thrust[note]
+            return self.min_thrust
 
-        freq = self.thrust_to_freq(ft_fixed)
-        self.freq_pub.publish(freq)
-
-        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
-
-        self.use_fix_rotor_flag = True
-
-        return rotor_id, ft_fixed, alpha_fixed
-
-
-class IncreasingFixedRotorTraj(BaseTrajwFixedRotor):
-    def __init__(self, loop_num: int = 1) -> None:
-        super().__init__(loop_num)
-
-        self.period = 12.0
-        self.T = 9999.0
-        self.min_thrust = 0.5
-        self.rotor_id = 0
-        self.use_fix_rotor_flag = True
-        self.is_ready = True
-
-        # topic to publish the frequency
-        self.freq_pub = rospy.Publisher("/fixed_rotor_frequency", Float32, queue_size=10)
-
-    def thrust_to_freq(self, f):
-        """calculate the frequency from the thrust"""
-        a = 0.0000161
-        b = 0.0327
-        c = -7.54 - f
-        disc = b**2 - 4 * a * c
-        if disc < 0:
-            rospy.logwarn(f"Invalid thrust value f={f}, cannot compute frequency")
-            return 0.0
-        h = (-b + np.sqrt(disc)) / (2 * a)
-        return h
-
-    def get_fixed_rotor(self, t: float):
-        rotor_id = 0
-
-        # 12 seconds period
-        t_mod = t % self.period
-
-        # calculate the thrust for each period
-        if t_mod < 3.0:
-            ft_fixed = 5.0
-        elif t_mod < 6.0:
-            ft_fixed = 7.0
-        elif t_mod < 9.0:
-            ft_fixed = 9.0
-        else:
-            ft_fixed = 15.0
-
-        # publish the frequency
-        freq = self.thrust_to_freq(ft_fixed)
-        self.freq_pub.publish(freq)
-
-        # rospy.loginfo(f"[DEBUG] t={t_mod:.2f}s, ft_fixed={ft_fixed:.2f}N, freq={freq:.2f}Hz")
-
-        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
-
-        self.use_fix_rotor_flag = True
-        return rotor_id, ft_fixed, alpha_fixed
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
 
 
 class InfinitePitchNeg90deg(BaseTraj):
