@@ -197,6 +197,11 @@
   <xacro:arg name="end_effector" default="fork"/>
   <xacro:property name="end_effector" value="$(arg end_effector)"/>
 
+  <xacro:if value="${end_effector != 'fork' and end_effector != 'ball' and end_effector != 'sensor_ball'
+  and end_effector != 'brush' and end_effector != 'osmo'}">
+    <xacro:error>Invalid end_effector type: ${end_effector}. Must be one of: fork, ball, sensor_ball, brush, osmo.</xacro:error>
+  </xacro:if>
+
   <!-- Fixed the flange that all tools attach to -->
   <link name="ee_mount"/>
   <joint name="body_to_ee_mount" type="fixed">
