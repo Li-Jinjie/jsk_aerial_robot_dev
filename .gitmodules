@@ -1,0 +1,3 @@
+[submodule "aerial_robot_simulation/gazebo_model"]
+	path = aerial_robot_simulation/gazebo_model
+	url = git@github.com:ut-dragon-lab/gazebo_model.git

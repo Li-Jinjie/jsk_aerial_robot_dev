@@ -1,0 +1,88 @@
+# Gazebo and ROS specific files
+*~
+*.swp
+*.swo
+*.log
+*.bag
+*.pyc
+*.pyo
+__pycache__/
+
+# Build artifacts
+build/
+devel/
+install/
+bin/
+lib/
+msg_gen/
+srv_gen/
+*.o
+*.so
+*.a
+*.exe
+*.dll
+*.dylib
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Catkin
+.catkin_workspace
+.catkin_tools/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-*
+.project
+.cproject
+.pydevproject
+.settings/
+*.code-workspace
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Gazebo generated files
+*.state
+gzserver/
+gzclient/
+
+# Log and cache directories
+logs/
+*.log
+log/
+.cache/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp
