@@ -6,15 +6,10 @@ on:
       - '**/*.puml'
       - '**/*.plantuml'
       - '**/*.uml'
-  pull_request:
-    paths:
-      - '**/*.puml'
-      - '**/*.plantuml'
-      - '**/*.uml'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate_plantuml:
