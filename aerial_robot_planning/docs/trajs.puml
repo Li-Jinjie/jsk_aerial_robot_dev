@@ -1,0 +1,211 @@
+@startuml
+'https://plantuml.com/class-diagram
+
+set namespaceSeparator ::
+
+abstract class BaseTraj {
+'    + ControlBase()
+'    + ~ControlBase()
+'    + initialize()
+'    + update()
+'    + activate()
+'    + reset()
+}
+
+abstract class BaseTrajwFixedRotor extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class BaseTrajwSound extends BaseTrajwFixedRotor {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class CircleTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class LemniscateTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class LemniscateTrajOmni extends LemniscateTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class SetPointTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class PitchRotationTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class PitchRotationFullTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class PitchContinuousRotationTraj extends BaseTrajwFixedRotor {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class PitchRotationTrajOpposite extends PitchRotationTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class Continuous45DegRotationTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class RollRotationTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class RollRotationFullTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class RollRotationTrajOpposite extends RollRotationTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class RollRotationYaw045dTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class PitchSetPtTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class YawRotationRoll090dTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class YawRotationRoll045dTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class YawRotationRoll135dTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class SingularityPointTraj extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class TestFixedRotorTraj extends BaseTrajwFixedRotor {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class HappyBirthdayFixedRotorTraj extends BaseTrajwSound {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class TestThrustFrequencyTraj extends BaseTrajwSound {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class InfinitePitchNeg90deg extends BaseTraj {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+
+
+
+
+@enduml
