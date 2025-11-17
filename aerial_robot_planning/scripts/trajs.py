@@ -857,7 +857,7 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwSound):
         return self.note2thrust[note]
 
 
-class TestThrustFrequencyTraj(BaseTrajwFixedRotor):
+class TestThrustFrequencyTraj(BaseTrajwSound):
     def __init__(self, loop_num: int = 1):
         super().__init__(loop_num)
 
