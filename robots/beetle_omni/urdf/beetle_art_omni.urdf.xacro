@@ -365,7 +365,7 @@
   </xacro:if>
 
   <!-- ############# DJI OSMO Action 4 ############# -->
-  <xacro:include filename="$(find beetle_omni)/urdf/osmo_camera.xacro"/>
+  <xacro:include filename="$(find beetle_omni)/urdf/effectors/osmo_cam_ee.xacro"/>
 
   <xacro:if value="${end_effector == 'osmo'}">
     <!-- Contact frame at the bristle tip, required by the outer framework -->
