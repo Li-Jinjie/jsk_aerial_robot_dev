@@ -7,7 +7,16 @@
   <arg name="estimate_mode"  default= "1" />
   <arg name="sim_estimate_mode"  default= "2" />
   <arg name="headless" default="True" />
-  <arg name="worldtype" default="$(find aerial_robot_simulation)/gazebo_model/world/empty.world" />
+
+  <!-- 0: empty.world, 1: 0066.world (you can add more later) -->
+  <arg name="world_type" default="0" />
+  <arg name="world_path"
+       default="$(eval
+         find('aerial_robot_simulation') +
+         '/gazebo_model/world/' +
+         ('empty.world' if arg('world_type') == 0 else '0066.world')
+     )" />
+
   <arg name="launch_gazebo" default="True" />
   <arg name="direct_model" default="False" />
   <arg name="direct_model_name" />
@@ -112,7 +121,7 @@
     <arg name="gui" value="false" if="$(arg headless)"/>
     <arg name="headless" default="$(arg headless)" />
     <arg name="launch_gazebo" default="$(arg launch_gazebo)" />
-    <arg name="worldtype" value="$(arg worldtype)" />
+    <arg name="worldtype" value="$(arg world_path)" />
     <arg name="spawn_x" value="$(arg spawn_x)" />
     <arg name="spawn_y" value="$(arg spawn_y)" />
     <arg name="spawn_z" value="$(arg spawn_z)" />
