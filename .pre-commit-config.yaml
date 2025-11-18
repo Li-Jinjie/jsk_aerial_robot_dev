@@ -49,3 +49,11 @@ repos:
       - id: shfmt
         name: shfmt (bash formatter)
         args: ["-i", "2", "-ci", "-sr"]
+
+  # Xacro formatting via xmllint ----------------------------------------------
+  - repo: https://github.com/lsst-ts/pre-commit-xmllint
+    rev: v1.0.0
+    hooks:
+      - id: format-xmllint
+        name: xmllint-format-xacro
+        files: \.(xacro|urdf|launch|xml)$
