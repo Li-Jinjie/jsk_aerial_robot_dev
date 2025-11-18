@@ -46,6 +46,55 @@
       <origin xyz="0 0 0.144" rpy="0 0 0"/>
     </joint>
 
+    <!--  3) Attach the ark_flow_sensor  -->
+    <xacro:ark_flow_sensor parent_link="ee_mount"/>
+
+  </xacro:macro>
+
+
+  <!--
+  Macro: ark_flow_sensor
+  params:
+    parent_link : The link the optical flow sensor attaches to (e.g. "ee_contact").
+-->
+  <xacro:macro name="ark_flow_sensor" params="parent_link">
+
+    <!-- 1) Optical flow sensor link -->
+    <link name="ark_flow_sensor">
+      <inertial>
+        <!-- Approximate inertial parameters -->
+        <origin xyz="0.0 0.0 0.0" rpy="0 3.141592 0"/>
+        <mass value="0.005"/>
+        <inertia
+                ixx="0.00001" iyy="0.00001" izz="0.00001"
+                ixy="0.0"     ixz="0.0"     iyz="0.0"/>
+      </inertial>
+
+      <visual>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/ark_flow_mr_rev_1.0.dae"
+                scale="1 1 1"/>
+        </geometry>
+      </visual>
+
+      <!-- Optional collision -->
+      <!--
+      <collision>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/ark_flow_mr_rev_1.0.dae"
+                scale="1 1 1"/>
+        </geometry>
+      </collision>
+      -->
+    </link>
+
+    <!-- 2) Fixed joint from parent link to the sensor -->
+    <joint name="ark_flow_sensor_joint" type="fixed">
+      <parent link="${parent_link}"/>
+      <child  link="ark_flow_sensor"/>
+      <origin xyz="-0.08 0 0" rpy="0 0 0"/>
+    </joint>
+
   </xacro:macro>
 
 </robot>
