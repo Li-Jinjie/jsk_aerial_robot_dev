@@ -6,7 +6,7 @@
     params:
       ee_mount_link : The base link that the ball tool is mounted to (e.g. "ee_mount").
   -->
-  <xacro:macro name="ball_end_effector" params="ee_mount_link">
+  <xacro:macro name="ball_end_effector" params="ee_mount_link robot_ns">
 
     <!-- 1) Ball tool geometry and inertia -->
     <link name="ball">

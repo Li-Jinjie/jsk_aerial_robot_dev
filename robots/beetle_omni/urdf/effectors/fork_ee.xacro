@@ -6,7 +6,7 @@
     params:
       ee_mount_link : The base link that the fork tool is mounted to (e.g. "ee_mount").
   -->
-  <xacro:macro name="fork_end_effector" params="ee_mount_link">
+  <xacro:macro name="fork_end_effector" params="ee_mount_link robot_ns">
 
     <!-- 1) Fork tool geometry and inertia -->
     <link name="fork">

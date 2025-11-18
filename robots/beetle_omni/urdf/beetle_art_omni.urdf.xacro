@@ -217,14 +217,14 @@
   <xacro:include filename="$(find beetle_omni)/urdf/effectors/fork_ee.xacro"/>
 
   <xacro:if value="${end_effector == 'fork'}">
-    <xacro:fork_end_effector ee_mount_link="ee_mount"/>
+    <xacro:fork_end_effector ee_mount_link="ee_mount" robot_ns="${robot_name}"/>
   </xacro:if>
 
   <!-- ############# Ball tool ############# -->
   <xacro:include filename="$(find beetle_omni)/urdf/effectors/ball_ee.xacro"/>
 
   <xacro:if value="${end_effector == 'ball'}">
-    <xacro:ball_end_effector ee_mount_link="ee_mount"/>
+    <xacro:ball_end_effector ee_mount_link="ee_mount" robot_ns="${robot_name}"/>
   </xacro:if>
 
 
@@ -232,14 +232,14 @@
   <xacro:include filename="$(find beetle_omni)/urdf/effectors/force_sensor_ball_ee.xacro"/>
 
   <xacro:if value="${end_effector == 'sensor_ball'}">
-    <xacro:force_sensor_ball_end_effector ee_mount_link="ee_mount"/>
+    <xacro:force_sensor_ball_end_effector ee_mount_link="ee_mount" robot_ns="${robot_name}"/>
   </xacro:if>
 
   <!-- ############# Brush tool ############# -->
   <xacro:include filename="$(find beetle_omni)/urdf/effectors/brush_ee.xacro"/>
 
   <xacro:if value="${end_effector == 'brush'}">
-    <xacro:brush_end_effector ee_mount_link="ee_mount"/>
+    <xacro:brush_end_effector ee_mount_link="ee_mount" robot_ns="${robot_name}"/>
   </xacro:if>
 
   <!-- ############# DJI OSMO Action 4 ############# -->
