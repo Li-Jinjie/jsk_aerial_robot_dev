@@ -214,36 +214,10 @@
   <link name="ee_contact"/>
 
   <!-- ############# Fork tool ############# -->
+  <xacro:include filename="$(find beetle_omni)/urdf/effectors/fork_ee.xacro"/>
+
   <xacro:if value="${end_effector == 'fork'}">
-    <!-- Tool geometry -->
-    <link name="fork">
-      <inertial>
-        <origin xyz="0.00000000 0.06681059 -0.00005783" rpy="0 0 0"/>
-        <mass value="0.140"/>
-        <inertia
-                ixx="0.00040632" iyy="0.00053824" izz="0.00040617"
-                ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
-      </inertial>
-      <visual>
-        <geometry>
-          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_fork.dae" scale="1 1 1"/>
-        </geometry>
-      </visual>
-    </link>
-
-    <!-- Mount fork to the flange -->
-    <joint name="ee_mount_to_fork" type="fixed">
-      <parent link="ee_mount"/>
-      <child link="fork"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </joint>
-
-    <!-- Contact point for the fork tips -->
-    <joint name="fork_to_ee_contact" type="fixed">
-      <parent link="fork"/>
-      <child link="ee_contact"/>
-      <origin xyz="0 0 0.104" rpy="0 0 0"/>
-    </joint>
+    <xacro:fork_end_effector ee_mount_link="ee_mount"/>
   </xacro:if>
 
   <!-- ############# Ball tool ############# -->
