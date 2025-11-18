@@ -41,7 +41,7 @@
     <!-- 2) Mount the wrench sensor to the end-effector flange -->
     <joint name="ee_mount_to_sensor" type="fixed">
       <parent link="${ee_mount_link}"/>
-      <child  link="wrench_sensor"/>
+      <child link="wrench_sensor"/>
       <origin xyz="0 0 0.031" rpy="0 0 0"/>
     </joint>
 
