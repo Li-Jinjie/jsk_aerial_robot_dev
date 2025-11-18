@@ -221,35 +221,12 @@
   </xacro:if>
 
   <!-- ############# Ball tool ############# -->
+  <xacro:include filename="$(find beetle_omni)/urdf/effectors/ball_ee.xacro"/>
+
   <xacro:if value="${end_effector == 'ball'}">
-    <link name="ball">
-      <inertial>
-        <origin xyz="0.00000000 0.08052689 0.00000000" rpy="0 0 0"/>
-        <mass value="0.1030"/>
-        <inertia
-                ixx="0.00020646" iyy="0.00008167" izz="0.00020646"
-                ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
-      </inertial>
-      <visual>
-        <geometry>
-          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_ball.dae" scale="1 1 1"/>
-        </geometry>
-      </visual>
-    </link>
-
-    <joint name="ee_mount_to_ball" type="fixed">
-      <parent link="ee_mount"/>
-      <child link="ball"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </joint>
-
-    <!-- Contact point at the ball’s center -->
-    <joint name="ball_to_ee_contact" type="fixed">
-      <parent link="ball"/>
-      <child link="ee_contact"/>
-      <origin xyz="0 0 0.11" rpy="0 0 0"/>
-    </joint>
+    <xacro:ball_end_effector ee_mount_link="ee_mount"/>
   </xacro:if>
+
 
   <!-- ############# Sensor‑ball tool ############# -->
   <xacro:if value="${end_effector == 'sensor_ball'}">
