@@ -334,34 +334,10 @@
   </xacro:if>
 
   <!-- ############# Brush tool ############# -->
+  <xacro:include filename="$(find beetle_omni)/urdf/effectors/brush_ee.xacro"/>
+
   <xacro:if value="${end_effector == 'brush'}">
-    <link name="brush">
-      <inertial>
-        <origin xyz="0.00000000 0.06565796 -0.00001172" rpy="0 0 0"/>
-        <mass value="0.100"/>
-        <inertia
-                ixx="0.00019687" iyy="0.00013173" izz="0.00019689"
-                ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
-      </inertial>
-      <visual>
-        <geometry>
-          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_brush.dae" scale="1 1 1"/>
-        </geometry>
-      </visual>
-    </link>
-
-    <joint name="ee_mount_to_brush" type="fixed">
-      <parent link="ee_mount"/>
-      <child link="brush"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </joint>
-
-    <!-- Contact frame at the bristle tip -->
-    <joint name="brush_to_ee_contact" type="fixed">
-      <parent link="brush"/>
-      <child link="ee_contact"/>
-      <origin xyz="0 0 0.144" rpy="0 0 0"/>
-    </joint>
+    <xacro:brush_end_effector ee_mount_link="ee_mount"/>
   </xacro:if>
 
   <!-- ############# DJI OSMO Action 4 ############# -->
