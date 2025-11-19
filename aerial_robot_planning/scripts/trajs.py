@@ -5,6 +5,8 @@ Created by li-jinjie on 24-1-5.
 import numpy as np
 from typing import Tuple
 import tf_conversions as tf
+import rospy
+from std_msgs.msg import Float32
 
 
 class BaseTraj:
@@ -53,6 +55,53 @@ class BaseTrajwFixedRotor(BaseTraj):
         ft_fixed = 7.0
         alpha_fixed = 0.0
         return rotor_id, ft_fixed, alpha_fixed
+
+
+class BaseTrajwSound(BaseTrajwFixedRotor):
+    def __init__(self, loop_num: int = np.inf):
+        super().__init__(loop_num)
+
+        # thrust of each musical note
+        self.note2thrust = {
+            "g4": 7.75,
+            "g4sharp": 8.83,
+            "a4": 9.96,
+            "a4sharp": 11.20,
+            "b4": 12.54,
+            "c5": 13.97,
+            "c5sharp": 15.56,
+            "d5": 17.22,
+            "d5sharp": 18.87,
+            "e5": 21.05,
+        }
+
+        self.freq_pub = rospy.Publisher("sound/fixed_rotor_frequency", Float32, queue_size=10)
+
+    def thrust_to_freq(self, f):
+        a = 0.0000161
+        b = 0.0327
+        c = -7.54 - f
+        disc = b**2 - 4 * a * c
+        if disc < 0:
+            rospy.logwarn(f"Invalid thrust value f={f}, cannot compute frequency")
+            return 0.0
+        return (-b + np.sqrt(disc)) / (2 * a)
+
+    def get_fixed_rotor(self, t: float):
+        rotor_id = 0
+
+        ft_fixed = self.compute_thrust_at_time(t)
+
+        freq = self.thrust_to_freq(ft_fixed)
+        self.freq_pub.publish(freq)
+
+        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
+        self.use_fix_rotor_flag = True
+
+        return rotor_id, ft_fixed, alpha_fixed
+
+    def compute_thrust_at_time(self, t: float) -> float:
+        raise NotImplementedError
 
 
 class CircleTraj(BaseTraj):
@@ -778,63 +827,63 @@ class TestFixedRotorTraj(BaseTrajwFixedRotor):
         return rotor_id, ft_fixed, alpha_fixed
 
 
-class HappyBirthdayFixedRotorTraj(BaseTrajwFixedRotor):
-    def __init__(self, loop_num: int = 1, beat: float = 1.0) -> None:
+class HappyBirthdayFixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
         super().__init__(loop_num)
 
-        # fmt: off
-        # beats of Happy Birthday (use strings for dot-notation)
-        # note that the last beat is half note so it is doubled
-        self.notes: list[str] = [
-            "5", "6", "5", ".1", "7", "7",
-            "5", "6", "5", ".2", ".1", ".1",
-            "5", ".5", ".3", ".1", "7", "6", "6",
-            ".4", ".3", ".1", ".2", ".1", ".1"
+        self.sequence = [
+            ("g4", 1.0),  # lyrics: Happy
+            ("a4", 1.0),  # Birth-
+            ("g4", 1.0),  # day
+            ("c5", 1.0),  # to
+            ("b4", 2.0),  # You
+            ("g4", 1.0),  # Happy
+            ("a4", 1.0),  # Birth-
+            ("g4", 1.0),  # day
+            ("d5", 1.0),  # to
+            ("c5", 2.0),  # You
         ]
-        # fmt: on
 
-        self.beat = beat  # for quarter note
-        self.t_total = len(self.notes) * self.beat
-        self.T = self.t_total * self.loop_num
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
 
-        self.min_thrust = 0.5  # TODO: if 0N is stable, change this place to 0.0
-
-    def _parse_note(self, note: str) -> float:
-        if note == "0":  # rest
+    def compute_thrust_at_time(self, t: float) -> float:
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+        if idx >= len(self.sequence):
             return self.min_thrust
 
-        # upper octave
-        if note.startswith(".") and note[1:].isdigit():
-            return float(int(note[1:]) + 7)
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
 
-        # lower octave
-        if note.endswith(".") and note[:-1].isdigit():
-            return max(0.0, float(int(note[:-1]) - 7))
 
-        # middle octave
-        if note.isdigit():
-            return float(int(note))
+class TestThrustFrequencyTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
 
-        raise ValueError(f"Unrecognized note token: {note!r}")
+        self.sequence = [
+            ("g4", 3.0),
+            ("a4", 3.0),
+            ("b4", 3.0),
+            ("c5", 3.0),
+            ("d5", 3.0),
+        ]
 
-    def get_fixed_rotor(self, t: float) -> Tuple[int, float, float]:
-        rotor_id = 0
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
 
-        # Song finished or not yet started → no fixed rotor
-        if t < 0.0 or t >= self.T:
-            self.use_fix_rotor_flag = False
-            return rotor_id, self.min_thrust, 0.0
+    def compute_thrust_at_time(self, t: float) -> float:
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+        if idx >= len(self.sequence):
+            return self.min_thrust
 
-        # Current beat index
-        beat_idx = int(t / self.beat) % len(self.notes)
-        note = self.notes[beat_idx]
-        ft_fixed = self.hover_thrust + self._parse_note(note) - 5.0
-
-        alpha_fixed = np.arccos(self.hover_thrust / ft_fixed)
-
-        # Rest → disable flag
-        self.use_fix_rotor_flag = ft_fixed != self.min_thrust
-        return rotor_id, ft_fixed, alpha_fixed
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
 
 
 class InfinitePitchNeg90deg(BaseTraj):
