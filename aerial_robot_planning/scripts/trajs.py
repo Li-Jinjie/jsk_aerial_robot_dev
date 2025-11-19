@@ -63,14 +63,16 @@ class BaseTrajwSound(BaseTrajwFixedRotor):
 
         # thrust of each musical note
         self.note2thrust = {
-            "c": 21.05,
-            "d": 25.29,
-            "e": 7.75,
-            "f": 9.96,
-            "g": 12.54,
-            "a": 13.97,
-            "b": 17.22,
-            "e2": 27.81,
+            "g4": 7.75,
+            "g4sharp": 8.83,
+            "a4": 9.96,
+            "a4sharp": 11.20,
+            "b4": 12.54,
+            "c5": 13.97,
+            "c5sharp": 15.56,
+            "d5": 17.22,
+            "d5sharp": 18.87,
+            "e5": 21.05,
         }
 
         self.freq_pub = rospy.Publisher("sound/fixed_rotor_frequency", Float32, queue_size=10)
@@ -830,16 +832,16 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwSound):
         super().__init__(loop_num)
 
         self.sequence = [
-            ("e", 1.0),
-            ("f", 1.0),
-            ("e", 1.0),
-            ("a", 1.0),
-            ("g", 2.0),
-            ("e", 1.0),
-            ("f", 1.0),
-            ("e", 1.0),
-            ("b", 1.0),
-            ("a", 2.0),
+            ("g4", 1.0),  # lyrics: Happy
+            ("a4", 1.0),  # Birth-
+            ("g4", 1.0),  # day
+            ("c5", 1.0),  # to
+            ("b4", 2.0),  # You
+            ("g4", 1.0),  # Happy
+            ("a4", 1.0),  # Birth-
+            ("g4", 1.0),  # day
+            ("d5", 1.0),  # to
+            ("c5", 2.0),  # You
         ]
 
         self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
@@ -862,11 +864,11 @@ class TestThrustFrequencyTraj(BaseTrajwSound):
         super().__init__(loop_num)
 
         self.sequence = [
-            ("g", 3.0),
-            ("a", 3.0),
-            ("b", 3.0),
-            ("c", 3.0),
-            ("d", 3.0),
+            ("g4", 3.0),
+            ("a4", 3.0),
+            ("b4", 3.0),
+            ("c5", 3.0),
+            ("d5", 3.0),
         ]
 
         self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
