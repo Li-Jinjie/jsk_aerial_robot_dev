@@ -188,6 +188,46 @@ abstract class HappyBirthdayFixedRotorTraj extends BaseTrajwSound {
 '    + reset()
 }
 
+abstract class TulipFixedRotorTraj extends BaseTrajwSound {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class Canon1FixedRotorTraj extends BaseTrajwSound {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class Canon2FixedRotorTraj extends BaseTrajwSound {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class Canon3FixedRotorTraj extends BaseTrajwSound {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
+abstract class Canon4FixedRotorTraj extends BaseTrajwSound {
+'    + PoseLinearController()
+'    + ~PoseLinearController()
+'    + initialize()
+'    + update()
+'    + reset()
+}
+
 abstract class TestThrustFrequencyTraj extends BaseTrajwSound {
 '    + PoseLinearController()
 '    + ~PoseLinearController()
