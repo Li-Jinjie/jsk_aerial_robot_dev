@@ -859,6 +859,207 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwSound):
         return self.note2thrust[note]
 
 
+class TulipFixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("g4", 1.0),  # lyrics: Sa-
+            ("a4", 1.0),  # i-
+            ("b4", 2.0),  # ta
+            ("g4", 1.0),  # Sa-
+            ("a4", 1.0),  # i-
+            ("b4", 2.0),  # ta
+            ("d5", 1.0),  # Tu-
+            ("b4", 1.0),  # li-
+            ("a4", 1.0),  # p
+            ("g4", 1.0),  # no
+            ("a4", 1.0),  # Ha-
+            ("b4", 1.0),  # na
+            ("a4", 2.0),  # ga
+            ("g4", 1.0),  # Na-
+            ("a4", 1.0),  # ran-
+            ("b4", 2.0),  # da
+            ("g4", 1.0),  # Na-
+            ("a4", 1.0),  # ran-
+            ("b4", 2.0),  # da
+            ("d5", 1.0),  # A-
+            ("b4", 1.0),  # ka-
+            ("a4", 1.0),  # Shi-
+            ("g4", 1.0),  # ro
+            ("a4", 1.0),  # Ki-
+            ("b4", 1.0),  # i-
+            ("a4", 2.0),  # ro. changed from g4 due to risk
+            ("d5", 2.0),  # Dono
+            ("b4", 1.0),  # ha-
+            ("d5", 1.0),  # na
+            ("e5", 2.0),  # Mite-
+            ("d5", 2.0),  # mo-
+            ("b4", 2.0),  # Kire-
+            ("a4", 2.0),  # ida-
+            ("g4", 3.0),  # na
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+    def compute_thrust_at_time(self, t: float) -> float:
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+        if idx >= len(self.sequence):
+            return self.min_thrust
+
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
+
+
+class Canon1FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("a4sharp", 5.0),  # preparation for music start
+            ("d5", 5.0),  # preparation for music start
+            ("e5", 2.0),
+            ("d5", 2.0),
+            ("c5", 2.0),
+            ("b4", 2.0),
+            ("a4", 2.0),
+            ("g4", 2.0),
+            ("a4", 2.0),
+            ("b4", 2.0),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+    def compute_thrust_at_time(self, t: float) -> float:
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+        if idx >= len(self.sequence):
+            return self.min_thrust
+
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
+
+
+class Canon2FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("a4sharp", 5.0),  # preparation for music start
+            ("c5", 2.0),
+            ("b4", 2.0),
+            ("a4", 2.0),
+            ("g4", 2.0),
+            ("a4", 2.0),
+            ("g4", 2.0),
+            ("a4", 2.0),
+            ("g4", 2.0),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+    def compute_thrust_at_time(self, t: float) -> float:
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+        if idx >= len(self.sequence):
+            return self.min_thrust
+
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
+
+
+class Canon3FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("c5", 0.5),
+            ("g4", 1.5),
+            ("b4", 0.5),  # changed from g4 due to risk
+            ("d5", 1.5),
+            ("a4", 0.5),
+            ("c5", 0.5),  # changed from e5 due to risk
+            ("e5", 1.0),
+            ("e5", 0.5),
+            ("b4", 1.5),
+            ("a4", 0.5),
+            ("c5", 1.5),
+            ("a4", 0.5),
+            ("g4", 1.5),
+            ("a4", 0.5),
+            ("c5", 1.5),
+            ("c5", 0.5),  # changed from g4 due to risk
+            ("d5", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+    def compute_thrust_at_time(self, t: float) -> float:
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+        if idx >= len(self.sequence):
+            return self.min_thrust
+
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
+
+
+class Canon4FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("g4", 2.0),
+            ("g4", 0.5),
+            ("a4", 0.5),
+            ("d5", 0.5),  # changed from g4 due to risk
+            ("d5", 0.5),
+            ("e5", 1.0),
+            ("c5", 0.5),
+            ("e5", 1.0),
+            ("d5", 0.5),
+            ("e5", 0.5),
+            ("d5", 0.5),
+            ("c5", 1.0),
+            ("a4", 0.5),
+            ("c5", 1.5),
+            ("e5", 0.5),
+            ("c5", 0.5),
+            ("c5", 0.5),
+            ("a4sharp", 0.5),
+            ("a4", 0.5),
+            ("a4sharp", 0.5),
+            ("b4", 2.0),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+    def compute_thrust_at_time(self, t: float) -> float:
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+        if idx >= len(self.sequence):
+            return self.min_thrust
+
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
+
+
 class TestThrustFrequencyTraj(BaseTrajwSound):
     def __init__(self, loop_num: int = 1):
         super().__init__(loop_num)
