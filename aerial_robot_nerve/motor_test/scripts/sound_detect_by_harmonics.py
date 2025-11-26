@@ -4,10 +4,8 @@ import numpy as np
 import sounddevice as sd
 import time
 from std_msgs.msg import String
-from datetime import datetime
-import soundfile as sf
 
-RATE = 48000  # [Hz]
+RATE = 44100  # [Hz]
 BLOCK_DURATION = 0.1  # [s]
 DETECTION_TIME = 1.2  # [s]
 ENERGY_THRESHOLD = 1e-6  # 0~1
@@ -27,37 +25,24 @@ class BandSoundDetector:
     def __init__(self):
         rospy.init_node("sound_note_detector")
         self.note_pub = rospy.Publisher("/detected_note", String, queue_size=10)
-        self.audio_buffer = []
-        self.filename = None
         self.last_note = None
         self.detect_start_time = None
-        rospy.loginfo("Listening for notes (E–D) & recording audio...")
+        rospy.loginfo("Listening for notes (E–D)...")
 
     def start(self):
-        try:
-            with sd.InputStream(
-                device="hw:1,0",
-                # USB mic: "hw: 1,0"
-                # PC mic: "hw: 0,6"
-                channels=1,
-                samplerate=RATE,
-                callback=self.audio_callback,
-                blocksize=int(RATE * BLOCK_DURATION),
-            ):
-                rospy.spin()
-
-        except KeyboardInterrupt:
-            rospy.loginfo("Stopped by user.")
-        finally:
-            self.save_audio()
+        with sd.InputStream(
+            channels=1,
+            samplerate=RATE,
+            callback=self.audio_callback,
+            blocksize=int(RATE * BLOCK_DURATION),
+        ):
+            rospy.spin()
 
     def audio_callback(self, indata, frames, time_info, status):
         if status:
             rospy.logwarn(str(status))
 
-        data = indata[:, 0].copy()
-        self.audio_buffer.append(data)
-
+        data = indata[:, 0]
         fft_data = np.fft.rfft(data)
         freq = np.fft.rfftfreq(len(data), 1.0 / RATE)
         mag = np.abs(fft_data)
@@ -66,15 +51,17 @@ class BandSoundDetector:
         max_energy = 0.0
 
         for note, ranges in BANDS.items():
+            # detect sound separately in two ranges
             energies = []
             for fmin, fmax in ranges:
                 mask = (freq >= fmin) & (freq < fmax)
                 if np.any(mask):
                     energy = np.mean(mag[mask])
+                    energies.append(energy)
                 else:
-                    energy = 0.0
-                energies.append(energy)
+                    energies.append(0.0)
 
+            # only recognise when energy exceeds threshold in both ranges
             if all(e > ENERGY_THRESHOLD for e in energies):
                 avg_energy = np.mean(energies)
                 if avg_energy > max_energy:
@@ -96,26 +83,14 @@ class BandSoundDetector:
         else:
             self.last_note = None
             self.detect_start_time = None
-            rospy.loginfo_throttle(2, "searching for sound...")
-
-    def save_audio(self):
-        """バッファの音声を WAV で保存"""
-        if len(self.audio_buffer) == 0:
-            rospy.logwarn("No audio data to save.")
-            return
-
-        audio_np = np.concatenate(self.audio_buffer)
-
-        if self.filename is None:
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            self.filename = f"record_{timestamp}.wav"
-
-        sf.write(self.filename, audio_np, RATE)
-        rospy.loginfo(f"Saved audio: {self.filename}")
-
-        self.audio_buffer = []
+            rospy.loginfo_throttle(2, "searching for sound...")  # show every 2 seconds
 
 
 if __name__ == "__main__":
-    detector = BandSoundDetector()
-    detector.start()
+    try:
+        detector = BandSoundDetector()
+        detector.start()
+    except rospy.ROSInterruptException:
+        pass
+    except KeyboardInterrupt:
+        rospy.loginfo("Stopped by user.")
