@@ -52,7 +52,7 @@ csv_files = sorted([f for f in os.listdir(csv_folder_path) if f.endswith(".csv")
 print(f"Found {len(csv_files)} CSV files in ./tilt_qd_csv_trajs folder.")
 
 # === hand control ===
-from hand_control.hand_ctrl_smach import create_hand_control_state_machine
+from teleoperation.hand_ctrl_smach import create_hand_control_state_machine
 
 
 def traj_factory(traj_type, loop_num):

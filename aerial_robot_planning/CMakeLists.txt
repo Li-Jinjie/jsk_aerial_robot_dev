@@ -157,8 +157,8 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
  catkin_install_python(PROGRAMS
    scripts/mpc_smach_node.py
-   scripts/hand_control/glove_control_pub.py
-   scripts/hand_control/visual_fb_mode.py
+   scripts/teleoperation/glove_control_pub.py
+   scripts/teleoperation/visual_fb_mode.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
