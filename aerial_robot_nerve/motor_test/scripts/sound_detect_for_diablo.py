@@ -6,9 +6,9 @@ import time
 from std_msgs.msg import String
 from geometry_msgs.msg import Twist
 
-RATE = 44100
+RATE = 48000
 BLOCK_DURATION = 0.1
-DETECTION_TIME = 0.7
+DETECTION_TIME = 1.2
 ENERGY_THRESHOLD = 1e-6
 
 BANDS = {
@@ -92,7 +92,10 @@ class BandSoundDetector:
 
     def start(self):
         with sd.InputStream(
-            channels=3,
+            device="hw:1,0",
+            # USB mic: "hw: 1,0"
+            # PC mic: "hw: 0,6"
+            channels=1,
             samplerate=RATE,
             callback=self.audio_callback,
             blocksize=int(RATE * BLOCK_DURATION),
