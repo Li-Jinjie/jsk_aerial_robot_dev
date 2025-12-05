@@ -51,8 +51,8 @@ csv_folder_path = os.path.join(current_path, "tilt_qd_csv_trajs")
 csv_files = sorted([f for f in os.listdir(csv_folder_path) if f.endswith(".csv")])
 print(f"Found {len(csv_files)} CSV files in ./tilt_qd_csv_trajs folder.")
 
-# === hand control ===
-from teleoperation.hand_ctrl_smach import create_hand_control_state_machine
+# === teleoperation ===
+from teleoperation.teleop_smach import create_teleop_state_machine
 
 
 def traj_factory(traj_type, loop_num):
@@ -75,7 +75,7 @@ class IdleState(smach.State):
     def __init__(self):
         smach.State.__init__(
             self,
-            outcomes=["go_init", "stay_idle", "shutdown", "go_hand_control_init"],
+            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop"],
             input_keys=["robot_name"],
             output_keys=["robot_name", "traj_type", "loop_num"],
         )
@@ -99,9 +99,9 @@ class IdleState(smach.State):
                 for i, csv_file in enumerate(csv_files):
                     print(f"{i + len(traj_cls_list)}: {csv_file}")
 
-                # print an available hand control state
+                # print an available teleoperation state
                 print("\n===== Other Choices =====")
-                print("h: hand-based control")
+                print("t: teleoperation")
 
                 max_traj_idx += len(csv_files)
 
@@ -109,8 +109,8 @@ class IdleState(smach.State):
             if traj_type_str.lower() == "q":
                 return "shutdown"
 
-            if traj_type_str.lower() == "h":
-                return "go_hand_control_init"
+            if traj_type_str.lower() == "t":
+                return "go_teleop"
 
             traj_type = int(traj_type_str)
             if not (0 <= traj_type <= max_traj_idx):
@@ -287,7 +287,7 @@ def main(args):
                 "go_init": "INIT",
                 "stay_idle": "IDLE",
                 "shutdown": "DONE",
-                "go_hand_control_init": "HAND_CONTROL",
+                "go_teleop": "TELEOP",
             },
         )
 
@@ -298,9 +298,9 @@ def main(args):
         smach.StateMachine.add("TRACK", TrackState(), transitions={"done_track": "IDLE"})
 
         smach.StateMachine.add(
-            "HAND_CONTROL",
-            create_hand_control_state_machine(),
-            transitions={"DONE": "IDLE"},
+            "TELEOP",
+            create_teleop_state_machine(),
+            transitions={"DONE_TELEOP": "IDLE"},
             remapping={"robot_name": "robot_name"},
         )
 
