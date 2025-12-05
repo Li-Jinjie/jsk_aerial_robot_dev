@@ -1087,6 +1087,146 @@ class TestThrustFrequencyTraj(BaseTrajwSound):
         return self.note2thrust[note]
 
 
+class NoteG4FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("g4", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
+class NoteG4sharpFixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("g4sharp", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
+class NoteA4FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("a4", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
+class NoteA4sharpFixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("a4sharp", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
+class NoteB4FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("b4", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
+class NoteC5FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("c5", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
+class NoteC5sharpFixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("c5sharp", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
+class NoteD5FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("d5", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
+class NoteD5sharpFixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("d5sharp", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
+class NoteE5FixedRotorTraj(BaseTrajwSound):
+    def __init__(self, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            ("e5", 1.5),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+
 class InfinitePitchNeg90deg(BaseTraj):
     def __init__(self, loop_num) -> None:
         super().__init__(loop_num)
