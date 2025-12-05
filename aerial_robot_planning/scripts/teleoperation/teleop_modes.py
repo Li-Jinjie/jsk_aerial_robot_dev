@@ -26,7 +26,7 @@ For example: From arm to hand, denoted as a2h; from hand to drone, denoted as h2
 """
 
 
-class HandControlBaseMode(MPCPubJointTraj, ABC):
+class TeleopBaseMode(MPCPubJointTraj, ABC):
     def __init__(
         self,
         robot_name: str,
@@ -142,7 +142,7 @@ class HandControlBaseMode(MPCPubJointTraj, ABC):
 ##########################################
 # Derived Class : OperationMode
 ##########################################
-class OperationMode(HandControlBaseMode):
+class OperationMode(TeleopBaseMode):
     def __init__(
         self,
         robot_name: str,
@@ -401,7 +401,7 @@ class ContRotationGen:
 ##########################################
 # Derived Class : SphericalMode
 ##########################################
-class SphericalMode(HandControlBaseMode):
+class SphericalMode(TeleopBaseMode):
     def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, glove: Glove):
         super().__init__(robot_name, hand_pose, arm_pose, glove, node_name="spherical_mode_traj_pub")
         self.expected_a2d_distance = 2.2
@@ -473,7 +473,7 @@ class SphericalMode(HandControlBaseMode):
 ##########################################
 # Derived Class : CartesianMode
 ##########################################
-class CartesianMode(HandControlBaseMode):
+class CartesianMode(TeleopBaseMode):
     def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, glove: Glove):
         super().__init__(robot_name, hand_pose, arm_pose, glove, node_name="cartesian_mode_traj_pub")
         self.expected_d2target_distance = 0.0
@@ -565,7 +565,7 @@ class CartesianMode(HandControlBaseMode):
 ##########################################
 # Derived Class : LockingMode
 ##########################################
-class LockingMode(HandControlBaseMode):
+class LockingMode(TeleopBaseMode):
     def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, glove: Glove):
         super().__init__(robot_name, hand_pose, arm_pose, glove, node_name="locking_mode_traj_pub")
         self._init_origin_drone_position = None
