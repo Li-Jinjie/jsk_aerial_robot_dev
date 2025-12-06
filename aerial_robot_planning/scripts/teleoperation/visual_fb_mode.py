@@ -6,6 +6,8 @@
 @Date    : 2024-12-04 12:32
 @Software: PyCharm
 """
+# TODO: This file should be integrated into RVIZ panel.
+
 import rosparam
 import rospy
 import rosgraph.masterapi
