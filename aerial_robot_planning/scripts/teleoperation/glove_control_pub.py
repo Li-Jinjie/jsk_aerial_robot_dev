@@ -5,6 +5,7 @@
 @Author  : Li JiaXuan
 @Date    : 2024-12-04 12:32
 @Software: PyCharm
+@Intro   : 1. subscribe the OSC messages from the data glove. 2. change the control mode by setting ROS parameters.
 """
 
 import signal

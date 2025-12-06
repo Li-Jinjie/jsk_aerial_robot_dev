@@ -101,7 +101,7 @@ class IdleState(smach.State):
 
                 # print an available teleoperation state
                 print("\n===== Other Choices =====")
-                print("t: teleoperation")
+                print("t: Teleoperation Mode")
 
                 max_traj_idx += len(csv_files)
 
