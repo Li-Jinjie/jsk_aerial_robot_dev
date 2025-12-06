@@ -13,17 +13,17 @@ current_path = os.path.abspath(os.path.dirname(__file__))
 if current_path not in sys.path:
     sys.path.insert(0, current_path)
 
-from util import TopicNotAvailableError
+from aerial_robot_planning.src.aerial_robot_planning.util import TopicNotAvailableError
 
 # fmt: off
-from teleoperation.sub_pos_objects import (
+from aerial_robot_planning.src.aerial_robot_planning.teleoperation.sub_pos_objects import (
     HandPose,
     ArmPose,
     DronePose,
     ModeManager
 )
 
-from teleoperation.teleop_modes import (
+from aerial_robot_planning.src.aerial_robot_planning.teleoperation.teleop_modes import (
     TeleopBaseMode,
     OperationMode,
     CartesianMode,

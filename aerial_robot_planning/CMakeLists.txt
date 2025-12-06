@@ -7,16 +7,17 @@ project(aerial_robot_planning)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED)
+find_package(catkin REQUIRED COMPONENTS
+  rospy
+)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
 
-## Uncomment this if the package has a setup.py. This macro ensures
-## modules and global scripts declared therein get installed
-## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
+# register python modules
+# NOTE: there must be a python pkg under src/ named the SAME as the project name, and there should be an __init__.py file in it.
+catkin_python_setup()
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -157,8 +158,8 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
  catkin_install_python(PROGRAMS
    scripts/mpc_smach_node.py
-   scripts/teleoperation/glove_control_pub.py
-   scripts/teleoperation/visual_fb_mode.py
+   scripts/glove_control_pub.py
+   scripts/visual_fb_mode.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 

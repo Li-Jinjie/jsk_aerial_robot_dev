@@ -18,10 +18,10 @@ current_path = os.path.abspath(os.path.dirname(__file__))
 if current_path not in sys.path:
     sys.path.insert(0, current_path)
 
-from pub_mpc_joint_traj import MPCTrajPtPub, MPCSinglePtPub
-from pub_mpc_pred_xu import MPCPubCSVPredXU
+from aerial_robot_planning.pub_mpc_joint_traj import MPCTrajPtPub, MPCSinglePtPub
+from aerial_robot_planning.pub_mpc_pred_xu import MPCPubCSVPredXU
 from geometry_msgs.msg import Pose, Quaternion, Vector3
-from util import read_csv_traj, pub_0066_wall_rviz, pub_hand_markers_rviz
+from aerial_robot_planning.util import read_csv_traj, pub_0066_wall_rviz, pub_hand_markers_rviz
 
 # === load smach config from the ROS package ===
 ros_pack = rospkg.RosPack()
@@ -34,7 +34,7 @@ with open(config_path, "r") as f:
     smach_config = yaml.load(f, Loader=yaml.FullLoader)
 
 # === analytical trajectory ===
-import trajs
+from aerial_robot_planning import trajs
 
 # Collect all classes inside trajs whose name ends with 'Traj'
 traj_cls_list = [
@@ -52,7 +52,7 @@ csv_files = sorted([f for f in os.listdir(csv_folder_path) if f.endswith(".csv")
 print(f"Found {len(csv_files)} CSV files in ./tilt_qd_csv_trajs folder.")
 
 # === teleoperation ===
-from teleoperation.teleop_smach import create_teleop_state_machine
+from aerial_robot_planning.teleoperation.teleop_smach import create_teleop_state_machine
 
 
 def traj_factory(traj_type, loop_num):
