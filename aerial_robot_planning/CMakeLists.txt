@@ -165,7 +165,6 @@ include_directories(
 catkin_install_python(PROGRAMS
         scripts/mpc_smach_node.py
         scripts/glove_control_pub.py
-        scripts/visual_fb_mode.py
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
