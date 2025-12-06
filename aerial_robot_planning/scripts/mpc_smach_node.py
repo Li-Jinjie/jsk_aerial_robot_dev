@@ -13,23 +13,19 @@ import numpy as np
 import yaml
 import inspect
 
-# Insert current folder into path so we can import from "trajs" or other local files
-current_path = os.path.abspath(os.path.dirname(__file__))
-if current_path not in sys.path:
-    sys.path.insert(0, current_path)
-
 from aerial_robot_planning.pub_mpc_joint_traj import MPCTrajPtPub, MPCSinglePtPub
 from aerial_robot_planning.pub_mpc_pred_xu import MPCPubCSVPredXU
 from geometry_msgs.msg import Pose, Quaternion, Vector3
 from aerial_robot_planning.util import read_csv_traj, pub_0066_wall_rviz, pub_hand_markers_rviz
 
 # === load smach config from the ROS package ===
-ros_pack = rospkg.RosPack()
 try:
-    config_path = os.path.join(ros_pack.get_path("aerial_robot_planning"), "config", "Smach.yaml")
+    ros_pack = rospkg.RosPack()
+    pkg_path = ros_pack.get_path("aerial_robot_planning")
 except rospkg.ResourceNotFound:
     raise RuntimeError("Package 'aerial_robot_planning' not found! Make sure your ROS workspace is sourced.")
 
+config_path = os.path.join(pkg_path, "config", "Smach.yaml")
 with open(config_path, "r") as f:
     smach_config = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -41,7 +37,8 @@ traj_cls_list = [
     cls
     for name, cls in inspect.getmembers(trajs, inspect.isclass)
     # optionally ensure the class is defined in trajs and not an imported library
-    if cls.__module__ == "trajs" and name not in {"BaseTraj", "BaseTrajwFixedRotor", "PitchContinuousRotationTraj"}
+    if cls.__module__ == "aerial_robot_planning.trajs"
+    and name not in {"BaseTraj", "BaseTrajwFixedRotor", "PitchContinuousRotationTraj"}
 ]
 print(f"Found {len(traj_cls_list)} trajectory classes in trajs module.")
 

@@ -12,10 +12,10 @@ import numpy as np
 
 import rospy
 from geometry_msgs.msg import Twist, Vector3, Quaternion, Transform
-from aerial_robot_planning.src.aerial_robot_planning.pub_mpc_joint_traj import MPCPubJointTraj
 from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectoryPoint
 
-from sub_pos_objects import HandPose, ArmPose, ModeManager
+from ..pub_mpc_joint_traj import MPCPubJointTraj
+from .sub_pos_objects import HandPose, ArmPose, ModeManager
 
 
 ##########################################

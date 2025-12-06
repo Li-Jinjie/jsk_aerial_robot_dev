@@ -2,28 +2,23 @@
 Refactored by li-jinjie on 25-3-19.
 """
 
-import os
 import sys
 import rospy
 import smach
 import numpy as np
 import tf.transformations as tft
 
-current_path = os.path.abspath(os.path.dirname(__file__))
-if current_path not in sys.path:
-    sys.path.insert(0, current_path)
-
-from aerial_robot_planning.src.aerial_robot_planning.util import TopicNotAvailableError
+from ..util import TopicNotAvailableError
 
 # fmt: off
-from aerial_robot_planning.src.aerial_robot_planning.teleoperation.sub_pos_objects import (
+from .sub_pos_objects import (
     HandPose,
     ArmPose,
     DronePose,
     ModeManager
 )
 
-from aerial_robot_planning.src.aerial_robot_planning.teleoperation.teleop_modes import (
+from .teleop_modes import (
     TeleopBaseMode,
     OperationMode,
     CartesianMode,

@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 import rospy
 
 from nav_msgs.msg import Odometry
-from util import topic_ready, check_first_data_received, TrackingErrorCalculator
+from .util import topic_ready, check_first_data_received, TrackingErrorCalculator
 
 
 ##########################################

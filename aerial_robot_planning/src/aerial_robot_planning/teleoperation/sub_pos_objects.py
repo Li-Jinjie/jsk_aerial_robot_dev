@@ -7,7 +7,7 @@ from nav_msgs.msg import Odometry
 from abc import ABC
 
 from geometry_msgs.msg import PoseStamped
-from aerial_robot_planning.src.aerial_robot_planning.util import check_first_data_received, check_topic_subscription
+from ..util import check_first_data_received, check_topic_subscription
 
 
 ##########################################

@@ -15,13 +15,8 @@ from geometry_msgs.msg import Transform, Twist, Quaternion, Vector3, Pose
 from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectoryPoint
 from aerial_robot_msgs.msg import FixRotor
 
-from pub_mpc_base import MPCPubBase
-from trajs import BaseTraj
-
-# Insert current folder into path so we can import from "trajs" or other local files
-current_path = os.path.abspath(os.path.dirname(__file__))
-if current_path not in sys.path:
-    sys.path.insert(0, current_path)
+from .pub_mpc_base import MPCPubBase
+from .trajs import BaseTraj
 
 
 ##########################################
