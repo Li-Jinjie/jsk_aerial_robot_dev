@@ -294,6 +294,7 @@ def main(args):
         # TRACK
         smach.StateMachine.add("TRACK", TrackState(), transitions={"done_track": "IDLE"})
 
+        # TELEOP
         smach.StateMachine.add(
             "TELEOP",
             create_teleop_state_machine(),

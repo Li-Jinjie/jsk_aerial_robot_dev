@@ -198,7 +198,7 @@ class LockingModeState(BaseModeState):
 
 
 def create_teleop_state_machine():
-    """HandControlStateMachine"""
+    """TeleoperationStateMachine"""
     sm_sub = smach.StateMachine(outcomes=["DONE_TELEOP"], input_keys=["robot_name"])
 
     with sm_sub:
