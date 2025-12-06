@@ -43,10 +43,10 @@ traj_cls_list = [
 print(f"Found {len(traj_cls_list)} trajectory classes in trajs module.")
 
 # === CSV trajectory ===
-# read all CSV files in the folder ./tilt_qd_csv_trajs
-csv_folder_path = os.path.join(current_path, "tilt_qd_csv_trajs")
+# read all CSV files inside the folder
+csv_folder_path = os.path.join(pkg_path, "data", "csv_trajs", "tilt_qd")
 csv_files = sorted([f for f in os.listdir(csv_folder_path) if f.endswith(".csv")])
-print(f"Found {len(csv_files)} CSV files in ./tilt_qd_csv_trajs folder.")
+print(f"Found {len(csv_files)} CSV files in {csv_folder_path} folder.")
 
 # === teleoperation ===
 from aerial_robot_planning.teleoperation.teleop_smach import create_teleop_state_machine
