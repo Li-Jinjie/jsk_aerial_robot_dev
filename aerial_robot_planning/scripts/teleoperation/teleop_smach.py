@@ -20,7 +20,7 @@ from teleoperation.sub_pos_objects import (
     HandPose,
     ArmPose,
     DronePose,
-    Glove
+    ModeManager
 )
 
 from teleoperation.teleop_modes import (
@@ -33,7 +33,7 @@ from teleoperation.teleop_modes import (
 # fmt: on
 
 # global variables
-shared_data = {"hand_pose": None, "arm_pose": None, "drone_pose": None, "glove": None}
+shared_data = {"hand_pose": None, "arm_pose": None, "drone_pose": None, "mode_manager": None}
 
 
 class InitObjectState(smach.State):
@@ -146,7 +146,7 @@ class BaseModeState(smach.State):
                 userdata.robot_name,
                 hand_pose=shared_data["hand_pose"],
                 arm_pose=shared_data["arm_pose"],
-                glove=shared_data["glove"],
+                mode_manager=shared_data["mode_manager"],
             )
 
         while not rospy.is_shutdown():

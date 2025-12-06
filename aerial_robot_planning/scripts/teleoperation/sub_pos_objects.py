@@ -69,7 +69,7 @@ class DronePose(PoseBase):
         self.pose_msg = msg.pose
 
 
-class Glove:
+class ModeManager:
     def __init__(self, param_name="/hand/control_mode", default_value=1):
         """
         Initializes the ControlModeManager.
