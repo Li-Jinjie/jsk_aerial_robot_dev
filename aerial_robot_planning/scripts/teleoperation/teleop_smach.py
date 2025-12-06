@@ -40,30 +40,22 @@ class InitObjectState(smach.State):
     def __init__(self):
         smach.State.__init__(self, outcomes=["go_wait", "done_teleop"], input_keys=["robot_name"], output_keys=[])
 
-    @staticmethod
-    def get_user_decision(device_name):
-        prompt = f"Activate {device_name}? ([Y]/[N]): "
-        while True:
-            user_input = input(prompt).strip().lower()
-            if user_input in ("y", "n"):
-                return user_input == "y"
-            rospy.logwarn("Invalid input. Please enter Y or N.")
-
     def execute(self, userdata):
         try:
+            shared_data["mode_manager"] = ModeManager()
+            rospy.loginfo("ModeManager activated.")
+
             shared_data["hand_pose"] = HandPose()
             rospy.loginfo("Hand mocap activated.")
 
             shared_data["drone_pose"] = DronePose(userdata.robot_name)
             rospy.loginfo("Drone activated.")
 
-            # if self.get_user_decision("Arm mocap"):
-            shared_data["arm_pose"] = ArmPose()
-            rospy.loginfo("Arm mocap activated.")
-
-            # if self.get_user_decision("Glove"):
-            shared_data["glove"] = Glove()
-            rospy.loginfo("Glove activated.")
+            try:
+                shared_data["arm_pose"] = ArmPose()
+                rospy.loginfo("Arm mocap activated.")
+            except TopicNotAvailableError:
+                rospy.logwarn("Arm mocap topic not available. Skipping Arm mocap activation.")
 
             return "go_wait"
 
