@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
         sensor_msgs
         visualization_msgs
         aerial_robot_msgs
+        rqt_gui_py
 )
 
 ## System dependencies are found with CMake's conventions

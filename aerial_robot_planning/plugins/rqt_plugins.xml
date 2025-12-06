@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<library path="src">
+  <class name="TeleopMode"
+         type="aerial_robot_planning.teleoperation.rqt_plugin_teleop.TeleopModeRqtPlugin"
+         base_class_type="rqt_gui_py::Plugin">
+    <description>
+      Teleoperation mode visualization plugin using background color and text.
+    </description>
+
+    <qtgui>
+      <group>
+        <icon type="theme">folder</icon>
+        <label>aerial robot</label>
+      </group>
+
+      <label>Teleoperation Mode</label>
+      <icon type="theme">applications-system</icon>
+      <statustip>Teleoperation mode visualization</statustip>
+    </qtgui>
+  </class>
+</library>
