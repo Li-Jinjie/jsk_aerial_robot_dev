@@ -2,15 +2,14 @@
  Created by li-jinjie on 2025/12/7.
 """
 
-import sys
 import rospy
 import smach
-import numpy as np
-import tf.transformations as tft
+import re
 from geometry_msgs.msg import Pose, Quaternion, Vector3
 
 from ..pub_mpc_joint_traj import MPCSinglePtPub, MPCTrajPtPub
 from .sound_trajs import BaseTrajwSound, StringNoteTraj
+from .tokenizer import allowed_token_list
 
 
 class InitVoiceState(smach.State):
@@ -68,14 +67,18 @@ class ListenInputState(smach.State):
             rospy.logerr(f"LISTEN: Failed to start voice recognition system: {e}")
             return "done_voice"
 
-        user_input = input(f"\nPress g4, a4, b4, c5, d5, e5 to play notes, or 'q' to quit: ").strip().lower()
+        user_input = (
+            input(f"\nPress the combination of {allowed_token_list} to play notes, or 'q' to quit: ").strip().lower()
+        )
 
         if user_input == "q":
             rospy.loginfo("LISTEN: Quitting voice command mode.")
             pass  # TODO: xxx.stop()  # Stop voice recognition system here
             return "done_voice"
 
-        if user_input in ["g4", "a4", "b4", "c5", "d5", "e5"]:
+        # check if the input is the combination of allowed strings
+        pattern = r"^(?:" + "|".join(allowed_token_list) + ")+$"
+        if re.match(pattern, user_input):
             duration_per_note = input(f"\nEnter duration per note in seconds (e.g. 2): ").strip()
 
             userdata.user_input = user_input

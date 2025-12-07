@@ -7,6 +7,7 @@ import rospy
 from std_msgs.msg import Float32
 
 from ..trajs import BaseTrajwFixedRotor
+from .tokenizer import allowed_token_list, tokenize
 
 
 class BaseTrajwSound(BaseTrajwFixedRotor):
@@ -117,9 +118,10 @@ class StringNoteTraj(BaseTrajwSound):
     def __init__(self, note: str = "a4", duration: float = 2.0, loop_num: int = 1):
         super().__init__(loop_num)
 
-        self.sequence = [
-            (note, duration),
-        ]
+        note_list = tokenize(note, allowed_token_list)
+        rospy.loginfo(f"Constructed note sequence: {note_list}")
+
+        self.sequence = [(n, duration) for n in note_list]
 
         self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
         self.T = self.beat_times[-1]
