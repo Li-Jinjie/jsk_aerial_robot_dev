@@ -1,5 +1,6 @@
 """
- Created by li-jinjie on 2025/12/7.
+ Created by Hirata and li-jinjie.
+ NOTE: these trajectories should remain at the same pose while producing sound to execute multiple notes at one time.
 """
 import numpy as np
 import rospy
@@ -75,13 +76,12 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwSound):
         self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
         self.T = self.beat_times[-1]
         self.period = self.T
-        self.min_thrust = 0.5
 
     def compute_thrust_at_time(self, t: float) -> float:
         t_mod = t % self.period
         idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
         if idx >= len(self.sequence):
-            return self.min_thrust
+            return self.hover_thrust
 
         note, _ = self.sequence[idx]
         return self.note2thrust[note]
@@ -102,13 +102,12 @@ class TestThrustFrequencyTraj(BaseTrajwSound):
         self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
         self.T = self.beat_times[-1]
         self.period = self.T
-        self.min_thrust = 0.5
 
     def compute_thrust_at_time(self, t: float) -> float:
         t_mod = t % self.period
         idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
         if idx >= len(self.sequence):
-            return self.min_thrust
+            return self.hover_thrust
 
         note, _ = self.sequence[idx]
         return self.note2thrust[note]
