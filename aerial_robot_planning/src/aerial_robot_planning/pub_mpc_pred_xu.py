@@ -17,7 +17,8 @@ from aerial_robot_msgs.msg import PredXU
 from nav_msgs.msg import Path
 
 from .pub_mpc_joint_traj import MPCPubBase
-from .util import read_csv_traj, check_traj_info
+from .traj_register import read_csv_traj
+from .util import check_traj_info
 
 
 ##########################################

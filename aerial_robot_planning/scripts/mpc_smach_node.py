@@ -14,10 +14,13 @@ import numpy as np
 import yaml
 import inspect
 
+from geometry_msgs.msg import Pose, Quaternion, Vector3
+
 from aerial_robot_planning.pub_mpc_joint_traj import MPCTrajPtPub, MPCSinglePtPub
 from aerial_robot_planning.pub_mpc_pred_xu import MPCPubCSVPredXU
-from geometry_msgs.msg import Pose, Quaternion, Vector3
-from aerial_robot_planning.util import TrajRegister, read_csv_traj, pub_0066_wall_rviz, pub_hand_markers_rviz
+from aerial_robot_planning.traj_register import TrajRegister, read_csv_traj
+from aerial_robot_planning.util import pub_0066_wall_rviz, pub_hand_markers_rviz
+
 
 # ======== load smach config from the ROS package ========
 try:
