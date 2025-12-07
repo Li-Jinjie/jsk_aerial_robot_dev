@@ -54,7 +54,7 @@ class ListenInputState(smach.State):
     def __init__(self):
         smach.State.__init__(
             self,
-            outcomes=["go_play", "done_voice"],
+            outcomes=["go_play", "stay_listen_input", "done_voice"],
             input_keys=["robot_name"],
             output_keys=["robot_name", "user_input", "duration_per_note"],
         )
@@ -68,33 +68,32 @@ class ListenInputState(smach.State):
             rospy.logerr(f"LISTEN: Failed to start voice recognition system: {e}")
             return "done_voice"
 
-        while True:
-            user_input = input(f"\nPress g4, a4, b4, c5, d5, e5 to play notes, or 'q' to quit: ").strip().lower()
+        user_input = input(f"\nPress g4, a4, b4, c5, d5, e5 to play notes, or 'q' to quit: ").strip().lower()
 
-            if user_input == "q":
-                rospy.loginfo("LISTEN: Quitting voice command mode.")
-                pass  # TODO: xxx.stop()  # Stop voice recognition system here
-                return "done_voice"
+        if user_input == "q":
+            rospy.loginfo("LISTEN: Quitting voice command mode.")
+            pass  # TODO: xxx.stop()  # Stop voice recognition system here
+            return "done_voice"
 
-            elif user_input in ["g4", "a4", "b4", "c5", "d5", "e5"]:
-                duration_per_note = input(f"\nEnter duration per note in seconds (e.g. 2): ").strip()
+        if user_input in ["g4", "a4", "b4", "c5", "d5", "e5"]:
+            duration_per_note = input(f"\nEnter duration per note in seconds (e.g. 2): ").strip()
 
-                userdata.user_input = user_input
-                try:
-                    userdata.duration_per_note = float(duration_per_note)
-                except ValueError:
-                    rospy.logwarn(f"LISTEN: Invalid duration '{duration_per_note}'. Using default of 2 seconds.")
-                    userdata.duration_per_note = 2.0
+            userdata.user_input = user_input
+            try:
+                userdata.duration_per_note = float(duration_per_note)
+            except ValueError:
+                rospy.logwarn(f"LISTEN: Invalid duration '{duration_per_note}'. Using default of 2 seconds.")
+                userdata.duration_per_note = 2.0
 
-                pass  # TODO: xxx.stop()  # Stop voice recognition system here
+            pass  # TODO: xxx.stop()  # Stop voice recognition system here
 
-                rospy.loginfo(
-                    f"LISTEN: Received command to play note '{user_input}' for {float(duration_per_note)} seconds."
-                )
-                return "go_play"
+            rospy.loginfo(
+                f"LISTEN: Received command to play note '{user_input}' for {float(duration_per_note)} seconds."
+            )
+            return "go_play"
 
-            else:
-                rospy.logwarn(f"LISTEN: Invalid command '{user_input}'. Please try again.")
+        rospy.logwarn("LISTEN: Unexpected reading input. Please try again.")
+        return "stay_listen_input"
 
 
 class PlayState(smach.State):
@@ -147,7 +146,7 @@ def create_voice_state_machine():
         smach.StateMachine.add(
             "LISTEN_INPUT",
             ListenInputState(),
-            transitions={"go_play": "PLAY", "done_voice": "DONE_VOICE"},
+            transitions={"go_play": "PLAY", "stay_listen_input": "LISTEN_INPUT", "done_voice": "DONE_VOICE"},
         )
 
         smach.StateMachine.add(
