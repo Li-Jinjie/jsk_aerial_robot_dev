@@ -3,7 +3,7 @@ Created by jiaxuan and jinjie on 25/01/22.
 """
 
 from functools import wraps
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Type
 import pandas as pd
 
 import numpy as np
@@ -18,6 +18,92 @@ from geometry_msgs.msg import Point, Quaternion, PoseStamped
 
 from trajectory_msgs.msg import MultiDOFJointTrajectory
 from aerial_robot_msgs.msg import PredXU, FixRotor
+
+from .trajs import BaseTraj
+
+
+class TrajRegister:
+    def __init__(self):
+        self.num_analytic_traj = 0
+        self.analytic_traj_list_dict = {}
+
+        self.num_csv_traj = 0
+        self.csv_traj_file_list_dict = {}
+
+        self.index_trajs_list = []
+
+    def register_anal_traj_list(self, name: str, anal_traj_list: list):
+        self.analytic_traj_list_dict[name] = anal_traj_list
+        print(f"Registered trajectory list '{name}' with {len(anal_traj_list)} trajectories.")
+        self.num_analytic_traj += len(anal_traj_list)
+
+    def register_csv_traj_list(self, name: str, csv_traj_file_list: list):
+        self.csv_traj_file_list_dict[name] = csv_traj_file_list
+        print(f"Registered CSV trajectory list '{name}' with {len(csv_traj_file_list)} trajectories.")
+        self.num_csv_traj += len(csv_traj_file_list)
+
+    def index_all_traj_and_print(self, has_csv: bool = True):
+        self._index_all_analytic_traj_and_print()
+
+        if has_csv:
+            self._index_all_csv_traj_and_print()
+
+    def get_max_traj_index(self) -> int:
+        return len(self.index_trajs_list) - 1
+
+    def is_traj_index_valid(self, index: int) -> bool:
+        return 0 <= index <= self.get_max_traj_index()
+
+    def is_analytic_traj_index(self, index: int) -> bool:
+        return index < self.num_analytic_traj
+
+    def lookup_analytic_traj_cls_by_index(self, index: int) -> Type[BaseTraj]:
+        if not self.is_traj_index_valid(index):
+            raise IndexError(f"Trajectory index {index} is out of range.")
+
+        traj = self.index_trajs_list[index]
+
+        if isinstance(traj, str):
+            raise TypeError(f"Trajectory index {index} corresponds to a CSV file, not an Analytic trajectory.")
+
+        rospy.loginfo(f"Selected Analytic trajectory: {traj.__name__}")
+
+        return traj
+
+    def lookup_csv_traj_file_by_index(self, index: int) -> str:
+        if not self.is_traj_index_valid(index):
+            raise IndexError(f"Trajectory index {index} is out of range.")
+
+        traj = self.index_trajs_list[index]
+
+        if not isinstance(traj, str):
+            raise TypeError(f"Trajectory index {index} corresponds to an Analytic trajectory, not a CSV file.")
+
+        rospy.loginfo(f"Selected CSV trajectory file: {traj}")
+
+        return traj
+
+    def _index_all_analytic_traj_and_print(self):
+        index = 0
+
+        print("\n=== Analytic Trajectory Lists ===")
+        for list_name, traj_list in self.analytic_traj_list_dict.items():
+            print(f"\nList '{list_name}':")
+            for traj in traj_list:
+                print(f"{index}: {traj.__name__}")
+                index += 1
+                self.index_trajs_list.append(traj)
+
+    def _index_all_csv_traj_and_print(self):
+        index = self.num_analytic_traj  # the CSV trajs are always printed after analytic trajs
+
+        print("\n=== CSV Trajectory File Lists ===")
+        for list_name, file_list in self.csv_traj_file_list_dict.items():
+            print(f"\nList '{list_name}':")
+            for file_path in file_list:
+                print(f"{index}: {file_path}")
+                index += 1
+                self.index_trajs_list.append(file_path)
 
 
 def read_csv_traj(path, nrows=None):
