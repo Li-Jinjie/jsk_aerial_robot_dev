@@ -53,7 +53,7 @@ from aerial_robot_planning.voice import sound_trajs
 anal_sound_traj_list = [
     cls
     for name, cls in inspect.getmembers(sound_trajs, inspect.isclass)
-    if cls.__module__ == "aerial_robot_planning.voice.sound_trajs" and name not in {"BaseTrajwSound"}
+    if cls.__module__ == "aerial_robot_planning.voice.sound_trajs" and name not in {"BaseTrajwSound", "StringNoteTraj"}
 ]
 traj_register.register_anal_traj_list("sound_trajs", anal_sound_traj_list)
 
@@ -65,6 +65,9 @@ traj_register.register_csv_traj_list("csv_files", csv_files)
 
 # === teleoperation ===
 from aerial_robot_planning.teleoperation.teleop_smach import create_teleop_state_machine
+
+# === voice control ===
+from aerial_robot_planning.voice.voice_smach import create_voice_state_machine
 
 
 ###############################################
@@ -80,7 +83,7 @@ class IdleState(smach.State):
     def __init__(self):
         smach.State.__init__(
             self,
-            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop"],
+            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop", "go_voice"],
             input_keys=["robot_name"],
             output_keys=["robot_name", "traj_type", "loop_num"],
         )
@@ -96,6 +99,7 @@ class IdleState(smach.State):
             if is_beetle:
                 print("\n===== Other Choices =====")
                 print("t: Teleoperation Mode")
+                print("v: Voice Mode")
 
             traj_type_str = input(f"\nEnter trajectory number/letter above to select or 'q' to quit: ")
             if traj_type_str.lower() == "q":
@@ -103,6 +107,9 @@ class IdleState(smach.State):
 
             if traj_type_str.lower() == "t":
                 return "go_teleop"
+
+            if traj_type_str.lower() == "v":
+                return "go_voice"
 
             traj_index = int(traj_type_str)
             if not traj_register.is_traj_index_valid(traj_index):
@@ -278,6 +285,7 @@ def main(args):
                 "stay_idle": "IDLE",
                 "shutdown": "DONE",
                 "go_teleop": "TELEOP",
+                "go_voice": "VOICE",
             },
         )
 
@@ -292,6 +300,14 @@ def main(args):
             "TELEOP",
             create_teleop_state_machine(),
             transitions={"DONE_TELEOP": "IDLE"},
+            remapping={"robot_name": "robot_name"},
+        )
+
+        # VOICE
+        smach.StateMachine.add(
+            "VOICE",
+            create_voice_state_machine(),
+            transitions={"DONE_VOICE": "IDLE"},
             remapping={"robot_name": "robot_name"},
         )
 

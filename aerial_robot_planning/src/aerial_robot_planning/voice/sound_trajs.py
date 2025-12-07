@@ -111,3 +111,25 @@ class TestThrustFrequencyTraj(BaseTrajwSound):
 
         note, _ = self.sequence[idx]
         return self.note2thrust[note]
+
+
+class StringNoteTraj(BaseTrajwSound):
+    def __init__(self, note: str = "a4", duration: float = 2.0, loop_num: int = 1):
+        super().__init__(loop_num)
+
+        self.sequence = [
+            (note, duration),
+        ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+
+    def compute_thrust_at_time(self, t: float) -> float:
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+        if idx >= len(self.sequence):
+            return self.hover_thrust
+
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
