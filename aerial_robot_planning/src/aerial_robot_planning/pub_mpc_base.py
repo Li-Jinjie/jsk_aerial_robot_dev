@@ -125,6 +125,7 @@ class MPCPubBase(ABC):
 
         # 2) Fill the trajectory from a child-class method
         t_has_started = rospy.Time.now().to_sec() - self.start_time
+        # NOTE: traj_msg can be a tuple of different messages, such as (MultiDOFJointTrajectory, FixRotor)
         traj_msg = self.fill_trajectory_points(t_has_started)
 
         # 2.1) Calculate tracking error

@@ -3,7 +3,7 @@ Created by jiaxuan and jinjie on 25/01/22.
 """
 
 from functools import wraps
-from typing import Optional
+from typing import Optional, Union, Tuple
 import pandas as pd
 
 import numpy as np
@@ -15,6 +15,9 @@ import tf_conversions as tf
 from nav_msgs.msg import Odometry, Path
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point, Quaternion, PoseStamped
+
+from trajectory_msgs.msg import MultiDOFJointTrajectory
+from aerial_robot_msgs.msg import PredXU, FixRotor
 
 
 def read_csv_traj(path, nrows=None):
@@ -227,7 +230,9 @@ class TrackingErrorCalculator:
         return pos_rmse_norm, pos_rmse, ang_rmse_norm, ang_rmse
 
     @staticmethod
-    def _cal_tracking_error(uav_odom: Odometry, ref_traj):
+    def _cal_tracking_error(
+        uav_odom: Odometry, ref_traj: Union[Tuple[MultiDOFJointTrajectory, FixRotor], MultiDOFJointTrajectory, PredXU]
+    ):
         """
         Calculate position and orientation error between current odom and ref_traj,
         which can be a MultiDOFJointTrajectory or PredXU.
@@ -243,24 +248,39 @@ class TrackingErrorCalculator:
 
         # Extract reference pose
         try:
-            if hasattr(ref_traj, "points"):  # MultiDOFJointTrajectory
-                ref_px = ref_traj.points[0].transforms[0].translation.x
-                ref_py = ref_traj.points[0].transforms[0].translation.y
-                ref_pz = ref_traj.points[0].transforms[0].translation.z
-                ref_qx = ref_traj.points[0].transforms[0].rotation.x
-                ref_qy = ref_traj.points[0].transforms[0].rotation.y
-                ref_qz = ref_traj.points[0].transforms[0].rotation.z
-                ref_qw = ref_traj.points[0].transforms[0].rotation.w
-            else:  # PredXU
-                ref_px = ref_traj.x.data[0]
-                ref_py = ref_traj.x.data[1]
-                ref_pz = ref_traj.x.data[2]
-                ref_qx = ref_traj.x.data[6]
-                ref_qy = ref_traj.x.data[7]
-                ref_qz = ref_traj.x.data[8]
-                ref_qw = ref_traj.x.data[9]
+            # Handle (MultiDOFJointTrajectory, FixRotor) case:
+            # if ref_traj is a tuple, we only use the trajectory part
+            if isinstance(ref_traj, tuple):
+                traj_msg, _ = ref_traj  # (MultiDOFJointTrajectory, FixRotor)
+            else:
+                traj_msg = ref_traj
+
+            # MultiDOFJointTrajectory case
+            if hasattr(traj_msg, "points"):
+                transform = traj_msg.points[0].transforms[0]
+                ref_px = transform.translation.x
+                ref_py = transform.translation.y
+                ref_pz = transform.translation.z
+                ref_qx = transform.rotation.x
+                ref_qy = transform.rotation.y
+                ref_qz = transform.rotation.z
+                ref_qw = transform.rotation.w
+
+            # PredXU case
+            else:
+                ref_px = traj_msg.x.data[0]
+                ref_py = traj_msg.x.data[1]
+                ref_pz = traj_msg.x.data[2]
+                ref_qx = traj_msg.x.data[6]
+                ref_qy = traj_msg.x.data[7]
+                ref_qz = traj_msg.x.data[8]
+                ref_qw = traj_msg.x.data[9]
+
         except AttributeError:
-            raise AttributeError("Reference trajectory must be either MultiDOFJointTrajectory or PredXU!")
+            raise AttributeError(
+                "Reference trajectory must be one of: "
+                "(MultiDOFJointTrajectory, FixRotor), MultiDOFJointTrajectory, or PredXU!"
+            )
 
         # Position error
         dx = cur_pos.x - ref_px
