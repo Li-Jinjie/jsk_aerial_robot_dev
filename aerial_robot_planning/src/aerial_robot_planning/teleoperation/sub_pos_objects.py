@@ -7,7 +7,7 @@ from nav_msgs.msg import Odometry
 from abc import ABC
 
 from geometry_msgs.msg import PoseStamped
-from ..util import check_first_data_received, check_topic_subscription
+from ..util import check_first_data_received, check_topic_subscription, TopicNotAvailableError
 
 
 ##########################################
@@ -27,7 +27,9 @@ class PoseBase(ABC):
 
         self.subscriber = self._sub_topic(topic_name, msg_type)
 
-        check_first_data_received(self, "pose_msg", self.object_name)
+        is_data_receive = check_first_data_received(self, "pose_msg", self.object_name)
+        if not is_data_receive:
+            raise TopicNotAvailableError(f"Failed to receive initial data for {self.object_name} pose.")
 
     @check_topic_subscription
     def _sub_topic(self, topic_name, msg_type):
