@@ -5,6 +5,7 @@ Created by li-jinjie on 25-1-4.
 import os
 import sys
 import argparse
+
 import rospy
 import rospkg
 import smach
@@ -13,12 +14,15 @@ import numpy as np
 import yaml
 import inspect
 
+from geometry_msgs.msg import Pose, Quaternion, Vector3
+
 from aerial_robot_planning.pub_mpc_joint_traj import MPCTrajPtPub, MPCSinglePtPub
 from aerial_robot_planning.pub_mpc_pred_xu import MPCPubCSVPredXU
-from geometry_msgs.msg import Pose, Quaternion, Vector3
-from aerial_robot_planning.util import read_csv_traj, pub_0066_wall_rviz, pub_hand_markers_rviz
+from aerial_robot_planning.traj_register import TrajRegister, read_csv_traj
+from aerial_robot_planning.util import pub_0066_wall_rviz, pub_hand_markers_rviz
 
-# === load smach config from the ROS package ===
+
+# ======== load smach config from the ROS package ========
 try:
     ros_pack = rospkg.RosPack()
     pkg_path = ros_pack.get_path("aerial_robot_planning")
@@ -29,34 +33,41 @@ config_path = os.path.join(pkg_path, "config", "Smach.yaml")
 with open(config_path, "r") as f:
     smach_config = yaml.load(f, Loader=yaml.FullLoader)
 
+# ======== collect all trajectory classes ========
+traj_register = TrajRegister()
+
 # === analytical trajectory ===
 from aerial_robot_planning import trajs
 
-# Collect all classes inside trajs whose name ends with 'Traj'
-traj_cls_list = [
+anal_traj_list = [
     cls
     for name, cls in inspect.getmembers(trajs, inspect.isclass)
     # optionally ensure the class is defined in trajs and not an imported library
     if cls.__module__ == "aerial_robot_planning.trajs"
     and name not in {"BaseTraj", "BaseTrajwFixedRotor", "PitchContinuousRotationTraj"}
 ]
-print(f"Found {len(traj_cls_list)} trajectory classes in trajs module.")
+traj_register.register_anal_traj_list("trajs", anal_traj_list)
+
+from aerial_robot_planning.voice import sound_trajs
+
+anal_sound_traj_list = [
+    cls
+    for name, cls in inspect.getmembers(sound_trajs, inspect.isclass)
+    if cls.__module__ == "aerial_robot_planning.voice.sound_trajs" and name not in {"BaseTrajwSound", "StringNoteTraj"}
+]
+traj_register.register_anal_traj_list("sound_trajs", anal_sound_traj_list)
 
 # === CSV trajectory ===
 # read all CSV files inside the folder
 csv_folder_path = os.path.join(pkg_path, "data", "csv_trajs", "tilt_qd")
 csv_files = sorted([f for f in os.listdir(csv_folder_path) if f.endswith(".csv")])
-print(f"Found {len(csv_files)} CSV files in {csv_folder_path} folder.")
+traj_register.register_csv_traj_list("csv_files", csv_files)
 
 # === teleoperation ===
 from aerial_robot_planning.teleoperation.teleop_smach import create_teleop_state_machine
 
-
-def traj_factory(traj_type, loop_num):
-    if traj_type not in range(len(traj_cls_list)):
-        raise ValueError("Invalid trajectory type!")
-
-    return traj_cls_list[traj_type](loop_num)
+# === voice control ===
+from aerial_robot_planning.voice.voice_smach import create_voice_state_machine
 
 
 ###############################################
@@ -72,7 +83,7 @@ class IdleState(smach.State):
     def __init__(self):
         smach.State.__init__(
             self,
-            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop"],
+            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop", "go_voice"],
             input_keys=["robot_name"],
             output_keys=["robot_name", "traj_type", "loop_num"],
         )
@@ -81,41 +92,32 @@ class IdleState(smach.State):
         rospy.loginfo("State: IDLE -- Waiting for user input...")
 
         try:
-            # print available trajectory types
-            print("Available trajectory types:")
-            max_traj_idx = 0
+            is_beetle = userdata.robot_name == "beetle1"
 
-            print("\n===== Analytical Trajectories =====")
-            for i, traj_cls in enumerate(traj_cls_list):
-                print(f"{i}: {traj_cls.__name__}")
-            max_traj_idx += len(traj_cls_list) - 1
+            traj_register.index_all_traj_and_print(has_csv=is_beetle)
 
-            if userdata.robot_name == "beetle1":
-                print("\n===== CSV Trajectories =====")
-                # print available CSV files
-                for i, csv_file in enumerate(csv_files):
-                    print(f"{i + len(traj_cls_list)}: {csv_file}")
-
-                # print an available teleoperation state
+            if is_beetle:
                 print("\n===== Other Choices =====")
                 print("t: Teleoperation Mode")
+                print("v: Voice Mode")
 
-                max_traj_idx += len(csv_files)
-
-            traj_type_str = input(f"\nEnter trajectory type (0..{max_traj_idx}) or 'q' to quit: ")
+            traj_type_str = input(f"\nEnter trajectory number/letter above to select or 'q' to quit: ")
             if traj_type_str.lower() == "q":
                 return "shutdown"
 
             if traj_type_str.lower() == "t":
                 return "go_teleop"
 
-            traj_type = int(traj_type_str)
-            if not (0 <= traj_type <= max_traj_idx):
+            if traj_type_str.lower() == "v":
+                return "go_voice"
+
+            traj_index = int(traj_type_str)
+            if not traj_register.is_traj_index_valid(traj_index):
                 rospy.logwarn("Invalid trajectory type!")
                 return "stay_idle"
 
             loop_num = 1.0  # TODO: add loop support for CSV trajectories
-            if traj_type < len(traj_cls_list):
+            if traj_register.is_analytic_traj_index(traj_index):
                 loop_str = input("Enter loop number (or press Enter for infinite): ")
                 if loop_str.strip() == "":
                     loop_num = np.inf
@@ -123,7 +125,7 @@ class IdleState(smach.State):
                     loop_num = float(loop_str)
 
             # Set user data
-            userdata.traj_type = traj_type
+            userdata.traj_type = traj_index
             userdata.loop_num = loop_num
 
             return "go_init"
@@ -155,9 +157,9 @@ class InitState(smach.State):
     def execute(self, userdata):
         rospy.loginfo("State: INIT -- Start to reach the first point of the trajectory.")
 
-        if userdata.traj_type < len(traj_cls_list):
-            rospy.loginfo(f"Using trajs.{traj_cls_list[userdata.traj_type].__name__} trajectory.")
-            traj = traj_factory(userdata.traj_type, userdata.loop_num)
+        if traj_register.is_analytic_traj_index(userdata.traj_type):
+            traj_cls = traj_register.lookup_analytic_traj_cls_by_index(userdata.traj_type)
+            traj = traj_cls(userdata.loop_num)
 
             frame_id = traj.get_frame_id()
             child_frame_id = traj.get_child_frame_id()
@@ -170,8 +172,7 @@ class InitState(smach.State):
                 qw, qx, qy, qz = 1.0, 0.0, 0.0, 0.0
 
         else:
-            csv_file = csv_files[userdata.traj_type - len(traj_cls_list)]
-            rospy.loginfo(f"Using CSV file: {csv_file}")
+            csv_file = traj_register.lookup_csv_traj_file_by_index(userdata.traj_type)
 
             traj_robot, frame_id, child_frame_id, traj_data_df = read_csv_traj(
                 os.path.join(csv_folder_path, csv_file), nrows=1
@@ -226,13 +227,12 @@ class TrackState(smach.State):
             f"traj_type={userdata.traj_type}, loop_num={userdata.loop_num}"
         )
 
-        if userdata.traj_type < len(traj_cls_list):
-            traj = traj_factory(userdata.traj_type, userdata.loop_num)
-            rospy.loginfo(f"Using {traj} trajectory.")
+        if traj_register.is_analytic_traj_index(userdata.traj_type):
+            traj_cls = traj_register.lookup_analytic_traj_cls_by_index(userdata.traj_type)
+            traj = traj_cls(userdata.loop_num)
             mpc_node = MPCTrajPtPub(robot_name=userdata.robot_name, traj=traj)
         else:
-            csv_file = csv_files[userdata.traj_type - len(traj_cls_list)]
-            rospy.loginfo(f"Using CSV file: {csv_file}")
+            csv_file = traj_register.lookup_csv_traj_file_by_index(userdata.traj_type)
             mpc_node = MPCPubCSVPredXU(
                 userdata.robot_name, os.path.join(csv_folder_path, csv_file), u_mode=smach_config["xu_traj"]["u_mode"]
             )
@@ -285,6 +285,7 @@ def main(args):
                 "stay_idle": "IDLE",
                 "shutdown": "DONE",
                 "go_teleop": "TELEOP",
+                "go_voice": "VOICE",
             },
         )
 
@@ -299,6 +300,14 @@ def main(args):
             "TELEOP",
             create_teleop_state_machine(),
             transitions={"DONE_TELEOP": "IDLE"},
+            remapping={"robot_name": "robot_name"},
+        )
+
+        # VOICE
+        smach.StateMachine.add(
+            "VOICE",
+            create_voice_state_machine(),
+            transitions={"DONE_VOICE": "IDLE"},
             remapping={"robot_name": "robot_name"},
         )
 

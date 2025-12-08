@@ -8,6 +8,8 @@ import sys
 import os
 import math
 from abc import ABC, abstractmethod
+from typing import Union, Tuple, Optional
+
 import rospy
 import tf_conversions as tf
 
@@ -29,10 +31,21 @@ class MPCPubJointTraj(MPCPubBase, ABC):
         self.pub_ref_traj = rospy.Publisher(f"/{robot_name}/set_ref_traj", MultiDOFJointTrajectory, queue_size=3)
         self.pub_fixed_rotor = rospy.Publisher(f"/{robot_name}/set_fixed_rotor", FixRotor, queue_size=3)
 
-    def pub_trajectory_points(self, traj_msg: MultiDOFJointTrajectory):
-        """Publish the MultiDOFJointTrajectory message."""
-        traj_msg.header.stamp = rospy.Time.now()
+    def pub_trajectory_points(self, msg: Union[Tuple[MultiDOFJointTrajectory, FixRotor], MultiDOFJointTrajectory]):
+        if isinstance(msg, tuple):  # MPCTrajPtPub
+            traj_msg, fix_rotor_msg = msg
+        else:
+            traj_msg = msg  # MPCSinglePtPub
+            fix_rotor_msg = None
+
+        now = rospy.Time.now()
+
+        traj_msg.header.stamp = now
         self.pub_ref_traj.publish(traj_msg)
+
+        if fix_rotor_msg is not None:
+            fix_rotor_msg.header.stamp = now
+            self.pub_fixed_rotor.publish(fix_rotor_msg)
 
 
 ##########################################
@@ -51,13 +64,14 @@ class MPCTrajPtPub(MPCPubJointTraj):
 
         self.start_timer()
 
-    def fill_trajectory_points(self, t_elapsed: float) -> MultiDOFJointTrajectory:
+    def fill_trajectory_points(self, t_elapsed: float) -> Tuple[MultiDOFJointTrajectory, FixRotor]:
         """
         Build a MultiDOFJointTrajectory of length N_nmpc+1 from the 'traj' object,
         evaluating at times t_elapsed + (0..N)*T_integ (if it's time-varying)
         or always t_elapsed if the reference is the same across the horizon.
         """
         multi_dof_joint_traj = MultiDOFJointTrajectory()
+        fixed_rotor_msg = None
 
         # set frame
         multi_dof_joint_traj.header.frame_id = self.traj.get_frame_id()
@@ -94,20 +108,6 @@ class MPCTrajPtPub(MPCPubJointTraj):
                 r_rate, p_rate, y_rate = 0.0, 0.0, 0.0
                 r_acc, p_acc, y_acc = 0.0, 0.0, 0.0
 
-            # new feature: fix rotor  TODO: think of a better place to put this function. Only JointTraj has this function.
-            try:
-                rotor_id, ft_fixed, alpha_fixed = self.traj.get_fixed_rotor(t_elapsed)
-
-                if self.traj.use_fix_rotor_flag:
-                    fixed_rotor_msg = FixRotor()
-                    fixed_rotor_msg.header.stamp = rospy.Time.now()
-                    fixed_rotor_msg.rotor_id = rotor_id
-                    fixed_rotor_msg.fix_ft = ft_fixed
-                    fixed_rotor_msg.fix_alpha = alpha_fixed
-                    self.pub_fixed_rotor.publish(fixed_rotor_msg)
-            except AttributeError:
-                pass
-
             # Fill the transforms / velocities / accelerations
             traj_pt.transforms.append(Transform(translation=Vector3(x, y, z), rotation=Quaternion(qx, qy, qz, qw)))
             traj_pt.velocities.append(Twist(linear=Vector3(vx, vy, vz), angular=Vector3(r_rate, p_rate, y_rate)))
@@ -116,7 +116,18 @@ class MPCTrajPtPub(MPCPubJointTraj):
 
             multi_dof_joint_traj.points.append(traj_pt)
 
-        return multi_dof_joint_traj
+        # new feature: fix one rotor for nullspace exploitation
+        if hasattr(self.traj, "use_fix_rotor_flag") and hasattr(self.traj, "get_fixed_rotor"):
+            rotor_id, ft_fixed, alpha_fixed = self.traj.get_fixed_rotor(t_elapsed)
+
+            if self.traj.use_fix_rotor_flag:
+                fixed_rotor_msg = FixRotor()
+                fixed_rotor_msg.header.stamp = rospy.Time.now()
+                fixed_rotor_msg.rotor_id = rotor_id
+                fixed_rotor_msg.fix_ft = ft_fixed
+                fixed_rotor_msg.fix_alpha = alpha_fixed
+
+        return multi_dof_joint_traj, fixed_rotor_msg
 
     def check_finished(self, t_elapsed: float) -> bool:
         """

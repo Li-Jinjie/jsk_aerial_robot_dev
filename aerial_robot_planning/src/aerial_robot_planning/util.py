@@ -3,8 +3,7 @@ Created by jiaxuan and jinjie on 25/01/22.
 """
 
 from functools import wraps
-from typing import Optional
-import pandas as pd
+from typing import Optional, Union, Tuple
 
 import numpy as np
 import rospy
@@ -16,33 +15,8 @@ from nav_msgs.msg import Odometry, Path
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point, Quaternion, PoseStamped
 
-
-def read_csv_traj(path, nrows=None):
-    # please read READEME.md in tilt_qd_csv_trajs for the csv file format
-    non_data_row_num = 0
-    with open(path, "r") as f:
-        robot_line = f.readline().strip().split(",")
-        frame_id_line = f.readline().strip().split(",")
-        child_frame_id_line = f.readline().strip().split(",")
-        non_data_row_num += 3
-
-        if robot_line[0] != "robot" or frame_id_line[0] != "frame_id" or child_frame_id_line[0] != "child_frame_id":
-            raise ValueError("CSV file format error: first three lines must be 'robot', 'frame_id', 'child_frame_id'")
-        robot = robot_line[1] if len(robot_line) > 1 else None
-        frame_id = frame_id_line[1] if len(frame_id_line) > 1 else None
-        child_frame_id = child_frame_id_line[1] if len(child_frame_id_line) > 1 else None
-
-    if nrows is not None:
-        df = pd.read_csv(path, skiprows=non_data_row_num, nrows=nrows)
-    else:
-        df = pd.read_csv(path, skiprows=non_data_row_num)
-
-    # check each column has a header
-    for col in df.columns:
-        if col.strip() == "":
-            raise ValueError("CSV file format error: all columns must have a header")
-
-    return robot, frame_id, child_frame_id, df
+from trajectory_msgs.msg import MultiDOFJointTrajectory
+from aerial_robot_msgs.msg import PredXU, FixRotor
 
 
 def check_first_data_received(obj: object, attr: str, object_name: str, timeout: float = 1.0):
@@ -227,7 +201,9 @@ class TrackingErrorCalculator:
         return pos_rmse_norm, pos_rmse, ang_rmse_norm, ang_rmse
 
     @staticmethod
-    def _cal_tracking_error(uav_odom: Odometry, ref_traj):
+    def _cal_tracking_error(
+        uav_odom: Odometry, ref_traj: Union[Tuple[MultiDOFJointTrajectory, FixRotor], MultiDOFJointTrajectory, PredXU]
+    ):
         """
         Calculate position and orientation error between current odom and ref_traj,
         which can be a MultiDOFJointTrajectory or PredXU.
@@ -243,24 +219,39 @@ class TrackingErrorCalculator:
 
         # Extract reference pose
         try:
-            if hasattr(ref_traj, "points"):  # MultiDOFJointTrajectory
-                ref_px = ref_traj.points[0].transforms[0].translation.x
-                ref_py = ref_traj.points[0].transforms[0].translation.y
-                ref_pz = ref_traj.points[0].transforms[0].translation.z
-                ref_qx = ref_traj.points[0].transforms[0].rotation.x
-                ref_qy = ref_traj.points[0].transforms[0].rotation.y
-                ref_qz = ref_traj.points[0].transforms[0].rotation.z
-                ref_qw = ref_traj.points[0].transforms[0].rotation.w
-            else:  # PredXU
-                ref_px = ref_traj.x.data[0]
-                ref_py = ref_traj.x.data[1]
-                ref_pz = ref_traj.x.data[2]
-                ref_qx = ref_traj.x.data[6]
-                ref_qy = ref_traj.x.data[7]
-                ref_qz = ref_traj.x.data[8]
-                ref_qw = ref_traj.x.data[9]
+            # Handle (MultiDOFJointTrajectory, FixRotor) case:
+            # if ref_traj is a tuple, we only use the trajectory part
+            if isinstance(ref_traj, tuple):
+                traj_msg, _ = ref_traj  # (MultiDOFJointTrajectory, FixRotor)
+            else:
+                traj_msg = ref_traj
+
+            # MultiDOFJointTrajectory case
+            if hasattr(traj_msg, "points"):
+                transform = traj_msg.points[0].transforms[0]
+                ref_px = transform.translation.x
+                ref_py = transform.translation.y
+                ref_pz = transform.translation.z
+                ref_qx = transform.rotation.x
+                ref_qy = transform.rotation.y
+                ref_qz = transform.rotation.z
+                ref_qw = transform.rotation.w
+
+            # PredXU case
+            else:
+                ref_px = traj_msg.x.data[0]
+                ref_py = traj_msg.x.data[1]
+                ref_pz = traj_msg.x.data[2]
+                ref_qx = traj_msg.x.data[6]
+                ref_qy = traj_msg.x.data[7]
+                ref_qz = traj_msg.x.data[8]
+                ref_qw = traj_msg.x.data[9]
+
         except AttributeError:
-            raise AttributeError("Reference trajectory must be either MultiDOFJointTrajectory or PredXU!")
+            raise AttributeError(
+                "Reference trajectory must be one of: "
+                "(MultiDOFJointTrajectory, FixRotor), MultiDOFJointTrajectory, or PredXU!"
+            )
 
         # Position error
         dx = cur_pos.x - ref_px
