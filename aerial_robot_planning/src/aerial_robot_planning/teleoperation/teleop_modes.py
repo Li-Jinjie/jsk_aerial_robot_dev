@@ -35,9 +35,8 @@ class TeleopBaseMode(MPCPubJointTraj, ABC):
         mode_manager: ModeManager,
         node_name: str,
     ):
-        super().__init__(robot_name=robot_name, node_name=node_name, is_calc_rmse=False)
+        super().__init__(robot_name=robot_name, node_name=node_name, odom_frame_id="ee", is_calc_rmse=False)
         self.hand_pose = hand_pose
-        self.arm_pose = arm_pose
         self.mode_manager = mode_manager
 
         self.is_finished = False
@@ -137,6 +136,24 @@ class TeleopBaseMode(MPCPubJointTraj, ABC):
 
     def get_control_mode(self):
         return self.to_return_control_mode
+
+
+##########################################
+# Base Class : TeleopBaseModeWArm
+##########################################
+
+
+class TeleopBaseModeWArm(TeleopBaseMode, ABC):
+    def __init__(
+        self,
+        robot_name: str,
+        hand_pose: HandPose,
+        arm_pose: ArmPose,
+        mode_manager: ModeManager,
+        node_name: str,
+    ):
+        super().__init__(robot_name, hand_pose, mode_manager, node_name)
+        self.arm_pose = arm_pose
 
 
 ##########################################
