@@ -19,7 +19,7 @@ from .sub_pos_objects import HandPose, ArmPose, ModeManager
 
 
 ##########################################
-# Derived Class : HandControlBaseMode
+# Base Class : TeleopBaseMode
 ##########################################
 """
 For example: From arm to hand, denoted as a2h; from hand to drone, denoted as h2d.
@@ -31,7 +31,6 @@ class TeleopBaseMode(MPCPubJointTraj, ABC):
         self,
         robot_name: str,
         hand_pose: HandPose,
-        arm_pose: ArmPose,
         mode_manager: ModeManager,
         node_name: str,
     ):
@@ -164,10 +163,9 @@ class OperationMode(TeleopBaseMode):
         self,
         robot_name: str,
         hand_pose: HandPose,
-        arm_pose: ArmPose,
         mode_manager: ModeManager,
     ):
-        super().__init__(robot_name, hand_pose, arm_pose, mode_manager, node_name="operation_mode_traj_pub")
+        super().__init__(robot_name, hand_pose, mode_manager, node_name="operation_mode_traj_pub")
 
         self.initial_hand_position = None
         self.initial_drone_position = None
@@ -418,7 +416,7 @@ class ContRotationGen:
 ##########################################
 # Derived Class : SphericalMode
 ##########################################
-class SphericalMode(TeleopBaseMode):
+class SphericalMode(TeleopBaseModeWArm):
     def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, mode_manager: ModeManager):
         super().__init__(robot_name, hand_pose, arm_pose, mode_manager, node_name="spherical_mode_traj_pub")
         self.expected_a2d_distance = 2.2
@@ -490,7 +488,7 @@ class SphericalMode(TeleopBaseMode):
 ##########################################
 # Derived Class : CartesianMode
 ##########################################
-class CartesianMode(TeleopBaseMode):
+class CartesianMode(TeleopBaseModeWArm):
     def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, mode_manager: ModeManager):
         super().__init__(robot_name, hand_pose, arm_pose, mode_manager, node_name="cartesian_mode_traj_pub")
         self.expected_d2target_distance = 0.0
@@ -582,7 +580,7 @@ class CartesianMode(TeleopBaseMode):
 ##########################################
 # Derived Class : LockingMode
 ##########################################
-class LockingMode(TeleopBaseMode):
+class LockingMode(TeleopBaseModeWArm):
     def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, mode_manager: ModeManager):
         super().__init__(robot_name, hand_pose, arm_pose, mode_manager, node_name="locking_mode_traj_pub")
         self._init_origin_drone_position = None

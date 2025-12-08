@@ -20,6 +20,7 @@ from .sub_pos_objects import (
 
 from .teleop_modes import (
     TeleopBaseMode,
+    TeleopBaseModeWArm,
     OperationMode,
     CartesianMode,
     LockingMode,
@@ -129,12 +130,26 @@ class BaseModeState(smach.State):
 
     def execute(self, userdata):
         if self.pub_object is None:
-            self.pub_object = self.mode_class(
-                userdata.robot_name,
-                hand_pose=shared_data["hand_pose"],
-                arm_pose=shared_data["arm_pose"],
-                mode_manager=shared_data["mode_manager"],
-            )
+            if issubclass(self.mode_class, TeleopBaseModeWArm):
+                # Class with arm support
+                self.pub_object = self.mode_class(
+                    userdata.robot_name,
+                    hand_pose=shared_data["hand_pose"],
+                    arm_pose=shared_data["arm_pose"],
+                    mode_manager=shared_data["mode_manager"],
+                )
+            elif issubclass(self.mode_class, TeleopBaseMode):
+                # Base class without arm
+                self.pub_object = self.mode_class(
+                    userdata.robot_name,
+                    hand_pose=shared_data["hand_pose"],
+                    mode_manager=shared_data["mode_manager"],
+                )
+            else:
+                rospy.logerr(
+                    f"Mode class {self.mode_class.__name__} is neither TeleopBaseModeWArm " f"nor TeleopBaseMode."
+                )
+                return "done_teleop"
 
         while not rospy.is_shutdown():
             if self.pub_object.check_finished():
