@@ -3,12 +3,11 @@ Refactored by li-jinjie on 25-3-19.
 """
 
 import rospy
-from std_msgs.msg import UInt8
 from nav_msgs.msg import Odometry
-from abc import ABC, abstractmethod
+from abc import ABC
 
 from geometry_msgs.msg import PoseStamped
-from util import check_first_data_received, check_topic_subscription
+from ..util import check_first_data_received, check_topic_subscription, TopicNotAvailableError
 
 
 ##########################################
@@ -28,7 +27,9 @@ class PoseBase(ABC):
 
         self.subscriber = self._sub_topic(topic_name, msg_type)
 
-        check_first_data_received(self, "pose_msg", self.object_name)
+        is_data_receive = check_first_data_received(self, "pose_msg", self.object_name)
+        if not is_data_receive:
+            raise TopicNotAvailableError(f"Failed to receive initial data for {self.object_name} pose.")
 
     @check_topic_subscription
     def _sub_topic(self, topic_name, msg_type):
@@ -69,7 +70,7 @@ class DronePose(PoseBase):
         self.pose_msg = msg.pose
 
 
-class Glove:
+class ModeManager:
     def __init__(self, param_name="/hand/control_mode", default_value=1):
         """
         Initializes the ControlModeManager.
@@ -84,6 +85,7 @@ class Glove:
             rospy.set_param(self.param_name, default_value)
             rospy.loginfo(f"Initialized {self.param_name} with default value: {default_value}")
 
+        self.set_control_mode(0)
         self._control_mode = self.get_control_mode()
 
     def get_control_mode(self):

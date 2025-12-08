@@ -45,20 +45,28 @@ def read_csv_traj(path, nrows=None):
     return robot, frame_id, child_frame_id, df
 
 
-def check_first_data_received(obj: object, attr: str, object_name: str):
+def check_first_data_received(obj: object, attr: str, object_name: str, timeout: float = 1.0):
     """
     Waits until the position is initialized. Logs a message repeatedly  TODO: use rospy.wait_for_message instead?
     :param obj:  The object to check the position of
     :param attr:  The attribute of the object to check
     :param object_name:  The name of the object being tracked
+    :param timeout:  Maximum time to wait in seconds
     :return:
     """
+    start_time = rospy.get_time()
     while not rospy.is_shutdown() and getattr(obj, attr) is None:
         rospy.loginfo(f"Waiting for {object_name} '{attr}' msg...")
         rospy.sleep(0.2)
 
+        if rospy.get_time() - start_time > timeout:
+            rospy.logerr(f"Timeout for {timeout} seconds while waiting for {object_name} '{attr}' msg.")
+            return False
+
     if getattr(obj, attr) is not None:
         rospy.loginfo(f"{object_name} '{attr}' msg is received for the first time")
+
+    return True
 
 
 def topic_ready(topic_name, msg_type, timeout=1.0):

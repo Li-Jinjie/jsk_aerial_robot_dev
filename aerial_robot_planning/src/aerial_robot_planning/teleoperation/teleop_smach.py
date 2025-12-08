@@ -2,29 +2,25 @@
 Refactored by li-jinjie on 25-3-19.
 """
 
-import os
 import sys
 import rospy
 import smach
 import numpy as np
 import tf.transformations as tft
 
-current_path = os.path.abspath(os.path.dirname(__file__))
-if current_path not in sys.path:
-    sys.path.insert(0, current_path)
-
-from util import TopicNotAvailableError
+from ..util import TopicNotAvailableError
 
 # fmt: off
-from hand_control.sub_pos_objects import (
+from .sub_pos_objects import (
     HandPose,
     ArmPose,
     DronePose,
-    Glove
+    ModeManager
 )
 
-from hand_control.hand_ctrl_modes import (
-    HandControlBaseMode,
+from .teleop_modes import (
+    TeleopBaseMode,
+    TeleopBaseModeWArm,
     OperationMode,
     CartesianMode,
     LockingMode,
@@ -33,43 +29,35 @@ from hand_control.hand_ctrl_modes import (
 # fmt: on
 
 # global variables
-shared_data = {"hand_pose": None, "arm_pose": None, "drone_pose": None, "glove": None}
+shared_data = {"hand_pose": None, "arm_pose": None, "drone_pose": None, "mode_manager": None}
 
 
 class InitObjectState(smach.State):
     def __init__(self):
-        smach.State.__init__(self, outcomes=["go_wait", "done_hand_ctrl"], input_keys=["robot_name"], output_keys=[])
-
-    @staticmethod
-    def get_user_decision(device_name):
-        prompt = f"Activate {device_name}? ([Y]/[N]): "
-        while True:
-            user_input = input(prompt).strip().lower()
-            if user_input in ("y", "n"):
-                return user_input == "y"
-            rospy.logwarn("Invalid input. Please enter Y or N.")
+        smach.State.__init__(self, outcomes=["go_wait", "done_teleop"], input_keys=["robot_name"], output_keys=[])
 
     def execute(self, userdata):
         try:
+            shared_data["mode_manager"] = ModeManager()
+            rospy.loginfo("ModeManager activated.")
+
             shared_data["hand_pose"] = HandPose()
             rospy.loginfo("Hand mocap activated.")
 
             shared_data["drone_pose"] = DronePose(userdata.robot_name)
             rospy.loginfo("Drone activated.")
 
-            # if self.get_user_decision("Arm mocap"):
-            shared_data["arm_pose"] = ArmPose()
-            rospy.loginfo("Arm mocap activated.")
-
-            # if self.get_user_decision("Glove"):
-            shared_data["glove"] = Glove()
-            rospy.loginfo("Glove activated.")
+            try:
+                shared_data["arm_pose"] = ArmPose()
+                rospy.loginfo("Arm mocap activated.")
+            except TopicNotAvailableError:
+                rospy.logwarn("Arm mocap topic not available. Skipping Arm mocap activation.")
 
             return "go_wait"
 
         except TopicNotAvailableError as e:
             rospy.logerr(f"Initialization failed: {e}")
-            return "done_hand_ctrl"
+            return "done_teleop"
 
 
 class WaitState(smach.State):
@@ -133,7 +121,7 @@ class WaitState(smach.State):
 
 
 class BaseModeState(smach.State):
-    def __init__(self, mode_class: HandControlBaseMode, outcomes, outcome_map):
+    def __init__(self, mode_class: TeleopBaseMode, outcomes, outcome_map):
         super(BaseModeState, self).__init__(outcomes=outcomes, input_keys=["robot_name"], output_keys=[])
         self.mode_class = mode_class
         self.outcome_map = outcome_map
@@ -142,12 +130,26 @@ class BaseModeState(smach.State):
 
     def execute(self, userdata):
         if self.pub_object is None:
-            self.pub_object = self.mode_class(
-                userdata.robot_name,
-                hand_pose=shared_data["hand_pose"],
-                arm_pose=shared_data["arm_pose"],
-                glove=shared_data["glove"],
-            )
+            if issubclass(self.mode_class, TeleopBaseModeWArm):
+                # Class with arm support
+                self.pub_object = self.mode_class(
+                    userdata.robot_name,
+                    hand_pose=shared_data["hand_pose"],
+                    arm_pose=shared_data["arm_pose"],
+                    mode_manager=shared_data["mode_manager"],
+                )
+            elif issubclass(self.mode_class, TeleopBaseMode):
+                # Base class without arm
+                self.pub_object = self.mode_class(
+                    userdata.robot_name,
+                    hand_pose=shared_data["hand_pose"],
+                    mode_manager=shared_data["mode_manager"],
+                )
+            else:
+                rospy.logerr(
+                    f"Mode class {self.mode_class.__name__} is neither TeleopBaseModeWArm " f"nor TeleopBaseMode."
+                )
+                return "done_teleop"
 
         while not rospy.is_shutdown():
             if self.pub_object.check_finished():
@@ -168,9 +170,9 @@ class OperationModeState(BaseModeState):
             2: "go_cartesian_mode",
             3: "go_spherical_mode",
             4: "go_locking_mode",
-            5: "done_hand_ctrl",
+            5: "done_teleop",
         }
-        outcomes = ["go_cartesian_mode", "go_spherical_mode", "go_locking_mode", "done_hand_ctrl"]
+        outcomes = ["go_cartesian_mode", "go_spherical_mode", "go_locking_mode", "done_teleop"]
         super(OperationModeState, self).__init__(OperationMode, outcomes, outcome_map)
 
 
@@ -180,9 +182,9 @@ class SphericalModeState(BaseModeState):
             1: "go_operation_mode",
             2: "go_cartesian_mode",
             4: "go_locking_mode",
-            5: "done_hand_ctrl",
+            5: "done_teleop",
         }
-        outcomes = ["go_operation_mode", "go_cartesian_mode", "go_locking_mode", "done_hand_ctrl"]
+        outcomes = ["go_operation_mode", "go_cartesian_mode", "go_locking_mode", "done_teleop"]
         super(SphericalModeState, self).__init__(SphericalMode, outcomes, outcome_map)
 
 
@@ -192,9 +194,9 @@ class CartesianModeState(BaseModeState):
             1: "go_operation_mode",
             3: "go_spherical_mode",
             4: "go_locking_mode",
-            5: "done_hand_ctrl",
+            5: "done_teleop",
         }
-        outcomes = ["go_operation_mode", "go_spherical_mode", "go_locking_mode", "done_hand_ctrl"]
+        outcomes = ["go_operation_mode", "go_spherical_mode", "go_locking_mode", "done_teleop"]
         super(CartesianModeState, self).__init__(CartesianMode, outcomes, outcome_map)
 
 
@@ -204,22 +206,22 @@ class LockingModeState(BaseModeState):
             1: "go_operation_mode",
             2: "go_cartesian_mode",
             3: "go_spherical_mode",
-            5: "done_hand_ctrl",
+            5: "done_teleop",
         }
-        outcomes = ["go_operation_mode", "go_spherical_mode", "go_cartesian_mode", "done_hand_ctrl"]
+        outcomes = ["go_operation_mode", "go_spherical_mode", "go_cartesian_mode", "done_teleop"]
         super(LockingModeState, self).__init__(LockingMode, outcomes, outcome_map)
 
 
-def create_hand_control_state_machine():
-    """HandControlStateMachine"""
-    sm_sub = smach.StateMachine(outcomes=["DONE"], input_keys=["robot_name"])
+def create_teleop_state_machine():
+    """TeleoperationStateMachine"""
+    sm_sub = smach.StateMachine(outcomes=["DONE_TELEOP"], input_keys=["robot_name"])
 
     with sm_sub:
         # InitObjectState
         smach.StateMachine.add(
-            "HAND_CONTROL_INIT",
+            "INIT_TELEOP",
             InitObjectState(),
-            transitions={"go_wait": "WAIT", "done_hand_ctrl": "DONE"},
+            transitions={"go_wait": "WAIT", "done_teleop": "DONE_TELEOP"},
         )
 
         # WaitState
@@ -236,7 +238,7 @@ def create_hand_control_state_machine():
                 "go_cartesian_mode": "CARTESIAN_MODE",
                 "go_spherical_mode": "SPHERICAL_MODE",
                 "go_locking_mode": "LOCKING_MODE",
-                "done_hand_ctrl": "DONE",
+                "done_teleop": "DONE_TELEOP",
             },
         )
         smach.StateMachine.add(
@@ -246,7 +248,7 @@ def create_hand_control_state_machine():
                 "go_cartesian_mode": "CARTESIAN_MODE",
                 "go_operation_mode": "OPERATION_MODE",
                 "go_locking_mode": "LOCKING_MODE",
-                "done_hand_ctrl": "DONE",
+                "done_teleop": "DONE_TELEOP",
             },
         )
         smach.StateMachine.add(
@@ -256,7 +258,7 @@ def create_hand_control_state_machine():
                 "go_operation_mode": "OPERATION_MODE",
                 "go_spherical_mode": "SPHERICAL_MODE",
                 "go_locking_mode": "LOCKING_MODE",
-                "done_hand_ctrl": "DONE",
+                "done_teleop": "DONE_TELEOP",
             },
         )
         smach.StateMachine.add(
@@ -266,7 +268,7 @@ def create_hand_control_state_machine():
                 "go_operation_mode": "OPERATION_MODE",
                 "go_spherical_mode": "SPHERICAL_MODE",
                 "go_cartesian_mode": "CARTESIAN_MODE",
-                "done_hand_ctrl": "DONE",
+                "done_teleop": "DONE_TELEOP",
             },
         )
 

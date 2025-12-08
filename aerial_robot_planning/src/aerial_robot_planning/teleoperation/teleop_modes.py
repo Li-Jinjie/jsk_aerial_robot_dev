@@ -12,33 +12,31 @@ import numpy as np
 
 import rospy
 from geometry_msgs.msg import Twist, Vector3, Quaternion, Transform
-from pub_mpc_joint_traj import MPCPubJointTraj
 from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectoryPoint
 
-from sub_pos_objects import HandPose, ArmPose, Glove
+from ..pub_mpc_joint_traj import MPCPubJointTraj
+from .sub_pos_objects import HandPose, ArmPose, ModeManager
 
 
 ##########################################
-# Derived Class : HandControlBaseMode
+# Base Class : TeleopBaseMode
 ##########################################
 """
 For example: From arm to hand, denoted as a2h; from hand to drone, denoted as h2d.
 """
 
 
-class HandControlBaseMode(MPCPubJointTraj, ABC):
+class TeleopBaseMode(MPCPubJointTraj, ABC):
     def __init__(
         self,
         robot_name: str,
         hand_pose: HandPose,
-        arm_pose: ArmPose,
-        glove: Glove,
+        mode_manager: ModeManager,
         node_name: str,
     ):
-        super().__init__(robot_name=robot_name, node_name=node_name, is_calc_rmse=False)
+        super().__init__(robot_name=robot_name, node_name=node_name, odom_frame_id="ee", is_calc_rmse=False)
         self.hand_pose = hand_pose
-        self.arm_pose = arm_pose
-        self.glove = glove
+        self.mode_manager = mode_manager
 
         self.is_finished = False
         # initialize vel_twist and acc_twist
@@ -121,15 +119,15 @@ class HandControlBaseMode(MPCPubJointTraj, ABC):
 
     def check_finished(self, t_elapsed=None):
         """
-        Checks if the task is finished. If the glove is not enabled, uses _check_finish_auto
+        Checks if the task is finished. If the mode_manager is not enabled, uses _check_finish_auto
         to check if the task is completed.
         """
-        if self.glove is None:
+        if self.mode_manager is None:
             self._check_finish_auto()
             return self.is_finished
 
-        current_ctrl_mode = self.glove.get_control_mode()
-        if self.mode_num != current_ctrl_mode:  # if the control mode is changed by the glove
+        current_ctrl_mode = self.mode_manager.get_control_mode()
+        if self.mode_num != current_ctrl_mode:  # if the control mode is changed by the mode_manager
             self.to_return_control_mode = current_ctrl_mode
             self.is_finished = True
 
@@ -140,17 +138,34 @@ class HandControlBaseMode(MPCPubJointTraj, ABC):
 
 
 ##########################################
-# Derived Class : OperationMode
+# Base Class : TeleopBaseModeWArm
 ##########################################
-class OperationMode(HandControlBaseMode):
+
+
+class TeleopBaseModeWArm(TeleopBaseMode, ABC):
     def __init__(
         self,
         robot_name: str,
         hand_pose: HandPose,
         arm_pose: ArmPose,
-        glove: Glove,
+        mode_manager: ModeManager,
+        node_name: str,
     ):
-        super().__init__(robot_name, hand_pose, arm_pose, glove, node_name="operation_mode_traj_pub")
+        super().__init__(robot_name, hand_pose, mode_manager, node_name)
+        self.arm_pose = arm_pose
+
+
+##########################################
+# Derived Class : OperationMode
+##########################################
+class OperationMode(TeleopBaseMode):
+    def __init__(
+        self,
+        robot_name: str,
+        hand_pose: HandPose,
+        mode_manager: ModeManager,
+    ):
+        super().__init__(robot_name, hand_pose, mode_manager, node_name="operation_mode_traj_pub")
 
         self.initial_hand_position = None
         self.initial_drone_position = None
@@ -401,9 +416,9 @@ class ContRotationGen:
 ##########################################
 # Derived Class : SphericalMode
 ##########################################
-class SphericalMode(HandControlBaseMode):
-    def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, glove: Glove):
-        super().__init__(robot_name, hand_pose, arm_pose, glove, node_name="spherical_mode_traj_pub")
+class SphericalMode(TeleopBaseModeWArm):
+    def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, mode_manager: ModeManager):
+        super().__init__(robot_name, hand_pose, arm_pose, mode_manager, node_name="spherical_mode_traj_pub")
         self.expected_a2d_distance = 2.2
 
     @staticmethod
@@ -473,9 +488,9 @@ class SphericalMode(HandControlBaseMode):
 ##########################################
 # Derived Class : CartesianMode
 ##########################################
-class CartesianMode(HandControlBaseMode):
-    def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, glove: Glove):
-        super().__init__(robot_name, hand_pose, arm_pose, glove, node_name="cartesian_mode_traj_pub")
+class CartesianMode(TeleopBaseModeWArm):
+    def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, mode_manager: ModeManager):
+        super().__init__(robot_name, hand_pose, arm_pose, mode_manager, node_name="cartesian_mode_traj_pub")
         self.expected_d2target_distance = 0.0
         self.last_target_position = None
         self.origin_position = None
@@ -565,9 +580,9 @@ class CartesianMode(HandControlBaseMode):
 ##########################################
 # Derived Class : LockingMode
 ##########################################
-class LockingMode(HandControlBaseMode):
-    def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, glove: Glove):
-        super().__init__(robot_name, hand_pose, arm_pose, glove, node_name="locking_mode_traj_pub")
+class LockingMode(TeleopBaseModeWArm):
+    def __init__(self, robot_name: str, hand_pose: HandPose, arm_pose: ArmPose, mode_manager: ModeManager):
+        super().__init__(robot_name, hand_pose, arm_pose, mode_manager, node_name="locking_mode_traj_pub")
         self._init_origin_drone_position = None
         self._init_origin_hand_orientation = None
 

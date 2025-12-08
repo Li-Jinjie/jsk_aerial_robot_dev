@@ -5,6 +5,7 @@
 @Author  : Li JiaXuan
 @Date    : 2024-12-04 12:32
 @Software: PyCharm
+@Intro   : 1. subscribe the OSC messages from the data glove. 2. change the control mode by setting ROS parameters.
 """
 
 import signal
@@ -150,12 +151,29 @@ if __name__ == "__main__":
     dispatcher = Dispatcher()
     dispatcher.map("/v1/animation/slider/all", finger_manager.process_glove_data)
 
-    server = BlockingOSCUDPServer((local_ip, port), dispatcher)
+    server = None
+    try:
+        server = BlockingOSCUDPServer((local_ip, port), dispatcher)
+        print(f"[OK] Listening for Data Glove OSC on {local_ip}:{port}")
 
-    print(f"Listening for Data Glove OSC messages on {local_ip}:{port} and updating ROS parameters...")
+        osc_thread = threading.Thread(target=server.serve_forever)
+        osc_thread.daemon = True
+        osc_thread.start()
 
-    osc_thread = threading.Thread(target=server.serve_forever)
-    osc_thread.daemon = True
-    osc_thread.start()
+        rospy.spin()
 
-    rospy.spin()
+    except Exception as e:
+        rospy.logerr(f"[ERROR] Failed to start OSC server on {local_ip}:{port}: {e}")
+        rospy.logwarn(f"[WARN] The Glove is not connected. Maybe there are no control mode switching.")
+
+        # Shutdown this script
+        rospy.signal_shutdown("Failed to start OSC server")
+
+    finally:
+        # Gracefully shutdown OSC server
+        if server is not None:
+            try:
+                rospy.loginfo("[INFO] Shutting down OSC server...")
+                server.shutdown()
+            except Exception as e:
+                rospy.logwarn(f"[WARN] Error while shutting down OSC server: {e}")

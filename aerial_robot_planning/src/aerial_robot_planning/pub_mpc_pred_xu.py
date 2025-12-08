@@ -16,13 +16,8 @@ from std_msgs.msg import MultiArrayDimension
 from aerial_robot_msgs.msg import PredXU
 from nav_msgs.msg import Path
 
-# Insert current folder into path so we can import from "trajs" or other local files
-current_path = os.path.abspath(os.path.dirname(__file__))
-if current_path not in sys.path:
-    sys.path.insert(0, current_path)
-
-from pub_mpc_joint_traj import MPCPubBase
-from util import read_csv_traj, check_traj_info
+from .pub_mpc_joint_traj import MPCPubBase
+from .util import read_csv_traj, check_traj_info
 
 
 ##########################################

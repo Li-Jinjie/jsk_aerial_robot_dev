@@ -13,46 +13,43 @@ import numpy as np
 import yaml
 import inspect
 
-# Insert current folder into path so we can import from "trajs" or other local files
-current_path = os.path.abspath(os.path.dirname(__file__))
-if current_path not in sys.path:
-    sys.path.insert(0, current_path)
-
-from pub_mpc_joint_traj import MPCTrajPtPub, MPCSinglePtPub
-from pub_mpc_pred_xu import MPCPubCSVPredXU
+from aerial_robot_planning.pub_mpc_joint_traj import MPCTrajPtPub, MPCSinglePtPub
+from aerial_robot_planning.pub_mpc_pred_xu import MPCPubCSVPredXU
 from geometry_msgs.msg import Pose, Quaternion, Vector3
-from util import read_csv_traj, pub_0066_wall_rviz, pub_hand_markers_rviz
+from aerial_robot_planning.util import read_csv_traj, pub_0066_wall_rviz, pub_hand_markers_rviz
 
 # === load smach config from the ROS package ===
-ros_pack = rospkg.RosPack()
 try:
-    config_path = os.path.join(ros_pack.get_path("aerial_robot_planning"), "config", "Smach.yaml")
+    ros_pack = rospkg.RosPack()
+    pkg_path = ros_pack.get_path("aerial_robot_planning")
 except rospkg.ResourceNotFound:
     raise RuntimeError("Package 'aerial_robot_planning' not found! Make sure your ROS workspace is sourced.")
 
+config_path = os.path.join(pkg_path, "config", "Smach.yaml")
 with open(config_path, "r") as f:
     smach_config = yaml.load(f, Loader=yaml.FullLoader)
 
 # === analytical trajectory ===
-import trajs
+from aerial_robot_planning import trajs
 
 # Collect all classes inside trajs whose name ends with 'Traj'
 traj_cls_list = [
     cls
     for name, cls in inspect.getmembers(trajs, inspect.isclass)
     # optionally ensure the class is defined in trajs and not an imported library
-    if cls.__module__ == "trajs" and name not in {"BaseTraj", "BaseTrajwFixedRotor", "PitchContinuousRotationTraj"}
+    if cls.__module__ == "aerial_robot_planning.trajs"
+    and name not in {"BaseTraj", "BaseTrajwFixedRotor", "PitchContinuousRotationTraj"}
 ]
 print(f"Found {len(traj_cls_list)} trajectory classes in trajs module.")
 
 # === CSV trajectory ===
-# read all CSV files in the folder ./tilt_qd_csv_trajs
-csv_folder_path = os.path.join(current_path, "tilt_qd_csv_trajs")
+# read all CSV files inside the folder
+csv_folder_path = os.path.join(pkg_path, "data", "csv_trajs", "tilt_qd")
 csv_files = sorted([f for f in os.listdir(csv_folder_path) if f.endswith(".csv")])
-print(f"Found {len(csv_files)} CSV files in ./tilt_qd_csv_trajs folder.")
+print(f"Found {len(csv_files)} CSV files in {csv_folder_path} folder.")
 
-# === hand control ===
-from hand_control.hand_ctrl_smach import create_hand_control_state_machine
+# === teleoperation ===
+from aerial_robot_planning.teleoperation.teleop_smach import create_teleop_state_machine
 
 
 def traj_factory(traj_type, loop_num):
@@ -75,7 +72,7 @@ class IdleState(smach.State):
     def __init__(self):
         smach.State.__init__(
             self,
-            outcomes=["go_init", "stay_idle", "shutdown", "go_hand_control_init"],
+            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop"],
             input_keys=["robot_name"],
             output_keys=["robot_name", "traj_type", "loop_num"],
         )
@@ -99,9 +96,9 @@ class IdleState(smach.State):
                 for i, csv_file in enumerate(csv_files):
                     print(f"{i + len(traj_cls_list)}: {csv_file}")
 
-                # print an available hand control state
+                # print an available teleoperation state
                 print("\n===== Other Choices =====")
-                print("h: hand-based control")
+                print("t: Teleoperation Mode")
 
                 max_traj_idx += len(csv_files)
 
@@ -109,8 +106,8 @@ class IdleState(smach.State):
             if traj_type_str.lower() == "q":
                 return "shutdown"
 
-            if traj_type_str.lower() == "h":
-                return "go_hand_control_init"
+            if traj_type_str.lower() == "t":
+                return "go_teleop"
 
             traj_type = int(traj_type_str)
             if not (0 <= traj_type <= max_traj_idx):
@@ -287,7 +284,7 @@ def main(args):
                 "go_init": "INIT",
                 "stay_idle": "IDLE",
                 "shutdown": "DONE",
-                "go_hand_control_init": "HAND_CONTROL",
+                "go_teleop": "TELEOP",
             },
         )
 
@@ -297,10 +294,11 @@ def main(args):
         # TRACK
         smach.StateMachine.add("TRACK", TrackState(), transitions={"done_track": "IDLE"})
 
+        # TELEOP
         smach.StateMachine.add(
-            "HAND_CONTROL",
-            create_hand_control_state_machine(),
-            transitions={"DONE": "IDLE"},
+            "TELEOP",
+            create_teleop_state_machine(),
+            transitions={"DONE_TELEOP": "IDLE"},
             remapping={"robot_name": "robot_name"},
         )
 
