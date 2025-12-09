@@ -53,7 +53,6 @@ public:
                   boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
                   boost::shared_ptr<aerial_robot_navigation::BaseNavigator> navigator, double ctrl_loop_du) override;
   void activate() override;
-  bool update() override;
   void reset() override;
 
 protected:

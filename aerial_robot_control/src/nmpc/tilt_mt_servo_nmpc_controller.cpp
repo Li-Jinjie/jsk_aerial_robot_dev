@@ -78,17 +78,6 @@ void nmpc::TiltMtServoNMPC::activate()
   BaseMPC::activate();
 }
 
-bool nmpc::TiltMtServoNMPC::update()
-{
-  if (!BaseMPC::update())
-    return false;
-
-  this->controlCore();
-  this->sendCmd();
-
-  return true;
-}
-
 void nmpc::TiltMtServoNMPC::reset()
 {
   BaseMPC::reset();
