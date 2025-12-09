@@ -384,9 +384,10 @@ private:
     thrust_cmd_[3] = msg->base_thrust[3];
   }
 
-  static bool absElementLessEqualThan(const tf::Vector3& vec, const std::vector<double>& thresh)
+  template <typename Vec3Type>  // Vec3Type can be tf::Vector3 or Eigen::Vector3 or any 3-element vector-like type
+  static bool absElementLessEqualThan(const Vec3Type& vec, const std::vector<double>& thresh)
   {
-    return (abs(vec.x()) < thresh[0]) && (abs(vec.y()) < thresh[1]) && (abs(vec.z()) < thresh[2]);
+    return (std::abs(vec[0]) < thresh[0]) && (std::abs(vec[1]) < thresh[1]) && (std::abs(vec[2]) < thresh[2]);
   }
 };
 
