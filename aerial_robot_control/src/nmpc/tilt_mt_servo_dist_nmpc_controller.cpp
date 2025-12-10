@@ -22,13 +22,17 @@ void nmpc::TiltMtServoDistNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle n
 
 void nmpc::TiltMtServoDistNMPC::controlCore()
 {
+  updateITerm();
+
   updateDisturbWrench();  // should be called before controlCore of parent class to keep fresh
+
   TiltMtServoNMPC::controlCore();
 }
 
 void nmpc::TiltMtServoDistNMPC::sendCmd()
 {
   TiltMtServoNMPC::sendCmd();
+
   pubDisturbWrench();  // should be called after sendCmd of parent class to keep control input fresh
 }
 
@@ -102,8 +106,6 @@ void nmpc::TiltMtServoDistNMPC::prepareNMPCParams()
 {
   TiltMtServoNMPC::prepareNMPCParams();
 
-  // This form of I Term can always be activated, no need to be shut down when the external wrench appears.
-  updateITerm();
   auto mdl_error_force_w = wrench_est_i_term_.getDistForceW();
   auto mdl_error_torque_cog = wrench_est_i_term_.getDistTorqueCOG();
 
