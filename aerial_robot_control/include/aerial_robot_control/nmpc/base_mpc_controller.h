@@ -50,7 +50,7 @@ protected:
 
   virtual void callbackSetRefXU(const aerial_robot_msgs::PredXUConstPtr& msg) = 0;
   virtual std::vector<double> meas2VecX() = 0;
-  virtual void controlCore() = 0;
+  virtual void controlCore(bool is_warmup = false) = 0;  // is_warmup: tell the function whether this is a warmup phase
   virtual void sendCmd() = 0;
   virtual void callbackViz(const ros::TimerEvent& event) = 0;
 

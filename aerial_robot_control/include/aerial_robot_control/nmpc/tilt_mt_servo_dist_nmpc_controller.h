@@ -49,7 +49,7 @@ protected:
   void initAllocMat() override;
 
   /* update() */
-  void controlCore() override;
+  void controlCore(bool is_warmup = false) override;
   void sendCmd() override;
 
   // controlCore()

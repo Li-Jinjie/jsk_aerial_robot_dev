@@ -466,7 +466,7 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
   return phys_p;
 }
 
-void nmpc::TiltMtServoNMPC::controlCore()
+void nmpc::TiltMtServoNMPC::controlCore(bool is_warmup)
 {
   // restore velocity constraints after hovering
   if (navigator_->getNaviState() == aerial_robot_navigation::HOVER_STATE and has_restored_vel_ == false)

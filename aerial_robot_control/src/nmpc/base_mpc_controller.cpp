@@ -100,8 +100,8 @@ bool BaseMPC::update()
   // after press activate button, but before takeoff
   if (!ctrl_base_ret)
   {
-    if (navigator_->getNaviState() == aerial_robot_navigation::START_STATE)
-      controlCore();  // warmup the solver before actual takeoff
+    if (navigator_->getNaviState() == aerial_robot_navigation::ARM_ON_STATE)
+      controlCore(true);  // warmup the solver before actual takeoff
   }
   else
   {
