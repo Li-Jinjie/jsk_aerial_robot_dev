@@ -118,7 +118,7 @@ class BandSoundDetector:
             # ---- START sequence ----
             if not self.command_active:
                 if self.check_sequence(detected_note, START_SEQ):
-                    rospy.loginfo("🎉 Command STARTED (G C A)")
+                    rospy.loginfo("Command STARTED (G C A)")
                     self.command_active = True
                 else:
                     rospy.loginfo("command not started yet")
@@ -127,7 +127,7 @@ class BandSoundDetector:
             # ---- STOP sequence ----
             if self.command_active:
                 if self.check_sequence(detected_note, STOP_SEQ):
-                    rospy.loginfo("🛑 Command STOPPED (G B F)")
+                    rospy.loginfo("Command STOPPED (G B F)")
                     self.command_active = False
                     return
 
