@@ -54,6 +54,11 @@ public:
     ros::NodeHandle wrench_est_nh(nh_, "controller/wrench_est");
 
     // state machine mode switch
+    ext_force_thresh_calib_.resize(3, 0.0);
+    ext_torque_thresh_calib_.resize(3, 0.0);
+    wrench_est_nh.getParam("ext_force_thresh_calib", ext_force_thresh_calib_);
+    wrench_est_nh.getParam("ext_torque_thresh_calib", ext_torque_thresh_calib_);
+
     lin_vel_thresh_calib_.resize(3, 0.0);
     ang_vel_thresh_calib_.resize(3, 0.0);
     wrench_est_nh.getParam("lin_vel_thresh_calib", lin_vel_thresh_calib_);
@@ -125,9 +130,13 @@ public:
     switch (state_)
     {
       case State::STOPPED: {
-        const bool condition_calib = absElementLessEqualThan(vel, lin_vel_thresh_calib_) &&
-                                     absElementLessEqualThan(ang_vel, ang_vel_thresh_calib_);
-        if (condition_calib)
+        const bool vel_cond_calib = absElementLessEqualThan(vel, lin_vel_thresh_calib_) &&
+                                    absElementLessEqualThan(ang_vel, ang_vel_thresh_calib_);
+
+        const bool wrench_cond_calib = absElementLessEqualThan(raw_dist_force_w_, ext_force_thresh_calib_) &&
+                                       absElementLessEqualThan(raw_dist_torque_cog_, ext_torque_thresh_calib_);
+
+        if (vel_cond_calib && wrench_cond_calib)
         {
           enter(State::CALIBRATING);
         }
@@ -136,11 +145,15 @@ public:
       }
 
       case State::CALIBRATING: {
-        const bool condition_stop = !(absElementLessEqualThan(vel, lin_vel_thresh_stop_) &&
-                                      absElementLessEqualThan(ang_vel, ang_vel_thresh_stop_));
-        if (condition_stop)
+        const bool vel_cond_stop = !(absElementLessEqualThan(vel, lin_vel_thresh_stop_) &&
+                                     absElementLessEqualThan(ang_vel, ang_vel_thresh_stop_));
+
+        const bool wrench_cond_stop = !(absElementLessEqualThan(raw_dist_force_w_, ext_force_thresh_calib_) &&
+                                        absElementLessEqualThan(raw_dist_torque_cog_, ext_torque_thresh_calib_));
+
+        if (vel_cond_stop && wrench_cond_stop)
         {
-          // Abort calibration if motion becomes large
+          ROS_WARN("Wrench Estimator Calibration Aborted: Unstable motion or Too Large External wrench detected.");
           enter(State::STOPPED);
           break;
         }
@@ -283,10 +296,12 @@ private:
   ros::Time state_enter_time_;
 
   // state switch thresholds
-  std::vector<double> lin_vel_thresh_calib_;  // m/s
-  std::vector<double> ang_vel_thresh_calib_;  // rad/s
-  std::vector<double> lin_vel_thresh_stop_;   // m/s
-  std::vector<double> ang_vel_thresh_stop_;   // rad/s
+  std::vector<double> ext_force_thresh_calib_;   // N
+  std::vector<double> ext_torque_thresh_calib_;  // Nm
+  std::vector<double> lin_vel_thresh_calib_;     // m/s
+  std::vector<double> ang_vel_thresh_calib_;     // rad/s
+  std::vector<double> lin_vel_thresh_stop_;      // m/s
+  std::vector<double> ang_vel_thresh_stop_;      // rad/s
 
   // calibration duration
   ros::Duration calib_duration_t_;
@@ -384,9 +399,10 @@ private:
     thrust_cmd_[3] = msg->base_thrust[3];
   }
 
-  static bool absElementLessEqualThan(const tf::Vector3& vec, const std::vector<double>& thresh)
+  template <typename Vec3Type>  // Vec3Type can be tf::Vector3 or Eigen::Vector3 or any 3-element vector-like type
+  static bool absElementLessEqualThan(const Vec3Type& vec, const std::vector<double>& thresh)
   {
-    return (abs(vec.x()) < thresh[0]) && (abs(vec.y()) < thresh[1]) && (abs(vec.z()) < thresh[2]);
+    return (std::abs(vec[0]) < thresh[0]) && (std::abs(vec[1]) < thresh[1]) && (std::abs(vec[2]) < thresh[2]);
   }
 };
 

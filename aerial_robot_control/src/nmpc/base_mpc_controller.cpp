@@ -63,13 +63,14 @@ void BaseMPC::activate()
 
 bool BaseMPC::update()
 {
+  /* ====== timer guard ====== */
   ros::Time now = ros::Time::now();
 
   // init t_last_
   if (t_last_.is_zero())
   {
     t_last_ = now;
-    return ControlBase::update();
+    return false;
   }
 
   const double dt = (now - t_last_).toSec();
@@ -78,7 +79,7 @@ bool BaseMPC::update()
   if (dt_last_ == 0.0)
   {
     dt_last_ = dt;
-    return ControlBase::update();
+    return false;
   }
 
   // check the update rate
@@ -93,7 +94,22 @@ bool BaseMPC::update()
   dt_last_ = dt;
   t_last_ = now;
 
-  return ControlBase::update();
+  /* ====== function part ====== */
+  bool ctrl_base_ret = ControlBase::update();
+
+  // after press activate button, but before takeoff
+  if (!ctrl_base_ret)
+  {
+    if (navigator_->getNaviState() == aerial_robot_navigation::ARM_ON_STATE)
+      controlCore(true);  // warmup the solver before actual takeoff
+  }
+  else
+  {
+    controlCore();
+    sendCmd();
+  }
+
+  return ctrl_base_ret;
 }
 
 void BaseMPC::reset()

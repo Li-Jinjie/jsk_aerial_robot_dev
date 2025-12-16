@@ -53,7 +53,6 @@ public:
                   boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
                   boost::shared_ptr<aerial_robot_navigation::BaseNavigator> navigator, double ctrl_loop_du) override;
   void activate() override;
-  bool update() override;
   void reset() override;
 
 protected:
@@ -145,7 +144,7 @@ protected:
   void modifyVelConstraints(double vel_min, double vel_max) const;
 
   /* update() */
-  void controlCore() override;
+  void controlCore(bool is_warmup = false) override;
   void sendCmd() override;
 
   // controlCore()

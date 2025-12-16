@@ -28,8 +28,6 @@ public:
                   boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
                   boost::shared_ptr<aerial_robot_navigation::BaseNavigator> navigator, double ctrl_loop_du) override;
 
-  bool update() override;
-
   aerial_robot_control::WrenchEstITerm wrench_est_i_term_;  // I term is indispensable to eliminate steady error.
 
   boost::shared_ptr<pluginlib::ClassLoader<aerial_robot_control::WrenchEstActuatorMeasBase>> wrench_est_loader_ptr_;
@@ -45,13 +43,20 @@ protected:
   void initPlugins() override;
   void resetPlugins() override;
 
+  /* activate() */
   void initNMPCParams() override;
 
+  void initAllocMat() override;
+
+  /* update() */
+  void controlCore(bool is_warmup = false) override;
+  void sendCmd() override;
+
+  // controlCore()
   void prepareNMPCParams() override;
 
+  /* utils */
   std::vector<double> meas2VecX(bool is_modified_by_traj_frame) override;
-
-  void initAllocMat() override;
 
   /* external wrench estimation */
   void updateDisturbWrench() const;

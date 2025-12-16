@@ -20,23 +20,23 @@ void nmpc::TiltMtServoDistNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle n
   pub_disturb_wrench_ = nh_.advertise<geometry_msgs::WrenchStamped>("ext_wrench_est/value", 1);
 }
 
-bool nmpc::TiltMtServoDistNMPC::update()
+void nmpc::TiltMtServoDistNMPC::controlCore(bool is_warmup)
 {
-  // update the disturbance wrench only after activation. The updateDisturbWrench() should be called before the
-  // TiltMtServoNMPC::update() to ensure that the disturbance wrench is updated before the NMPC solver uses it.
-  if (!ControlBase::update())
-    return false;
-  updateDisturbWrench();
+  if (!is_warmup)
+  {
+    updateITerm();
 
-  // Note that the meas2VecX() function is called in the update() function. And since it always get the latest info
-  // from the estimator, the NMPC result should not be influenced by the disturbance wrench.
-  if (!TiltMtServoNMPC::update())
-    return false;
+    updateDisturbWrench();  // should be called before controlCore of parent class to keep fresh
+  }
 
-  // pub the est. wrench used by the controller. put here to shorten the delay caused by calcDisturbWrench();
-  pubDisturbWrench();
+  TiltMtServoNMPC::controlCore();
+}
 
-  return true;
+void nmpc::TiltMtServoDistNMPC::sendCmd()
+{
+  TiltMtServoNMPC::sendCmd();
+
+  pubDisturbWrench();  // should be called after sendCmd of parent class to keep control input fresh
 }
 
 void nmpc::TiltMtServoDistNMPC::resetPlugins()
@@ -109,8 +109,6 @@ void nmpc::TiltMtServoDistNMPC::prepareNMPCParams()
 {
   TiltMtServoNMPC::prepareNMPCParams();
 
-  // This form of I Term can always be activated, no need to be shut down when the external wrench appears.
-  updateITerm();
   auto mdl_error_force_w = wrench_est_i_term_.getDistForceW();
   auto mdl_error_torque_cog = wrench_est_i_term_.getDistTorqueCOG();
 
