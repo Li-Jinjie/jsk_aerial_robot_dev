@@ -101,7 +101,17 @@ class BaseTrajwSound(BaseTrajwFixedRotor):
         return rotor_id, ft_fixed, alpha_fixed
 
     def compute_thrust_at_time(self, t: float) -> float:
-        raise NotImplementedError
+        if self.sequence is None:
+            return self.hover_thrust
+
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+
+        if idx < 0 or idx >= len(self.sequence):
+            return self.hover_thrust
+
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
 
 
 class CircleTraj(BaseTraj):
