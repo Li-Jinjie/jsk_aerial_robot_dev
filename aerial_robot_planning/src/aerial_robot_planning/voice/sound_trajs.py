@@ -61,6 +61,7 @@ class BaseTrajwSound(BaseTrajwFixedRotor):
         self.sequence = sequence
         self.beat_times = np.cumsum([0.0] + [dur for _, dur in sequence])
         self.period = self.beat_times[-1]
+        self.T = self.period
 
     def compute_thrust_at_time(self, t: float) -> float:
         if self.sequence is None:
@@ -84,14 +85,15 @@ class BaseTrajForSoundTest(BaseTrajwFixedRotor):
         # thrust of each musical note
         self.note2thrust = {
             "sound1": 7.60,
-            "sound2": 8.11,
-            "sound3": 8.62,
+            "sound2": 8.12,
+            "sound3": 8.63,
             "sound4": 9.12,
             "sound5": 9.61,
             "sound6": 10.10,
-            "sound7": 11.03,
-            "sound8": 11.49,
-            "sound10": 11.94,
+            "sound7": 10.57,
+            "sound8": 11.03,
+            "sound9": 11.49,
+            "sound10": 11.95,
             "sound11": 12.40,
             "sound12": 12.84,
             "sound13": 13.28,
@@ -108,7 +110,7 @@ class BaseTrajForSoundTest(BaseTrajwFixedRotor):
             "sound24": 17.80,
             "sound25": 18.19,
             "sound26": 18.58,
-            "sound27": 18.97,
+            "sound27": 18.96,
             "sound28": 19.34,
             "sound29": 19.72,
             "sound30": 20.09,
@@ -147,6 +149,7 @@ class BaseTrajForSoundTest(BaseTrajwFixedRotor):
         self.sequence = sequence
         self.beat_times = np.cumsum([0.0] + [dur for _, dur in sequence])
         self.period = self.beat_times[-1]
+        self.T = self.period
 
     def compute_thrust_at_time(self, t: float) -> float:
         if self.sequence is None:
@@ -179,6 +182,8 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwSound):
             ("d5", 1.0),  # to
             ("c5", 2.0),  # You
         ]
+
+        self.set_sequence(self.sequence)
 
 
 class SoundResolutionFixedRotorTraj(BaseTrajForSoundTest):
@@ -219,6 +224,8 @@ class SoundResolutionFixedRotorTraj(BaseTrajForSoundTest):
             ("sound31", 3.0),
         ]
 
+        self.set_sequence(self.sequence)
+
 
 class TestThrustFrequencyTraj(BaseTrajwSound):
     def __init__(self, loop_num: int = 1):
@@ -232,6 +239,8 @@ class TestThrustFrequencyTraj(BaseTrajwSound):
             ("d5", 3.0),
         ]
 
+        self.set_sequence(self.sequence)
+
 
 class StringNoteTraj(BaseTrajwSound):
     def __init__(self, note: str = "a4", duration: float = 2.0, loop_num: int = 1):
@@ -241,6 +250,8 @@ class StringNoteTraj(BaseTrajwSound):
         rospy.loginfo(f"Constructed note sequence: {note_list}")
 
         self.sequence = [(n, duration) for n in note_list]
+
+        self.set_sequence(self.sequence)
 
 
 class TulipFixedRotorTraj(BaseTrajwSound):
@@ -372,3 +383,17 @@ class Canon4FixedRotorTraj(BaseTrajwSound):
             ("a4sharp", 0.5),
             ("b4", 2.0),
         ]
+
+        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
+        self.T = self.beat_times[-1]
+        self.period = self.T
+        self.min_thrust = 0.5
+
+    def compute_thrust_at_time(self, t: float) -> float:
+        t_mod = t % self.period
+        idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
+        if idx >= len(self.sequence):
+            return self.min_thrust
+
+        note, _ = self.sequence[idx]
+        return self.note2thrust[note]
