@@ -1,15 +1,22 @@
+#!/usr/bin/env python3
+import sys
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
 from scipy.signal import spectrogram
 
-wav_filename = "diablo_2025-12-08_19-12-03.wav"
+if len(sys.argv) != 3:
+    print("Usage: python wav_transfer.py input.wav output.png")
+    sys.exit(1)
+
+wav_filename = sys.argv[1]
+png_filename = sys.argv[2]
+
 fs, data = wavfile.read(wav_filename)
 
 if data.ndim > 1:
     data = data.mean(axis=1)
-
 
 frequencies, times, Sxx = spectrogram(data, fs=fs, nperseg=1024, noverlap=512)
 
@@ -19,8 +26,6 @@ frequencies = frequencies[freq_mask]
 Sxx = Sxx[freq_mask, :]
 
 Sxx_dB = 10 * np.log10(Sxx + 1e-10)
-
-png_filename = os.path.splitext(wav_filename)[0] + "_spectrogram_gray.png"
 
 plt.figure(figsize=(10, 6))
 plt.imshow(
@@ -40,3 +45,5 @@ plt.title("Spectrogram (0-2000 Hz)")
 plt.tight_layout()
 plt.savefig(png_filename)
 plt.close()
+
+print(f"Saved spectrogram to: {png_filename}")
