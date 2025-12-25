@@ -113,7 +113,7 @@ class BaseTrajForSoundTest(BaseTrajwFixedRotor):
             "sound27": 18.96,
             "sound28": 19.34,
             "sound29": 19.72,
-            "sound30": 20.09,
+            "sound30": 20.10,
             "sound31": 20.84,
         }
 
@@ -295,6 +295,8 @@ class TulipFixedRotorTraj(BaseTrajwSound):
             ("g4", 3.0),  # na
         ]
 
+        self.set_sequence(self.sequence)
+
 
 class Canon1FixedRotorTraj(BaseTrajwSound):
     def __init__(self, loop_num: int = 1):
@@ -313,6 +315,8 @@ class Canon1FixedRotorTraj(BaseTrajwSound):
             ("b4", 2.0),
         ]
 
+        self.set_sequence(self.sequence)
+
 
 class Canon2FixedRotorTraj(BaseTrajwSound):
     def __init__(self, loop_num: int = 1):
@@ -329,6 +333,8 @@ class Canon2FixedRotorTraj(BaseTrajwSound):
             ("a4", 2.0),
             ("g4", 2.0),
         ]
+
+        self.set_sequence(self.sequence)
 
 
 class Canon3FixedRotorTraj(BaseTrajwSound):
@@ -354,6 +360,8 @@ class Canon3FixedRotorTraj(BaseTrajwSound):
             ("c5", 0.5),  # changed from g4 due to risk
             ("d5", 1.5),
         ]
+
+        self.set_sequence(self.sequence)
 
 
 class Canon4FixedRotorTraj(BaseTrajwSound):
@@ -384,10 +392,7 @@ class Canon4FixedRotorTraj(BaseTrajwSound):
             ("b4", 2.0),
         ]
 
-        self.beat_times = np.cumsum([0.0] + [dur for _, dur in self.sequence])
-        self.T = self.beat_times[-1]
-        self.period = self.T
-        self.min_thrust = 0.5
+        self.set_sequence(self.sequence)
 
     def compute_thrust_at_time(self, t: float) -> float:
         t_mod = t % self.period
