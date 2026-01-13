@@ -1,0 +1,125 @@
+<?xml version="1.0"?>
+<robot name="ark_flow_sensor" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+  Macro: ark_flow_sensor
+  params:
+    parent_link : The link the optical flow sensor attaches to (e.g. "ee_contact").
+  -->
+  <xacro:macro name="ark_flow_sensor" params="parent_link robot_ns">
+
+    <!-- 1) Optical flow sensor link and joint -->
+    <link name="ark_flow_sensor">
+      <inertial>
+        <!-- Approximate inertial parameters -->
+        <origin xyz="0.0 0.0 0.0" rpy="0 3.141592 0"/>
+        <mass value="0.005"/>
+        <inertia
+                ixx="0.00001" iyy="0.00001" izz="0.00001"
+                ixy="0.0" ixz="0.0" iyz="0.0"/>
+      </inertial>
+
+      <visual>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/ark_flow_mr_rev_1.0.dae"
+                scale="1 1 1"/>
+        </geometry>
+      </visual>
+
+      <!-- Optional collision -->
+      <!--
+      <collision>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/ark_flow_mr_rev_1.0.dae"
+                scale="1 1 1"/>
+        </geometry>
+      </collision>
+      -->
+    </link>
+
+    <joint name="ark_flow_sensor_joint" type="fixed">
+      <parent link="${parent_link}"/>
+      <child link="ark_flow_sensor"/>
+      <origin xyz="-0.08 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- optical camera -->
+    <link name="optic_cam_link"/>
+    <joint name="optic_cam_joint" type="fixed">
+      <parent link="ark_flow_sensor"/>
+      <child link="optic_cam_link"/>
+      <origin xyz="0.0071 0.00824 0.00154" rpy="0 -1.570796 0"/>  <!-- aim the camera here -->
+    </joint>
+
+    <gazebo reference="optic_cam_link">
+      <sensor type="camera" name="optic_camera_sensor">
+        <pose>0 0 0 0 0 0</pose>
+        <always_on>true</always_on>
+        <update_rate>50</update_rate>
+        <camera name="optic_rgb">
+          <horizontal_fov>1.047</horizontal_fov>
+          <image>
+            <width>35</width>
+            <height>35</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.08</near>
+            <far>50.0</far>
+          </clip>
+        </camera>
+        <plugin filename="libgazebo_ros_camera.so" name="optic_rgb_plugin">
+          <robotNamespace>${robot_ns}</robotNamespace>
+          <frameName>${robot_ns}/optic_cam_link</frameName>
+          <cameraName>ark_flow/cam_color</cameraName>
+        </plugin>
+      </sensor>
+    </gazebo>
+
+    <!-- point laser -->
+    <!-- the frame of point laser is aligned with optic_cam_link for simplicity -->
+    <gazebo reference="optic_cam_link">
+      <sensor type="ray" name="point_laser_sensor">
+        <pose>0 0 0 0 0 0</pose>
+        <always_on>true</always_on>
+        <update_rate>100</update_rate>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>1</samples>
+              <resolution>1</resolution>
+              <min_angle>0</min_angle>
+              <max_angle>0</max_angle>
+            </horizontal>
+            <vertical>
+              <samples>1</samples>
+              <resolution>1</resolution>
+              <min_angle>0.0</min_angle>
+              <max_angle>0.0</max_angle>
+            </vertical>
+          </scan>
+          <range>
+            <min>0.02</min>
+            <max>10.0</max>
+          </range>
+        </ray>
+        <!--        <noise>-->
+        <!--          <type>gaussian</type>-->
+        <!--          <mean>0.0</mean>-->
+        <!--          <stddev>0.005</stddev>-->
+        <!--        </noise>-->
+        <plugin filename="libgazebo_ros_range.so" name="point_laser_plugin">
+          <!-- ATTENTION: here are topicName and frameName, not topic_name! -->
+          <robotNamespace>${robot_ns}</robotNamespace>
+          <frameName>${robot_ns}/optic_cam_link</frameName>
+          <topicName>ark_flow/point_laser</topicName>
+          <!-- radiation_type：0=ULTRASOUND，1=INFRARED -->
+          <radiation_type>1</radiation_type>
+        </plugin>
+      </sensor>
+    </gazebo>
+
+  </xacro:macro>
+
+</robot>
+
