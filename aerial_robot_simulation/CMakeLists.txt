@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.5.1)
 project(aerial_robot_simulation)
 
 add_compile_options(-std=c++17 ${GAZEBO_CXX_FLAGS})
