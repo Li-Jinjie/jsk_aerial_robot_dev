@@ -121,7 +121,7 @@
         </camera>
         <plugin filename="libgazebo_ros_camera.so" name="optic_rgb_plugin">
           <robotNamespace>${robot_ns}</robotNamespace>
-          <frameName>ark_flow/cam_frame</frameName>
+          <frameName>${robot_ns}/optic_cam_link</frameName>
           <cameraName>ark_flow/cam_color</cameraName>
         </plugin>
       </sensor>
@@ -162,7 +162,7 @@
         <plugin filename="libgazebo_ros_range.so" name="point_laser_plugin">
           <!-- ATTENTION: here are topicName and frameName, not topic_name! -->
           <robotNamespace>${robot_ns}</robotNamespace>
-          <frameName>ark_flow/cam_frame</frameName>
+          <frameName>${robot_ns}/optic_cam_link</frameName>
           <topicName>ark_flow/point_laser</topicName>
           <!-- radiation_type：0=ULTRASOUND，1=INFRARED -->
           <radiation_type>1</radiation_type>

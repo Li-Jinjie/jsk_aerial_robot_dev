@@ -85,7 +85,7 @@
           <!-- If robot_ns="" this is just the global namespace -->
           <robotNamespace>${robot_ns}</robotNamespace>
 
-          <frameName>${parent_link}_color_optical_frame</frameName>
+          <frameName>${robot_ns}/${parent_link}_color_optical_frame</frameName>
           <cameraName>osmo/color</cameraName>
           <updateRate>30</updateRate>
 
