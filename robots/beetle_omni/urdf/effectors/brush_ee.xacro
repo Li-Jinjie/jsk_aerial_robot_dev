@@ -47,7 +47,7 @@
     </joint>
 
     <!--  3) Attach the ark_flow_sensor  -->
-    <xacro:ark_flow_sensor parent_link="ee_mount" robot_ns="${robot_ns}"/>
+    <xacro:ark_flow_sensor name="ark_flow" parent_link="ee_mount" robot_ns="${robot_ns}"/>
 
   </xacro:macro>
 
