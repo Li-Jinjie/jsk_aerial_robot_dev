@@ -27,7 +27,12 @@ Setup the folder architecture and clone the repo **with the specific branch**:
 ```bash
 mkdir -p ~/[path_to_ws]/src
 cd ~/[path_to_ws]/src
-git clone https://github.com/Li-Jinjie/jsk_aerial_robot_dev.git -b develop/MPC_tilt_mt    # pay attention to the branch flag
+# Recommended: clone including git submodules
+git clone --recurse-submodules https://github.com/Li-Jinjie/jsk_aerial_robot_dev.git -b develop/MPC_tilt_mt    # pay attention to the branch flag
+
+# If you already cloned without submodules, run these after cloning:
+# cd jsk_aerial_robot_dev
+# git submodule update --init --recursive
 ```
 
 ### 2.1 ... for Ubuntu 20.04 and ROS Noetic
