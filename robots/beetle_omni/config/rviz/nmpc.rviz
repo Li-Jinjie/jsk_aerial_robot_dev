@@ -1,6 +1,6 @@
 Panels:
   - Class: rviz/Displays
-    Help Height: 138
+    Help Height: 0
     Name: Displays
     Property Tree Widget:
       Expanded:
@@ -17,7 +17,7 @@ Panels:
         - /Path1
         - /MarkerArray2
       Splitter Ratio: 0.7065868377685547
-    Tree Height: 541
+    Tree Height: 752
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -35,7 +35,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: Image
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -71,7 +71,12 @@ Visualization Manager:
         Expand Link Details: false
         Expand Tree: false
         Link Tree Style: Links in Alphabetic Order
-        ball:
+        ark_flow_sensor:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        brush:
           Alpha: 1
           Show Axes: false
           Show Trail: false
@@ -113,6 +118,10 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        optic_cam_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
         root:
           Alpha: 1
           Show Axes: false
@@ -178,8 +187,10 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
-        beetle1/ball:
-          Value: false
+        beetle1/ark_flow_sensor:
+          Value: true
+        beetle1/brush:
+          Value: true
         beetle1/cog:
           Value: true
         beetle1/ee_contact:
@@ -198,6 +209,8 @@ Visualization Manager:
           Value: false
         beetle1/main_body:
           Value: false
+        beetle1/optic_cam_link:
+          Value: true
         beetle1/root:
           Value: false
         beetle1/rotor_arm1:
@@ -239,7 +252,10 @@ Visualization Manager:
               {}
             beetle1/main_body:
               beetle1/ee_mount:
-                beetle1/ball:
+                beetle1/ark_flow_sensor:
+                  beetle1/optic_cam_link:
+                    {}
+                beetle1/brush:
                   beetle1/ee_contact:
                     {}
               beetle1/fc:
@@ -392,8 +408,30 @@ Visualization Manager:
       Marker Topic: /beetle1/ext_wrench_est/viz_ring
       Name: Marker
       Namespaces:
-        ring: true
+        {}
       Queue Size: 100
+      Value: true
+    - Alpha: 0.5
+      Buffer Length: 1
+      Class: rviz/Range
+      Color: 255; 255; 255
+      Enabled: true
+      Name: Range
+      Queue Size: 10
+      Topic: /beetle1/ark_flow/point_laser
+      Unreliable: false
+      Value: true
+    - Class: rviz/Image
+      Enabled: true
+      Image Topic: /beetle1/ark_flow/cam_color/image_raw
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Image
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: raw
+      Unreliable: false
       Value: true
   Enabled: true
   Global Options:
@@ -446,10 +484,12 @@ Visualization Manager:
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 1051
+  Height: 1438
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000400000000000001f700000315fc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b000000b000fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000b0fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000006e000003150000018200fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000015f00000315fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000006e000003150000013200fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e100000197000000030000079a0000005efc0100000002fb0000000800540069006d006501000000000000079a000006ec00fffffffb0000000800540069006d006501000000000000045000000000000000000000042c0000031500000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Image:
+    collapsed: false
+  QMainWindow State: 000000ff00000000fd0000000400000000000001f700000498fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b000000b000fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000b0fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000006e0000035e0000018200fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d00610067006501000003d80000012e0000002600ffffff000000010000015f00000498fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000006e000004980000013200fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000009f10000005efc0100000002fb0000000800540069006d00650100000000000009f1000006ec00fffffffb0000000800540069006d00650100000000000004500000000000000000000006830000049800000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
@@ -458,6 +498,6 @@ Window Geometry:
     collapsed: false
   Views:
     collapsed: false
-  Width: 1946
-  X: 401
-  Y: 54
+  Width: 2545
+  X: 1348
+  Y: 365
