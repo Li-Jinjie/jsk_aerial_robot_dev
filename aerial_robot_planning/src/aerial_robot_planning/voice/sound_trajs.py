@@ -129,10 +129,11 @@ class StringNoteTraj(BaseTrajwSound):
         self.period = self.T
 
     def compute_thrust_at_time(self, t: float) -> float:
+        if t / self.period >= self.loop_num:
+            return self.hover_thrust
+
         t_mod = t % self.period
         idx = np.searchsorted(self.beat_times, t_mod, side="right") - 1
-        if idx >= len(self.sequence):
-            return self.hover_thrust
 
         note, _ = self.sequence[idx]
         return self.note2thrust[note]
