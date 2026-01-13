@@ -6,7 +6,7 @@
     params:
       ee_mount_link : The base link that the ball tool is mounted to (e.g. "ee_mount").
   -->
-  <xacro:macro name="ball_end_effector" params="ee_mount_link">
+  <xacro:macro name="ball_end_effector" params="ee_mount_link robot_ns">
 
     <!-- 1) Ball tool geometry and inertia -->
     <link name="ball">
@@ -40,7 +40,7 @@
     <!-- 2) Mount the ball to the end-effector flange -->
     <joint name="ee_mount_to_ball" type="fixed">
       <parent link="${ee_mount_link}"/>
-      <child  link="ball"/>
+      <child link="ball"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
 
@@ -48,7 +48,7 @@
     <!-- ee_contact is assumed to be defined elsewhere -->
     <joint name="ball_to_ee_contact" type="fixed">
       <parent link="ball"/>
-      <child  link="ee_contact"/>
+      <child link="ee_contact"/>
       <origin xyz="0 0 0.11" rpy="0 0 0"/>
     </joint>
 

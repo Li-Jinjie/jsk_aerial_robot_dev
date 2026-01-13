@@ -9,7 +9,7 @@
     params:
       ee_mount_link : The base link that the sensor-ball tool is mounted to (e.g. "ee_mount").
   -->
-  <xacro:macro name="force_sensor_ball_end_effector" params="ee_mount_link">
+  <xacro:macro name="force_sensor_ball_end_effector" params="ee_mount_link robot_ns">
 
     <!-- 1) Wrench sensor link -->
     <link name="wrench_sensor">
@@ -41,7 +41,7 @@
     <!-- 2) Mount the wrench sensor to the end-effector flange -->
     <joint name="ee_mount_to_sensor" type="fixed">
       <parent link="${ee_mount_link}"/>
-      <child  link="wrench_sensor"/>
+      <child link="wrench_sensor"/>
       <origin xyz="0 0 0.031" rpy="0 0 0"/>
     </joint>
 
@@ -53,7 +53,7 @@
         - add joint "ball_to_ee_contact" from ball to ee_contact
       ee_contact is assumed to be defined elsewhere.
     -->
-    <xacro:ball_end_effector ee_mount_link="wrench_sensor"/>
+    <xacro:ball_end_effector ee_mount_link="wrench_sensor" robot_ns="${robot_name}"/>
 
   </xacro:macro>
 
