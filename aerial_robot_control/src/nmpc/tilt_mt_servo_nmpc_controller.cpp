@@ -131,7 +131,7 @@ void nmpc::TiltMtServoNMPC::reset()
   for (int i = 0; i < joint_num_; i++)
   {
     gimbal_ctrl_cmd_.name.emplace_back("gimbal" + std::to_string(i + 1));
-    gimbal_ctrl_cmd_.position.push_back(0.0);
+    gimbal_ctrl_cmd_.position.push_back(xr_vec[13 + i]);  // servo angle
   }
 
   pub_gimbal_control_.publish(gimbal_ctrl_cmd_);
@@ -764,10 +764,11 @@ void nmpc::TiltMtServoNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf:
   for (int i = 0; i < motor_num_; i++)
   {
     ft_ref_vec[i] = sqrt(x_lambda(2 * i) * x_lambda(2 * i) + x_lambda(2 * i + 1) * x_lambda(2 * i + 1));
-    a_ref_vec[i] = atan2(x_lambda(2 * i), x_lambda(2 * i + 1));
-
     u.at(i) = ft_ref_vec[i];
+    a_ref_vec[i] = atan2(x_lambda(2 * i), x_lambda(2 * i + 1));
     x.at(13 + i) = ensureOneServoContinuity(a_ref_vec[i], i);
+    // u is not set since its definition is alpha_c - alpha, instead of alpha - alpha_r.
+    // Please read my RA-L: https://doi.org/10.1109/LRA.2024.3451391 for details.
   }
 
   if (alloc_type_ == 0)
@@ -876,6 +877,8 @@ void nmpc::TiltMtServoNMPC::allocateToXUwOneFixedRotor(int fix_rotor_idx, double
     u.at(i) = ft;
     const double alpha = atan2(z_final(2 * i), z_final(2 * i + 1));
     x.at(13 + i) = ensureOneServoContinuity(alpha, i);
+    // u is not set since its definition is alpha_c - alpha, instead of alpha - alpha_r.
+    // Please read my RA-L: https://doi.org/10.1109/LRA.2024.3451391 for details.
   }
 
   // if the fixed rotor is the same with previous one, no need to recalculate the allocation matrix.
