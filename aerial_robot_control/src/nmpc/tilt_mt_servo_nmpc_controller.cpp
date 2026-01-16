@@ -75,19 +75,42 @@ void nmpc::TiltMtServoNMPC::activate()
   flight_config_cmd.cmd = spinal::FlightConfigCmd::INTEGRATION_CONTROL_ON_CMD;
   pub_flight_config_cmd_spinal_.publish(flight_config_cmd);
 
-  BaseMPC::activate();
+  BaseMPC::activate();  // Note: this function indirectly calls reset()
 }
 
 void nmpc::TiltMtServoNMPC::reset()
 {
   BaseMPC::reset();
 
-  // reset x_u_ref_
-  std::vector<double> xr_vec = meas2VecX(true);
+  std::vector<double> xr_vec(mpc_solver_ptr_->NX_, 0);
   std::vector<double> u_vec(mpc_solver_ptr_->NU_, 0);
 
+  // Only compute hover u if physical parameters are initialized (not available during first initialization)
+  if (mass_ > 0 && alloc_mat_pinv_.size() > 0)
+  {
+    // Get current orientation
+    tf::Quaternion quat = estimator_->getQuat(Frame::COG, estimate_mode_);
+
+    // Calculate hover force in body frame to counteract gravity
+    // This provides a feasible initial guess for NMPC when taking off from a tilted platform
+    Eigen::Vector3d gravity_i(0, 0, mass_ * gravity_const_);
+    tf::Quaternion q_bi = quat.inverse();
+    Eigen::Matrix3d rot_bi;
+    tf::matrixTFToEigen(tf::Transform(q_bi).getBasis(), rot_bi);
+    Eigen::Vector3d force_b = rot_bi * gravity_i;
+
+    Eigen::VectorXd ref_wrench_b(6);
+    ref_wrench_b << force_b(0), force_b(1), force_b(2), 0, 0, 0;  // zero torque for hover
+
+    // Compute u via control allocation
+    tf::Vector3 ref_pos = estimator_->getPos(Frame::COG, estimate_mode_);
+    tf::Vector3 ref_vel(0, 0, 0);
+    tf::Vector3 ref_omega(0, 0, 0);
+    allocateToXU(ref_pos, ref_vel, quat, ref_omega, ref_wrench_b, xr_vec, u_vec);
+  }
+
   int &NX = mpc_solver_ptr_->NX_, &NU = mpc_solver_ptr_->NU_, &NN = mpc_solver_ptr_->NN_;
-  for (int i = 0; i < mpc_solver_ptr_->NN_; i++)
+  for (int i = 0; i < NN; i++)
   {
     std::copy(xr_vec.begin(), xr_vec.begin() + NX, x_u_ref_.x.data.begin() + NX * i);
     std::copy(u_vec.begin(), u_vec.begin() + NU, x_u_ref_.u.data.begin() + NU * i);
@@ -108,7 +131,7 @@ void nmpc::TiltMtServoNMPC::reset()
   for (int i = 0; i < joint_num_; i++)
   {
     gimbal_ctrl_cmd_.name.emplace_back("gimbal" + std::to_string(i + 1));
-    gimbal_ctrl_cmd_.position.push_back(0.0);
+    gimbal_ctrl_cmd_.position.push_back(xr_vec[13 + i]);  // servo angle
   }
 
   pub_gimbal_control_.publish(gimbal_ctrl_cmd_);
@@ -741,10 +764,11 @@ void nmpc::TiltMtServoNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf:
   for (int i = 0; i < motor_num_; i++)
   {
     ft_ref_vec[i] = sqrt(x_lambda(2 * i) * x_lambda(2 * i) + x_lambda(2 * i + 1) * x_lambda(2 * i + 1));
-    a_ref_vec[i] = atan2(x_lambda(2 * i), x_lambda(2 * i + 1));
-
     u.at(i) = ft_ref_vec[i];
+    a_ref_vec[i] = atan2(x_lambda(2 * i), x_lambda(2 * i + 1));
     x.at(13 + i) = ensureOneServoContinuity(a_ref_vec[i], i);
+    // u is not set since its definition is alpha_c - alpha, instead of alpha - alpha_r.
+    // Please read my RA-L: https://doi.org/10.1109/LRA.2024.3451391 for details.
   }
 
   if (alloc_type_ == 0)
@@ -853,6 +877,8 @@ void nmpc::TiltMtServoNMPC::allocateToXUwOneFixedRotor(int fix_rotor_idx, double
     u.at(i) = ft;
     const double alpha = atan2(z_final(2 * i), z_final(2 * i + 1));
     x.at(13 + i) = ensureOneServoContinuity(alpha, i);
+    // u is not set since its definition is alpha_c - alpha, instead of alpha - alpha_r.
+    // Please read my RA-L: https://doi.org/10.1109/LRA.2024.3451391 for details.
   }
 
   // if the fixed rotor is the same with previous one, no need to recalculate the allocation matrix.
