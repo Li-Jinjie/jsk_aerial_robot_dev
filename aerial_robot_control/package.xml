@@ -22,6 +22,11 @@
   <depend>spinal</depend>
   <depend>tf</depend>
 
+  <!-- Pinocchio multi-body simulator (system/ROS package) -->
+  <!-- Install on Ubuntu/ROS with: sudo apt install ros-${ROS_DISTRO}-pinocchio -->
+  <build_depend>pinocchio</build_depend>
+  <exec_depend>pinocchio</exec_depend>
+
   <export>
     <aerial_robot_control plugin="${prefix}/plugins/flight_control_plugins.xml" />
     <aerial_robot_control plugin="${prefix}/plugins/wrench_est_plugins.xml" />
