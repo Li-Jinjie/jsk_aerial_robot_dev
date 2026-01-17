@@ -284,7 +284,7 @@ class TiltBirotorPinocchioSimulator:
         # tau_servo = (1/t_servo) * I_servo * (a_cmd - a_current)
         # Approximate servo inertia
         I_servo = 0.0036697  # from phys_param_birotor.py
-        K_p = I_servo / self.t_servo
+        K_p = 0.5
 
         tau_gimbal1 = K_p * (a1c - a1)
         tau_gimbal2 = K_p * (a2c - a2)
