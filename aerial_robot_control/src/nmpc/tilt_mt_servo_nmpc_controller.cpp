@@ -34,9 +34,8 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   pub_flight_cmd_ = nh_.advertise<spinal::FourAxisCommand>("four_axes/command", 1);
   pub_gimbal_control_ = nh_.advertise<sensor_msgs::JointState>("gimbals_ctrl", 1);
   pub_flight_config_cmd_spinal_ = nh_.advertise<spinal::FlightConfigCmd>("flight_config_cmd", 1);
-
-  /* services */
-  srv_set_control_mode_ = nh_.serviceClient<spinal::SetControlMode>("set_control_mode");
+  // to be compatible with spinal and shutdown the attitude controller.
+  rpy_gain_pub_ = nh_.advertise<spinal::RollPitchYawTerms>("rpy/gain", 1);
 
   /* subscribers */
   sub_joint_states_ = nh_.subscribe("joint_states", 5, &TiltMtServoNMPC::callbackJointStates, this);
@@ -46,7 +45,7 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   sub_set_fixed_rotor_ = nh_.subscribe("set_fixed_rotor", 5, &TiltMtServoNMPC::callbackSetFixedRotor, this);
 
   /* init some values */
-  setControlMode();
+  setAttitudeGains();  // to be compatible with spinal and shutdown the attitude controller.
 
   initActuatorStates();
   initPredXU(x_u_ref_, mpc_solver_ptr_->NN_, mpc_solver_ptr_->NX_, mpc_solver_ptr_->NU_);
@@ -81,6 +80,8 @@ void nmpc::TiltMtServoNMPC::activate()
 void nmpc::TiltMtServoNMPC::reset()
 {
   BaseMPC::reset();
+
+  setAttitudeGains();  // to be compatible with spinal and shutdown the attitude controller.
 
   std::vector<double> xr_vec(mpc_solver_ptr_->NX_, 0);
   std::vector<double> u_vec(mpc_solver_ptr_->NU_, 0);
@@ -164,8 +165,6 @@ void nmpc::TiltMtServoNMPC::initGeneralParams()
         "The NMPC sampling time T_samp is not equal to the control loop time! Please set T_step to 1/ctrl_loop_du_ in "
         "the config.");
 
-  getParam<bool>(nmpc_nh, "is_attitude_ctrl", is_attitude_ctrl_, true);
-  getParam<bool>(nmpc_nh, "is_body_rate_ctrl", is_body_rate_ctrl_, false);
   getParam<bool>(nmpc_nh, "is_print_phys_params", is_print_phys_params_, false);
   getParam<bool>(nmpc_nh, "is_debug", is_debug_, false);
 
@@ -299,23 +298,20 @@ void nmpc::TiltMtServoNMPC::initNMPCConstraints()
   mpc_solver_ptr_->setConstraintsUbu(ubu);
 }
 
-void nmpc::TiltMtServoNMPC::setControlMode()
+void nmpc::TiltMtServoNMPC::setAttitudeGains() const
 {
-  bool res = ros::service::waitForService("set_control_mode", ros::Duration(5));
-  if (!res)
-  {
-    ROS_ERROR("cannot find service named set_control_mode");
-  }
-  ros::Duration(2.0).sleep();
-  spinal::SetControlMode set_control_mode_srv;
-  set_control_mode_srv.request.is_attitude = is_attitude_ctrl_;
-  set_control_mode_srv.request.is_body_rate = is_body_rate_ctrl_;
-  while (!srv_set_control_mode_.call(set_control_mode_srv))
-    ROS_WARN_THROTTLE(1,
-                      "Waiting for set_control_mode service.... If you always see this message, the robot cannot fly.");
-
-  ROS_INFO("Set control mode: attitude = %d and body rate = %d", set_control_mode_srv.request.is_attitude,
-           set_control_mode_srv.request.is_body_rate);
+  spinal::RollPitchYawTerms rpy_gain_msg;  // for rosserial
+  /* send zero gains to bypass low-level attitude controller */
+  /* scaling by 1000 for rosserial communication */
+  rpy_gain_msg.motors.resize(1);
+  rpy_gain_msg.motors.at(0).roll_p = 0;
+  rpy_gain_msg.motors.at(0).roll_i = 0;
+  rpy_gain_msg.motors.at(0).roll_d = 0;
+  rpy_gain_msg.motors.at(0).pitch_p = 0;
+  rpy_gain_msg.motors.at(0).pitch_i = 0;
+  rpy_gain_msg.motors.at(0).pitch_d = 0;
+  rpy_gain_msg.motors.at(0).yaw_d = 0;
+  rpy_gain_pub_.publish(rpy_gain_msg);
 }
 
 void nmpc::TiltMtServoNMPC::initAllocMat()
