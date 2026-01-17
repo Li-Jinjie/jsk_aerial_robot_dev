@@ -5,6 +5,7 @@ import numpy as np
 import argparse
 
 from nmpc_tilt_mt.utils.nmpc_viz import Visualizer
+from nmpc_tilt_mt.utils.pinocchio_viz import PinocchioVisualizer
 
 # Quadrotor
 import nmpc_tilt_mt.tilt_qd.phys_param_beetle_omni as phys_omni
@@ -37,6 +38,7 @@ from nmpc_tilt_mt.archive.tilt_qd_servo_thrust_drag import NMPCTiltQdServoThrust
 # Birotor
 from nmpc_tilt_mt.tilt_bi.tilt_bi_servo import NMPCTiltBiServo
 from nmpc_tilt_mt.tilt_bi.tilt_bi_2ord_servo import NMPCTiltBi2OrdServo
+from nmpc_tilt_mt.tilt_bi.tilt_bi_pinocchio_sim import create_pinocchio_sim_solver
 
 # Trirotor
 from nmpc_tilt_mt.tilt_tri.tilt_tri_servo import NMPCTiltTriServo
@@ -120,6 +122,16 @@ def main(args):
         ocp_solver.set(stage, "u", u_init)
 
     # ---------- Simulator ----------
+    ts_sim = 0.005  # or 0.001
+    t_total_sim = 15.0
+    if args.plot_type == 1:
+        t_total_sim = 4.0
+    if args.plot_type == 2:
+        t_total_sim = 3.0
+    N_sim = int(t_total_sim / ts_sim)
+
+    use_pinocchio = False  # Flag to track if Pinocchio simulator is used
+
     if args.arch == "qd":
         sim_phy = phys_omni if 20 < args.model < 30 else phys_art
         if args.sim_model == 0:
@@ -132,6 +144,13 @@ def main(args):
     elif args.arch == "bi":
         if args.sim_model == 0:
             sim_nmpc = NMPCTiltBiServo()
+        elif args.sim_model == 2:
+            # Use Pinocchio multi-body simulator
+            # Still create sim_nmpc for parameter access
+            sim_nmpc = NMPCTiltBiServo()
+            sim_solver = create_pinocchio_sim_solver(ts_sim)
+            nx_sim = sim_solver.acados_sim.dims.nx
+            use_pinocchio = True
         # elif args.sim_model == 1:
         #     sim_nmpc = NMPCTiltBi2OrdServo()   # This model is wrong
         else:
@@ -153,19 +172,10 @@ def main(args):
     else:
         t_rotor_sim = 0.0
 
-    ts_sim = 0.005  # or 0.001
-
-    t_total_sim = 15.0
-    if args.plot_type == 1:
-        t_total_sim = 4.0
-    if args.plot_type == 2:
-        t_total_sim = 3.0
-
-    N_sim = int(t_total_sim / ts_sim)
-
-    # Sim solver
-    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, build=True)
-    nx_sim = sim_solver.acados_sim.dims.nx
+    # Sim solver - create only if not using Pinocchio
+    if not use_pinocchio:
+        sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, build=True)
+        nx_sim = sim_solver.acados_sim.dims.nx
 
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
@@ -175,6 +185,16 @@ def main(args):
     reference_generator = nmpc.get_reference_generator()
 
     # ---------- Visualization ----------
+    # Get simulator properties for visualization
+    if use_pinocchio:
+        sim_include_servo = True
+        sim_include_thrust = False
+        sim_include_cog_dist = False
+    else:
+        sim_include_servo = sim_nmpc.include_servo_model
+        sim_include_thrust = sim_nmpc.include_thrust_model
+        sim_include_cog_dist = sim_nmpc.include_cog_dist_model
+
     viz = Visualizer(
         args.arch,
         N_sim,
@@ -182,9 +202,9 @@ def main(args):
         nu,
         x_init_sim,
         tilt=nmpc.tilt,
-        include_servo_model=sim_nmpc.include_servo_model,
-        include_thrust_model=sim_nmpc.include_thrust_model,
-        include_cog_dist_model=sim_nmpc.include_cog_dist_model,
+        include_servo_model=sim_include_servo,
+        include_thrust_model=sim_include_thrust,
+        include_cog_dist_model=sim_include_cog_dist,
     )
 
     # Prepare containers to record simulation data (x and u) for future comparison
@@ -353,11 +373,34 @@ def main(args):
         elif args.plot_type == 2:
             viz.visualize_rpy(ocp_solver.acados_ocp.model.name, ts_sim, t_total_sim)
 
+        # Pinocchio-specific visualization
+        if use_pinocchio and args.viz_pinocchio:
+            print("\n[Pinocchio Viz] Generating multi-body dynamics visualization...")
+            multibody_data = sim_solver.simulator.get_multibody_info()
+            pinocchio_viz = PinocchioVisualizer(multibody_data, viz.x_sim_all, viz.u_sim_all)
+            pinocchio_viz.visualize_multibody(ts_sim, t_total_sim)
+
+            # If comparison data is available, show comparison
+            if args.viz_comparison and args.comparison_data_path:
+                print("[Pinocchio Viz] Loading comparison data...")
+                try:
+                    comparison_data = np.load(args.comparison_data_path)
+                    standard_x = comparison_data["x"]
+                    standard_u = comparison_data["u"]
+                    pinocchio_viz.visualize_comparison(standard_x, standard_u, ts_sim, t_total_sim)
+                except Exception as e:
+                    print(f"[Pinocchio Viz] Warning: Could not load comparison data: {e}")
+
     if args.save_data:
         file_path = args.file_path
 
+        if use_pinocchio:
+            sim_name = "PinocchioMultiBody"
+        else:
+            sim_name = type(sim_nmpc).__name__
+
         np.savez(
-            file_path + f"nmpc_{type(nmpc).__name__}_sim_{type(sim_nmpc).__name__}.npz",
+            file_path + f"nmpc_{type(nmpc).__name__}_sim_{sim_name}.npz",
             x=np.array(x_history),
             u=np.array(u_history),
         )
@@ -385,7 +428,10 @@ if __name__ == "__main__":
         "--sim_model",
         type=int,
         default=0,
-        help="The simulation model. " "Options: 0 (default: servo+thrust), " "1 (servo+thrust+drag).",
+        help="The simulation model. "
+        "Options: 0 (default: servo+thrust), "
+        "1 (servo+thrust+drag), "
+        "2 (Pinocchio multi-body, birotor only).",
     )
 
     parser.add_argument(
@@ -410,6 +456,26 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--save_data", action="store_true", help="Save simulation x and u data to file")
 
     parser.add_argument("--file_path", type=str, default=f"../../../../test/data/", help="Path to save the data file")
+
+    parser.add_argument(
+        "--viz_pinocchio",
+        action="store_true",
+        default=True,
+        help="Enable Pinocchio-specific multi-body visualization (default: True when sim_model==2)",
+    )
+
+    parser.add_argument(
+        "--viz_comparison",
+        action="store_true",
+        help="Enable comparison visualization between Pinocchio and standard simulation",
+    )
+
+    parser.add_argument(
+        "--comparison_data_path",
+        type=str,
+        default=None,
+        help="Path to .npz file containing standard simulation data for comparison",
+    )
 
     args = parser.parse_args()
     main(args)

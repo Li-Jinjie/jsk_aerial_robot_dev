@@ -46,7 +46,7 @@ try:
     for i in range(n_steps):
         status = sim.solve()
         if status != 0:
-            print(f"[OK] Error at step {i}, status={status}")
+            print(f"[ERROR] Error at step {i}, status={status}")
             sys.exit(1)
 
         if i % 100 == 0:
@@ -73,7 +73,7 @@ try:
     for i in range(200):  # 1 second
         status = sim.solve()
         if status != 0:
-            print(f"[OK] Error at step {i}, status={status}")
+            print(f"[ERROR] Error at step {i}, status={status}")
             sys.exit(1)
 
     x_final = sim.get("x")
@@ -88,14 +88,14 @@ try:
     print("  python sim_nmpc.py 0 -a bi --sim_model 2")
 
 except ImportError as e:
-    print(f"[OK] Import error: {e}")
+    print(f"[ERROR] Import error: {e}")
     print("\nMake sure Pinocchio is installed:")
     print("  pip install pin")
     print("  OR")
     print("  conda install -c conda-forge pinocchio")
     sys.exit(1)
 except Exception as e:
-    print(f"[OK] Error: {e}")
+    print(f"[ERROR] Error: {e}")
     import traceback
 
     traceback.print_exc()

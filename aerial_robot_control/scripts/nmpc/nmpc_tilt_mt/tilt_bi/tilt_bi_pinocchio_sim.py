@@ -71,6 +71,14 @@ class TiltBirotorPinocchioSimulator:
         self.x_state = None  # NMPC state format
         self.u_control = None  # NMPC control input
 
+        # Multi-body dynamics tracking (for visualization)
+        self.joint_torques_history = []  # List of [tau1, tau2]
+        self.thrust_forces_history = []  # List of [[fx1, fy1, fz1], [fx2, fy2, fz2]]
+        self.kinetic_energy_history = []
+        self.potential_energy_history = []
+        self.com_position_history = []  # Center of mass position
+        self.joint_velocities_history = []  # List of [da1, da2]
+
         print(f"[Pinocchio Sim] Loaded robot model with {self.model.nq} generalized positions")
         print(f"[Pinocchio Sim] and {self.model.nv} generalized velocities")
         print(f"[Pinocchio Sim] Gimbal joint IDs: {self.gimbal1_id}, {self.gimbal2_id}")
@@ -342,6 +350,9 @@ class TiltBirotorPinocchioSimulator:
         self.v = v_new
         self.x_state = self._pinocchio_to_nmpc_state(self.q, self.v, np.array([a1_new, a2_new]))
 
+        # Record multi-body dynamics information for visualization
+        self._record_multibody_data(tau_servo, f_ext, v_new)
+
         return 0
 
     def get(self, key: str) -> np.ndarray:
@@ -358,6 +369,64 @@ class TiltBirotorPinocchioSimulator:
             return self.x_state.copy()
         else:
             raise ValueError(f"Unknown key: {key}")
+
+    def _record_multibody_data(self, tau_servo: np.ndarray, f_ext: pin.StdVec_Force, v: np.ndarray):
+        """
+        Record multi-body dynamics data for visualization.
+
+        Args:
+            tau_servo: Joint torques [tau1, tau2]
+            f_ext: External forces
+            v: Generalized velocities
+        """
+        # Record joint torques
+        self.joint_torques_history.append(tau_servo.copy())
+
+        # Record joint velocities
+        joint_vels = v[6:8].copy()  # da1, da2
+        self.joint_velocities_history.append(joint_vels)
+
+        # Compute and record energies
+        pin.computeKineticEnergy(self.model, self.data)
+        pin.computePotentialEnergy(self.model, self.data)
+        self.kinetic_energy_history.append(self.data.kinetic_energy)
+        self.potential_energy_history.append(self.data.potential_energy)
+
+        # Compute and record center of mass
+        com = pin.centerOfMass(self.model, self.data, self.q)
+        self.com_position_history.append(com.copy())
+
+        # Record thrust forces in world frame
+        pin.framesForwardKinematics(self.model, self.data, self.q)
+        thrust1_placement = self.data.oMf[self.thrust1_frame_id]
+        thrust2_placement = self.data.oMf[self.thrust2_frame_id]
+
+        ft1 = self.u_control[0]
+        ft2 = self.u_control[1]
+
+        f1_local = np.array([0.0, 0.0, ft1])
+        f2_local = np.array([0.0, 0.0, ft2])
+
+        f1_world = thrust1_placement.rotation @ f1_local
+        f2_world = thrust2_placement.rotation @ f2_local
+
+        self.thrust_forces_history.append([f1_world.copy(), f2_world.copy()])
+
+    def get_multibody_info(self) -> dict:
+        """
+        Get recorded multi-body dynamics information.
+
+        Returns:
+            Dictionary containing multi-body dynamics data
+        """
+        return {
+            "joint_torques": np.array(self.joint_torques_history),  # (N, 2)
+            "joint_velocities": np.array(self.joint_velocities_history),  # (N, 2)
+            "thrust_forces": np.array(self.thrust_forces_history),  # (N, 2, 3)
+            "kinetic_energy": np.array(self.kinetic_energy_history),  # (N,)
+            "potential_energy": np.array(self.potential_energy_history),  # (N,)
+            "com_position": np.array(self.com_position_history),  # (N, 3)
+        }
 
 
 class PinocchioSimWrapper:
