@@ -14,11 +14,30 @@ Then, follow the instructions below:
 - Install acados itself: Please follow the instructions on the acados website https://docs.acados.org/installation/index.html
 - Install Python interface: Please follow the instructions on the acados website https://docs.acados.org/python_interface/index.html, but don't create virtual env in step 2. The virtual env has compatibility problem with ROS env.
 - **Pay attention** that you must execute the step 5 in https://docs.acados.org/python_interface/index.html to test the installation. This step should automatically install t_renderer. If something goes wrong, please follow step 6 to manually install the t_renderer binary.
-- When performing step 6, please note that VIM4 is **aarch64(arm64)**, don't build t_renderer in amd64(x86) format.
+- When performing step 6, please note that VIM4 is **aarch64(arm64)**, don't build t_renderer in amd64(x86) format. Please see the build instruction below.
 - Optional: For developers trying to optimize the solver options for their applications, here is a convenient command to install more tested solvers in the cmake process of acados:
 ```bash
 cmake -DACADOS_WITH_QPOASES=ON -DACADOS_WITH_DAQP=ON -DACADOS_WITH_QPDUNES=ON -DACADOS_WITH_OSQP=ON ..
 ```
+
+[VIM4] Build t_renderer from source for aarch64(arm64):
+```bash
+git clone https://github.com/acados/tera_renderer.git --branch v0.0.34
+cd tera_renderer
+# Install rust, cargo etc.
+sudo apt install cargo
+cargo build --verbose --release
+```
+If you meet the problem that the version of rustc is too low (given by ChatGPT):
+```bash
+which rustc  # if it's /usr/bin/rustc, it's too old
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  # install rustup, as recommended
+source ~/.cargo/env
+rustup update stable
+rustc --version  # check the version, should be >=1.84.
+````
+
+(optional) Add SSH key to github account for easier cloning: please ask ChatGPT for help if you don't know how to do this.
 
 ### 2. Install the code base and the necessary ROS related packages ...
 
