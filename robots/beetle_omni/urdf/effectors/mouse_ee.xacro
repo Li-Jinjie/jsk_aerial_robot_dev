@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<robot name="mouse_end_effector" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Macro: mouse_end_effector
+    params:
+      ee_mount_link : The base link connected to the end-effector (e.g. "ee_mount").
+  -->
+  <xacro:macro name="mouse_end_effector" params="ee_mount_link robot_ns">
+
+    <!-- 1) Main body link and joint -->
+    <link name="mouse">
+      <inertial>
+        <origin xyz="0.00303612 0.00583742 0.03997628" rpy="0 0 0"/>
+        <mass value="0.20589572"/>
+        <inertia
+                ixx="0.00015191" iyy="0.00021672" izz="0.00023466"
+                ixy="-0.00000184" ixz="0.00000227" iyz="-0.00001360"/>
+      </inertial>
+      <visual>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_mouse.dae" scale="1 1 1"/>
+        </geometry>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <!-- You can reuse the same mesh for collision or a simplified one -->
+          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_mouse.dae"
+                scale="1 1 1"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <joint name="ee_mount_to_mouse" type="fixed">
+      <parent link="${ee_mount_link}"/>
+      <child link="mouse"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- 2) Contact frame at the bristle tip, required by the outer framework -->
+    <!-- ee_contact is assumed to be defined elsewhere -->
+    <joint name="mouse_to_ee_contact" type="fixed">
+      <parent link="mouse"/>
+      <child link="ee_contact"/>
+      <origin xyz="0 0 0.055" rpy="0 0 0"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>
