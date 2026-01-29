@@ -30,22 +30,22 @@
     ## main body
     <link name="main_body">
       <inertial>
-        <origin xyz="- 0.00023741 0.01491666" rpy="0 0 0"/>
-        <mass value="2.27739"/>
+        <origin xyz="-0.00058556 0.00011136 0.00444799" rpy="0 0 0"/>
+        <mass value="1.1340"/>
         <inertia
-            ixx="0.02747704" iyy="0.02676088" izz="0.04047304"
-            ixy="-0.00000599" ixz="0.00009626" iyz="0.00006750"/>
+            ixx="0.00358514" iyy="0.00354587" izz="0.00357606"
+            ixy="-0.00000033" ixz="-0.00005534" iyz="0.00000798"/>
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://beetle_omni/urdf/mesh/main_body_beetle_omni_w_guard.dae"/>
+          <mesh filename="package://beetle_omni/urdf/mesh/center_module_dragon_ball.dae"/>
         </geometry>
       </visual>
       <collision>
-        <origin xyz="0 0 0.0385" rpy="0 0 0"/>
+        <origin xyz="0 0 0.021" rpy="0 0 0"/>
         <geometry>
-          <box size="0.35 0.35 0.275"/>
+          <box size="0.15 0.15 0.160"/>
         </geometry>
       </collision>
     </link>
@@ -68,7 +68,7 @@
     <joint name="fc_joint" type="fixed">
       <child link="fc"/>
       <parent link="main_body"/>
-      <origin rpy="0 0 0" xyz="-0.0175 -0.0015 0.06647"/>  # should be aligned with the position of IMU
+      <origin rpy="0 0 0" xyz="-0.0175 -0.0015 0.075"/>  # should be aligned with the position of IMU
     </joint>
 
     ## rotor arm macro
@@ -93,10 +93,10 @@
     </xacro:macro>
 
     ## dummy rotor arms
-    <xacro:dummy_rotor_arm id = "${child1}" x = "0.17938" y="0.17938" z = "0.0171" yaw = "${pi*1.0/4.0}"/>
-    <xacro:dummy_rotor_arm id = "${child2}" x = "-0.17938" y="0.17938" z = "0.0171" yaw = "${pi*3.0/4.0}"/>
-    <xacro:dummy_rotor_arm id = "${child3}" x = "-0.17938" y="-0.17938" z = "0.0171" yaw = "${pi*5.0/4.0}"/>
-    <xacro:dummy_rotor_arm id = "${child4}" x = "0.17938" y="-0.17938" z = "0.0171" yaw = "${-pi*1.0/4.0}"/>
+    <xacro:dummy_rotor_arm id = "${child1}" x = "0.08231" y="0.08231" z = "0.0175" yaw = "${pi*1.0/4.0}"/>
+    <xacro:dummy_rotor_arm id = "${child2}" x = "-0.08231" y="0.08231" z = "0.0175" yaw = "${pi*3.0/4.0}"/>
+    <xacro:dummy_rotor_arm id = "${child3}" x = "-0.08231" y="-0.08231" z = "0.0175" yaw = "${pi*5.0/4.0}"/>
+    <xacro:dummy_rotor_arm id = "${child4}" x = "0.08231" y="-0.08231" z = "0.0175" yaw = "${-pi*1.0/4.0}"/>
 
     <xacro:friction self="main_body"/>
   </xacro:macro>
@@ -106,22 +106,22 @@
     #### rotor parent link (virtual) ####
     <link name="gimbal_link${self}">
       <inertial>
-        <origin xyz="0.02085225 0.0 -0.01276312" rpy="0 0 0"/>
-        <mass value="0.15944"/>
+        <origin xyz="0.01809124 0.0 -0.02799847" rpy="0 0 0"/>
+        <mass value="0.065"/>
         <inertia
-            ixx="0.00007281" iyy="0.00007289" izz="0.00007635"
-            ixy="0.0" ixz="0.0" iyz="0.0"/>
+            ixx="0.00003763" iyy="0.00003471" izz="0.00005131"
+            ixy="0.0" ixz="-0.00000255" iyz="0.0"/>
       </inertial>
       <collision>
-        <origin xyz="0.06 0 0" rpy="0 0 0"/>
+        <origin xyz="0.06 0 -0.03" rpy="0 0 0"/>
         <geometry>
-          <box size="0.11 0.11 0.05"/>
+          <box size="0.08 0.13 0.043"/>
         </geometry>
       </collision>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://beetle_omni/urdf/mesh/omni_rotor_module.dae"/>
+          <mesh filename="package://beetle_omni/urdf/mesh/omni_rotor_module_5inch.dae"/>
         </geometry>
       </visual>
     </link>
@@ -178,7 +178,7 @@
     <joint name="rotor_parent_link_joint${self}" type="fixed">
       <parent link="gimbal_link${self}"/>
       <child link="rotor_parent${self}"/>
-      <origin rpy="0 0 0" xyz="0.02185 0.0 0.0"/>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
     </joint>
 
     #### rotor joint (virtual) ####
@@ -228,7 +228,7 @@
   <joint name="body_to_ee_mount" type="fixed">
     <parent link="main_body"/>
     <child link="ee_mount"/>
-    <origin xyz="0 0 0.1725" rpy="0 0 0"/>
+    <origin xyz="0 0 0.104" rpy="0 0 0"/>
   </joint>
 
   <!-- Tool‑agnostic contact frame (pose set inside each branch) -->

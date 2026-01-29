@@ -1,4 +1,4 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="dragon-ball" >
-  <xacro:include filename="$(find beetle_omni)/urdf/dragon-ball.urdf.xacro" />
+  <xacro:include filename="$(find beetle_omni)/urdf/dragon_ball.urdf.xacro" />
 </robot>
