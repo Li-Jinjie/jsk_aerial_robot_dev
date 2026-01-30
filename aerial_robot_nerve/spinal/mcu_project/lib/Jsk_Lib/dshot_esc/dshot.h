@@ -34,6 +34,7 @@
 #define DSHOT_FRAME_SIZE 16
 #define DSHOT_DMA_BUFFER_SIZE 18 /* resolution + frame reset (2us) */
 
+#define DSHOT_DISARM_THROTTLE 0
 #define DSHOT_MIN_THROTTLE 48
 #define DSHOT_MAX_THROTTLE 2047
 #define DSHOT_RANGE (DSHOT_MAX_THROTTLE - DSHOT_MIN_THROTTLE)
@@ -41,20 +42,25 @@
 #define DSHOT_CMD_SPIN_DIRECTION_1 7
 #define DSHOT_CMD_SPIN_DIRECTION_2 8
 
+// Motor setting
+// TODO: should be set by onboard PC
+#define NUM_MOTOR_MAG_POLE 14
+#define IS_TELEMETRY true
+
 namespace
 {
 #ifdef STM32H7
-  uint32_t motor1_dmabuffer_[DSHOT_DMA_BUFFER_SIZE] __attribute__((section(".DShotBufferSection1")));
-  uint32_t motor2_dmabuffer_[DSHOT_DMA_BUFFER_SIZE] __attribute__((section(".DShotBufferSection2")));
-  uint32_t motor3_dmabuffer_[DSHOT_DMA_BUFFER_SIZE] __attribute__((section(".DShotBufferSection3")));
-  uint32_t motor4_dmabuffer_[DSHOT_DMA_BUFFER_SIZE] __attribute__((section(".DShotBufferSection4")));
+uint32_t motor1_dmabuffer_[DSHOT_DMA_BUFFER_SIZE] __attribute__((section(".DShotBufferSection1")));
+uint32_t motor2_dmabuffer_[DSHOT_DMA_BUFFER_SIZE] __attribute__((section(".DShotBufferSection2")));
+uint32_t motor3_dmabuffer_[DSHOT_DMA_BUFFER_SIZE] __attribute__((section(".DShotBufferSection3")));
+uint32_t motor4_dmabuffer_[DSHOT_DMA_BUFFER_SIZE] __attribute__((section(".DShotBufferSection4")));
 #else
-  uint32_t motor1_dmabuffer_[DSHOT_DMA_BUFFER_SIZE];
-  uint32_t motor2_dmabuffer_[DSHOT_DMA_BUFFER_SIZE];
-  uint32_t motor3_dmabuffer_[DSHOT_DMA_BUFFER_SIZE];
-  uint32_t motor4_dmabuffer_[DSHOT_DMA_BUFFER_SIZE];
+uint32_t motor1_dmabuffer_[DSHOT_DMA_BUFFER_SIZE];
+uint32_t motor2_dmabuffer_[DSHOT_DMA_BUFFER_SIZE];
+uint32_t motor3_dmabuffer_[DSHOT_DMA_BUFFER_SIZE];
+uint32_t motor4_dmabuffer_[DSHOT_DMA_BUFFER_SIZE];
 #endif
-}
+}  // namespace
 
 /* Enumeration */
 typedef enum
@@ -67,8 +73,8 @@ typedef enum
 class DShot
 {
 public:
-  DShot(){};
-  ~DShot(){};
+  DShot() {};
+  ~DShot() {};
 
   void init(dshot_type_e dshot_type, TIM_HandleTypeDef* htim_motor_1, uint32_t channel_motor_1,
             TIM_HandleTypeDef* htim_motor_2, uint32_t channel_motor_2, TIM_HandleTypeDef* htim_motor_3,

@@ -26,13 +26,13 @@ void DShot::init(dshot_type_e dshot_type, TIM_HandleTypeDef* htim_motor_1, uint3
 void DShot::initTelemetry(UART_HandleTypeDef* huart)
 {
   esc_reader_.init(huart);
-  is_telemetry_ = true;
-  esc_reader_.num_motor_mag_pole_ = 14; // TODO: should be set by onboard PC
+  is_telemetry_ = IS_TELEMETRY;
+  esc_reader_.num_motor_mag_pole_ = NUM_MOTOR_MAG_POLE;
 }
 
 void DShot::write(uint16_t* motor_value_array, bool is_telemetry)
 {
-  bool is_telemetry_array[4] = {false, false, false, false};
+  bool is_telemetry_array[4] = { false, false, false, false };
 
   if (is_telemetry)
   {
