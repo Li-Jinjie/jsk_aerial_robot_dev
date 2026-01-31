@@ -36,7 +36,7 @@ void DShot::write(uint16_t* motor_value_array, bool is_telemetry)
 
   if (is_telemetry)
   {
-    if (num_freq_divide == 1)
+    if (num_freq_divide == (ESC_TELEM_REQUEST_DIVIDER - 1))
     {
       // send telemetry
       id_telem_ = id_telem_ % 4;

@@ -47,6 +47,9 @@
 #define NUM_MOTOR_MAG_POLE 14
 #define IS_TELEMETRY true
 
+// ESC Telemetry setting
+#define ESC_TELEM_REQUEST_DIVIDER 3  // actual freq = 1kHz / ESC_TELEM_REQUEST_DIVIDER / 4
+
 namespace
 {
 #ifdef STM32H7
