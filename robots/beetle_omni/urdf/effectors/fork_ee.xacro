@@ -4,9 +4,10 @@
   <!--
     Macro: fork_end_effector
     params:
-      ee_mount_link : The base link that the fork tool is mounted to (e.g. "ee_mount").
+      ee_mount_link : The base link that the fork tool is mounted to (e.g. "ee_mount" or "ee_bottom_mount").
+      robot_ns      : ROS namespace
   -->
-  <xacro:macro name="fork_end_effector" params="ee_mount_link robot_ns">
+  <xacro:macro name="fork_end_effector" params="ee_mount_link ee_contact_link robot_ns">
 
     <!-- 1) Fork tool geometry and inertia -->
     <link name="fork">
@@ -42,10 +43,10 @@
     </joint>
 
     <!-- 3) Contact frame at the fork tips, required by the outer framework -->
-    <!-- ee_contact is assumed to be defined elsewhere -->
+    <!-- ee_contact_link is passed as parameter -->
     <joint name="fork_to_ee_contact" type="fixed">
       <parent link="fork"/>
-      <child link="ee_contact"/>
+      <child link="${ee_contact_link}"/>
       <origin xyz="0 0 0.104" rpy="0 0 0"/>
     </joint>
 

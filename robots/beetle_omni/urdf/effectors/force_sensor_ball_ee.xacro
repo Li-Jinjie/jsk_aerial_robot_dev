@@ -7,9 +7,10 @@
   <!--
     Macro: force_sensor_ball_end_effector
     params:
-      ee_mount_link : The base link that the sensor-ball tool is mounted to (e.g. "ee_mount").
+      ee_mount_link : The base link that the sensor-ball tool is mounted to (e.g. "ee_mount" or "ee_bottom_mount").
+      robot_ns      : ROS namespace
   -->
-  <xacro:macro name="force_sensor_ball_end_effector" params="ee_mount_link robot_ns">
+  <xacro:macro name="force_sensor_ball_end_effector" params="ee_mount_link ee_contact_link robot_ns">
 
     <!-- 1) Wrench sensor link -->
     <link name="wrench_sensor">
@@ -50,10 +51,10 @@
       ball_end_effector will:
         - create link "ball"
         - add joint "ee_mount_to_ball" from wrench_sensor to ball
-        - add joint "ball_to_ee_contact" from ball to ee_contact
-      ee_contact is assumed to be defined elsewhere.
+        - add joint "ball_to_ee_contact" from ball to ee_contact_link
+      ee_contact_link is passed as parameter.
     -->
-    <xacro:ball_end_effector ee_mount_link="wrench_sensor" robot_ns="${robot_name}"/>
+    <xacro:ball_end_effector ee_mount_link="wrench_sensor" ee_contact_link="${ee_contact_link}" robot_ns="${robot_name}"/>
 
   </xacro:macro>
 
