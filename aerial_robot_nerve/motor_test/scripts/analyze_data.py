@@ -38,18 +38,23 @@ def analyze_data(folder_path, file_name, has_telemetry, set_voltage, order, if_r
     valid_data = data[data["State"] == "valid"]
 
     if not has_telemetry:
-        columns_to_average = ["fx", "fy", "fz", "f_norm", "mx", "my", "mz", "currency"]
+        columns_to_average = ["fx", "fy", "fz", "mx", "my", "mz", "currency"]
     else:
-        columns_to_average = ["fx", "fy", "fz", "f_norm", "mx", "my", "mz", "currency", "RPM", "temperature", "voltage"]
+        columns_to_average = ["fx", "fy", "fz", "mx", "my", "mz", "currency", "RPM", "temperature", "voltage"]
 
     if if_reverse:
-        valid_data.loc[:, ["fz", "mz", "f_norm"]] *= -1
+        valid_data.loc[:, ["fz", "mz"]] *= -1
 
     # Group by 'PWM' and calculate the average for each specified column
     average_values = valid_data.groupby("PWM")[columns_to_average].mean()
 
     # Resetting index to make 'PWM' a column again
     average_values.reset_index(inplace=True)
+
+    # Recalculate f_norm after averaging, with the same sign as fz
+    # f_norm = sign(fz) * sqrt(fx^2 + fy^2 + fz^2)
+    f_magnitude = np.sqrt(average_values["fx"] ** 2 + average_values["fy"] ** 2 + average_values["fz"] ** 2)
+    average_values["f_norm"] = np.sign(average_values["fz"]) * f_magnitude
 
     # Add a column for power
     if has_telemetry:
