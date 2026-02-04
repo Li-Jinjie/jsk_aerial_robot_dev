@@ -264,7 +264,8 @@
       <child link="ee_contact"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
-
+  </xacro:if>
+  <xacro:if value="${end_effector_bottom == 'none'}">
     <!-- attach ee_bottom_contact to ee_bottom_mount -->
     <joint name="ee_bottom_mount_to_ee_bottom_contact" type="fixed">
       <parent link="ee_bottom_mount"/>
