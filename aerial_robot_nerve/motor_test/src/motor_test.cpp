@@ -11,7 +11,11 @@
 
 namespace Mode
 {
-  enum {STEP = 0, ONESHOT = 1,};
+enum
+{
+  STEP = 0,
+  ONESHOT = 1,
+};
 };
 
 class MotorTest
@@ -36,21 +40,26 @@ public:
 
     std::string topic_name;
     nhp_.param("force_sensor_sub_name", topic_name, std::string("forces"));
-    force_snesor_sub_ = nh_.subscribe(topic_name, 1, &MotorTest::forceSensorCallback, this, ros::TransportHints().tcpNoDelay());
+    force_snesor_sub_ =
+        nh_.subscribe(topic_name, 1, &MotorTest::forceSensorCallback, this, ros::TransportHints().tcpNoDelay());
     nhp_.param("power_info_sub_name", topic_name, std::string("power_info"));
-    power_info_sub_ = nh_.subscribe(topic_name, 1, &MotorTest::powerInfoCallback, this, ros::TransportHints().tcpNoDelay());
+    power_info_sub_ =
+        nh_.subscribe(topic_name, 1, &MotorTest::powerInfoCallback, this, ros::TransportHints().tcpNoDelay());
     nhp_.param("motor_pwm_sub_name", topic_name, std::string("power_pwm"));
-    motor_pwm_pub_ = nh_.advertise<std_msgs::Float32>(topic_name,1);
+    motor_pwm_pub_ = nh_.advertise<std_msgs::Float32>(topic_name, 1);
 
-    start_cmd_sub_ =  nh_.subscribe("start_log_cmd", 1,  &MotorTest::startCallback, this, ros::TransportHints().tcpNoDelay());
+    start_cmd_sub_ =
+        nh_.subscribe("start_log_cmd", 1, &MotorTest::startCallback, this, ros::TransportHints().tcpNoDelay());
     sps_on_pub_ = nh.advertise<std_msgs::Empty>("/power_on_cmd", 1);
 
     /* dshot telemetry */
     nhp_.param("has_dshot_telemetry", has_dshot_telemetry_, false);
+    nhp_.param("dshot_telemetry_id", dshot_telemetry_id_, 1);
 
     if (has_dshot_telemetry_)
     {
-      esc_telem_sub_ = nh_.subscribe("/esc_telem", 1, &MotorTest::escTelemCallback, this, ros::TransportHints().tcpNoDelay());
+      esc_telem_sub_ =
+          nh_.subscribe("/esc_telem", 1, &MotorTest::escTelemCallback, this, ros::TransportHints().tcpNoDelay());
     }
 
     ROS_WARN("run: %f, raise: %f, brake: %f", run_duration_, raise_duration_, brake_duration_);
@@ -58,17 +67,17 @@ public:
     ros::ServiceClient calib_client = nh_.serviceClient<std_srvs::Empty>("/cfs_sensor_calib");
     std_srvs::Empty srv;
     if (calib_client.call(srv))
-      {
-        ROS_INFO("done force sensor init calib");
-      }
+    {
+      ROS_INFO("done force sensor init calib");
+    }
     else
-      {
-        ROS_ERROR("Failed to call service /cfs_sensor_calib");
-      }
+    {
+      ROS_ERROR("Failed to call service /cfs_sensor_calib");
+    }
 
     sps_on_pub_.publish(std_msgs::Empty());
 
-    pwm_timer_ = nhp_.createTimer(ros::Duration(1.0 / 50), &MotorTest::pwmFunc,this);
+    pwm_timer_ = nhp_.createTimer(ros::Duration(1.0 / 50), &MotorTest::pwmFunc, this);
   }
 
   ~MotorTest()
@@ -85,7 +94,7 @@ private:
   ros::Publisher motor_pwm_pub_;
   ros::Publisher sps_on_pub_;
 
-  ros::Timer  pwm_timer_;
+  ros::Timer pwm_timer_;
 
   uint16_t pwm_value_;
 
@@ -93,7 +102,7 @@ private:
   bool start_flag_;
   bool once_flag_;
   double run_duration_;
-  double raise_duration_, brake_duration_; // for one-shot mode
+  double raise_duration_, brake_duration_;  // for one-shot mode
   int pwm_incremental_value_;
   int stop_pwm_value_, min_pwm_value_, max_pwm_value_;
   double pwm_range_;
@@ -105,30 +114,37 @@ private:
 
   /* dshot measurement */
   bool has_dshot_telemetry_;
+  int dshot_telemetry_id_;
   uint32_t rpm_;
   int temperature_;
   float voltage_;
 
-  void startCallback(const std_msgs::EmptyConstPtr & msg)
+  void startCallback(const std_msgs::EmptyConstPtr& msg)
   {
-    std::string file_name  = std::string("motor_test_") + std::to_string((int)ros::Time::now().toSec()) + std::string(".txt");
+    std::string file_name =
+        std::string("motor_test_") + std::to_string((int)ros::Time::now().toSec()) + std::string(".txt");
     ofs_.open(file_name, std::ios::out);
 
     pwm_value_ = min_pwm_value_;
 
     std_msgs::Float32 cmd_msg;
-    cmd_msg.data = pwm_value_  / pwm_range_;
+    cmd_msg.data = pwm_value_ / pwm_range_;
     motor_pwm_pub_.publish(cmd_msg);
     init_time_ = ros::Time::now();
     ROS_INFO("start pwm test");
     start_flag_ = true;
   }
 
-  void escTelemCallback(const spinal::ESCTelemetryArrayConstPtr & msg)
+  void escTelemCallback(const spinal::ESCTelemetryArrayConstPtr& msg)
   {
-    rpm_ = msg->esc_telemetry_1.rpm;
-    temperature_ = msg->esc_telemetry_1.temperature;
-    voltage_ = (float)(msg->esc_telemetry_1.voltage) / 100;
+    const auto& telemetry = (dshot_telemetry_id_ == 1) ? msg->esc_telemetry_1 :
+                            (dshot_telemetry_id_ == 2) ? msg->esc_telemetry_2 :
+                            (dshot_telemetry_id_ == 3) ? msg->esc_telemetry_3 :
+                                                         msg->esc_telemetry_4;
+
+    rpm_ = telemetry.rpm;
+    temperature_ = telemetry.temperature;
+    voltage_ = static_cast<float>(telemetry.voltage) / 100;
   }
 
   void powerInfoCallback(const takasako_sps::PowerInfoConstPtr& msg)
@@ -136,147 +152,131 @@ private:
     currency_ = msg->currency;
   }
 
-  void forceSensorCallback(const geometry_msgs::WrenchStampedConstPtr & msg)
+  void forceSensorCallback(const geometry_msgs::WrenchStampedConstPtr& msg)
   {
-    if(!start_flag_) return;
+    if (!start_flag_)
+      return;
 
-    double force_norm = sqrt(msg->wrench.force.x * msg->wrench.force.x +
-                             msg->wrench.force.y * msg->wrench.force.y +
+    double force_norm = sqrt(msg->wrench.force.x * msg->wrench.force.x + msg->wrench.force.y * msg->wrench.force.y +
                              msg->wrench.force.z * msg->wrench.force.z);
     if (has_dshot_telemetry_)
     {
-      ofs_ << pwm_value_ << " "
-           << msg->wrench.force.x << " "
-           << msg->wrench.force.y << " "
-           << msg->wrench.force.z << " "
-           << force_norm << " "
-           << msg->wrench.torque.x << " "
-           << msg->wrench.torque.y << " "
-           << msg->wrench.torque.z << " "
-           << currency_ << " "
-           << rpm_ << " "
-           << temperature_ << " "
-           << voltage_;
+      ofs_ << pwm_value_ << " " << msg->wrench.force.x << " " << msg->wrench.force.y << " " << msg->wrench.force.z
+           << " " << force_norm << " " << msg->wrench.torque.x << " " << msg->wrench.torque.y << " "
+           << msg->wrench.torque.z << " " << currency_ << " " << rpm_ << " " << temperature_ << " " << voltage_;
     }
     else
     {
-      ofs_ << pwm_value_ << " "
-           << msg->wrench.force.x << " "
-           << msg->wrench.force.y << " "
-           << msg->wrench.force.z << " "
-           << force_norm << " "
-           << msg->wrench.torque.x << " "
-           << msg->wrench.torque.y << " "
-           << msg->wrench.torque.z << " "
-           << currency_;
+      ofs_ << pwm_value_ << " " << msg->wrench.force.x << " " << msg->wrench.force.y << " " << msg->wrench.force.z
+           << " " << force_norm << " " << msg->wrench.torque.x << " " << msg->wrench.torque.y << " "
+           << msg->wrench.torque.z << " " << currency_;
     }
 
-
-    if(test_mode_ == Mode::ONESHOT)
+    if (test_mode_ == Mode::ONESHOT)
+    {
+      if (ros::Time::now().toSec() - init_time_.toSec() < raise_duration_)
       {
-        if(ros::Time::now().toSec() - init_time_.toSec() < raise_duration_)
-          {
-            ofs_ << " " << std::string("raise");
-          }
-        else
-          {
-            if(ros::Time::now().toSec() - init_time_.toSec() < raise_duration_ + run_duration_)
-              {
-                ofs_ << " " << std::string("valid");
-              }
-            else
-              {
-                ofs_ << " " << std::string("brake");
-              }
-          }
+        ofs_ << " " << std::string("raise");
       }
+      else
+      {
+        if (ros::Time::now().toSec() - init_time_.toSec() < raise_duration_ + run_duration_)
+        {
+          ofs_ << " " << std::string("valid");
+        }
+        else
+        {
+          ofs_ << " " << std::string("brake");
+        }
+      }
+    }
 
     ofs_ << std::endl;
   }
 
-  void pwmFunc(const ros::TimerEvent & e)
+  void pwmFunc(const ros::TimerEvent& e)
   {
-    if(!start_flag_) return;
+    if (!start_flag_)
+      return;
 
-    if(ros::Time::now().toSec() - init_time_.toSec() > run_duration_)
+    if (ros::Time::now().toSec() - init_time_.toSec() > run_duration_)
+    {
+      if (test_mode_ == Mode::STEP)
       {
-        if(test_mode_ == Mode::STEP)
+        pwm_value_ += pwm_incremental_value_;
+        init_time_ = ros::Time::now();
+      }
+      else if (test_mode_ == Mode::ONESHOT)
+      {
+        if (ros::Time::now().toSec() - init_time_.toSec() > run_duration_ + raise_duration_)
+        {
+          if (once_flag_)
           {
-            pwm_value_ += pwm_incremental_value_;
-            init_time_ = ros::Time::now();
-          }
-        else if(test_mode_ == Mode::ONESHOT)
-          {
-            if(ros::Time::now().toSec() - init_time_.toSec() > run_duration_ + raise_duration_)
-              {
-                if(once_flag_)
-                  {
-                    std_msgs::Float32 cmd_msg;
-                    cmd_msg.data = stop_pwm_value_ / pwm_range_;
-                    motor_pwm_pub_.publish(cmd_msg);
-                    once_flag_ = false;
-                    ROS_WARN("STOP");
-                    return;
-                  }
-              }
-            else
-              {
-                return;
-              }
-
-            if(ros::Time::now().toSec() - init_time_.toSec() > run_duration_ + raise_duration_ + brake_duration_)
-              {
-                /* need to wait 1s for calibration */
-                ros::ServiceClient calib_client = nh_.serviceClient<std_srvs::Empty>("/cfs_sensor_calib");
-                std_srvs::Empty srv;
-                if (calib_client.call(srv))
-                  {
-                    ROS_INFO("done force sensor calib");
-                    once_flag_ = true;
-                    pwm_value_ += pwm_incremental_value_;
-                    init_time_ = ros::Time::now();
-                  }
-                else
-                  {
-                    ROS_ERROR("Failed to call service add_two_ints");
-                    pwm_value_ = max_pwm_value_ + pwm_incremental_value_;
-                  }
-              }
-          }
-
-        if(pwm_value_ > max_pwm_value_)
-          {
-            start_flag_ = false;
             std_msgs::Float32 cmd_msg;
             cmd_msg.data = stop_pwm_value_ / pwm_range_;
             motor_pwm_pub_.publish(cmd_msg);
-
-            ROS_WARN("finish pwm test");
-            ofs_ << "done" << std::endl;
-            ofs_.close();
-
+            once_flag_ = false;
+            ROS_WARN("STOP");
             return;
           }
+        }
+        else
+        {
+          return;
+        }
 
-        if(once_flag_)
+        if (ros::Time::now().toSec() - init_time_.toSec() > run_duration_ + raise_duration_ + brake_duration_)
+        {
+          /* need to wait 1s for calibration */
+          ros::ServiceClient calib_client = nh_.serviceClient<std_srvs::Empty>("/cfs_sensor_calib");
+          std_srvs::Empty srv;
+          if (calib_client.call(srv))
           {
-            ROS_INFO("target_pwm: %d", pwm_value_);
-            std_msgs::Float32 cmd_msg;
-            cmd_msg.data = pwm_value_ / pwm_range_;
-            motor_pwm_pub_.publish(cmd_msg);
+            ROS_INFO("done force sensor calib");
+            once_flag_ = true;
+            pwm_value_ += pwm_incremental_value_;
+            init_time_ = ros::Time::now();
           }
+          else
+          {
+            ROS_ERROR("Failed to call service add_two_ints");
+            pwm_value_ = max_pwm_value_ + pwm_incremental_value_;
+          }
+        }
       }
-  }
 
+      if (pwm_value_ > max_pwm_value_)
+      {
+        start_flag_ = false;
+        std_msgs::Float32 cmd_msg;
+        cmd_msg.data = stop_pwm_value_ / pwm_range_;
+        motor_pwm_pub_.publish(cmd_msg);
+
+        ROS_WARN("finish pwm test");
+        ofs_ << "done" << std::endl;
+        ofs_.close();
+
+        return;
+      }
+
+      if (once_flag_)
+      {
+        ROS_INFO("target_pwm: %d", pwm_value_);
+        std_msgs::Float32 cmd_msg;
+        cmd_msg.data = pwm_value_ / pwm_range_;
+        motor_pwm_pub_.publish(cmd_msg);
+      }
+    }
+  }
 };
 
-int main (int argc, char **argv)
+int main(int argc, char** argv)
 {
-  ros::init (argc, argv, "force_sensor_log");
+  ros::init(argc, argv, "force_sensor_log");
   ros::NodeHandle nh;
   ros::NodeHandle nh_private("~");
-  MotorTest*  logNode = new MotorTest(nh, nh_private);
-  ros::AsyncSpinner spinner(4); // Use 4 threads
+  MotorTest* logNode = new MotorTest(nh, nh_private);
+  ros::AsyncSpinner spinner(4);  // Use 4 threads
   spinner.start();
   ros::waitForShutdown();
 

@@ -65,7 +65,8 @@ AttitudeController::AttitudeController()
 }
 
 void AttitudeController::init(TIM_HandleTypeDef* htim1, TIM_HandleTypeDef* htim2, StateEstimate* estimator,
-                              DirectServo* servo, DShot* dshot, BatteryStatus* bat, ros::NodeHandle* nh, osMutexId* mutex)
+                              DirectServo* servo, DShot* dshot, BatteryStatus* bat, ros::NodeHandle* nh,
+                              osMutexId* mutex)
 {
   pwm_htim1_ = htim1;
   pwm_htim2_ = htim2;
@@ -212,14 +213,22 @@ void AttitudeController::pwmsControl(void)
   uint16_t motor_value[4] = { 0, 0, 0, 0 };
   for (int i = 0; i < 4; i++)
   {
-    // target_pwm_: 0.5 ~ 1.0
-    uint16_t motor_v = (uint16_t)((target_pwm_[i] - 0.5) / 0.5 * DSHOT_RANGE + DSHOT_MIN_THROTTLE);
+    uint16_t motor_v;
 
-    if (motor_v > DSHOT_MAX_THROTTLE)
+    // target_pwm_: 0.5 ~ 1.0
+    if (target_pwm_[i] <= 0.5)
+    {
+      motor_v = DSHOT_DISARM_THROTTLE;
+    }
+    else if (target_pwm_[i] > 1.0)
+    {
       motor_v = DSHOT_MAX_THROTTLE;
-    else if (motor_v < DSHOT_MIN_THROTTLE)
-      motor_v = DSHOT_MIN_THROTTLE;
-    
+    }
+    else
+    {
+      motor_v = (uint16_t)((target_pwm_[i] - 0.5) / 0.5 * DSHOT_RANGE + DSHOT_MIN_THROTTLE);
+    }
+
     motor_value[i] = motor_v;
   }
 
@@ -237,7 +246,8 @@ void AttitudeController::pwmsControl(void)
       esc_telem_pub_.publish(&esc_telem_msg_);
 
       float voltage_ave = (float)(dshot_->esc_reader_.esc_msg_1_.voltage + dshot_->esc_reader_.esc_msg_2_.voltage +
-                    dshot_->esc_reader_.esc_msg_3_.voltage + dshot_->esc_reader_.esc_msg_4_.voltage) / 400.0;
+                                  dshot_->esc_reader_.esc_msg_3_.voltage + dshot_->esc_reader_.esc_msg_4_.voltage) /
+                          400.0;
       bat_->update(voltage_ave);
 
       dshot_->esc_reader_.is_update_all_msg_ = false;
@@ -625,7 +635,7 @@ void AttitudeController::rpyGainCallback(const spinal::RollPitchYawTerms& gain_m
   if (motor_number_ == 0)
     return;  // not be activated
 
-    /* check the number of motor which should be equal to the ros thrust */
+  /* check the number of motor which should be equal to the ros thrust */
 #ifdef SIMULATION
   if (gain_msg.motors.size() != motor_number_ && gain_msg.motors.size() != 1)
   {

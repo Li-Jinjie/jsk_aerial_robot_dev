@@ -9,7 +9,10 @@
   <!-- parameters for oneshot -->
   <arg name="raise_duration" default="2.0" />
   <arg name="brake_duration" default="4.0" />
+
+  <!-- dshot telemetry -->
   <arg name="has_dshot_telemetry" default="false" />
+  <arg name="dshot_telemetry_id" default="1" />  <!-- 1, 2, 3, 4 -->
 
   <arg name="force_sensor" default="CFS034CA301U" /> <!-- other sensor: PFS055YA501U6 -->
 
@@ -36,5 +39,6 @@
     <param name="raise_duration" value="$(arg raise_duration)" />
     <param name="brake_duration" value="$(arg brake_duration)" />
     <param name="has_dshot_telemetry" value="$(arg has_dshot_telemetry)" />
+    <param name="dshot_telemetry_id" value="$(arg dshot_telemetry_id)" />
   </node>
 </launch>
