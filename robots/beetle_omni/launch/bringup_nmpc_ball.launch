@@ -34,6 +34,7 @@
 
   <arg name="end_effector" default="none"/>  <!-- "ball", "fork", "brush", "sensor_ball", "osmo"   -->
   <arg name="end_effector_bottom" default="brush_short"/>  <!-- "brush_short", etc. -->
+  <arg name="has_h_flow" default="False"/>
 
   ########### Parameters ###########
   <group ns="$(arg robot_ns)">
@@ -98,7 +99,7 @@
     <arg name="headless" value="$(arg headless)"/>
     <arg name="robot_model" value="$(find beetle_omni)/robots/dragon_ball.$(arg description_mode).xacro"/>
     <arg name="model_options"
-         value="end_effector:=$(arg end_effector) end_effector_bottom:=$(arg end_effector_bottom)"/>
+         value="end_effector:=$(arg end_effector) end_effector_bottom:=$(arg end_effector_bottom) has_h_flow:=$(arg has_h_flow)"/>
     <arg name="robot_ns" value="$(arg robot_ns)"/>
     <arg name="rviz_config" value="$(arg config_dir)/rviz/nmpc_dragon_ball.rviz"/>
     <arg name="rviz_init_pose" value="$(arg config_dir)/rviz/RvizInit.yaml"/>

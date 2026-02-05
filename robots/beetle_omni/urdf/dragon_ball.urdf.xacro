@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="dragon_ball_link" >
+  <xacro:include filename="$(find beetle_omni)/urdf/sensors/h_flow.xacro"/>
   <!-- general attribute -->
   <baselink name="fc" />
   <thrust_link name="thrust" />
@@ -23,7 +24,7 @@
   </xacro:macro>
 
   <!-- robot -->
-  <xacro:macro name="dragon_ball_center_link" params="child1 child2 child3 child4">
+  <xacro:macro name="dragon_ball_center_link" params="child1 child2 child3 child4 has_h_flow">
     ## dummy
     <link name="root"/>
 
@@ -97,6 +98,15 @@
     <xacro:dummy_rotor_arm id = "${child2}" x = "-0.08231" y="0.08231" z = "0.0175" yaw = "${pi*3.0/4.0}"/>
     <xacro:dummy_rotor_arm id = "${child3}" x = "-0.08231" y="-0.08231" z = "0.0175" yaw = "${pi*5.0/4.0}"/>
     <xacro:dummy_rotor_arm id = "${child4}" x = "0.08231" y="-0.08231" z = "0.0175" yaw = "${-pi*1.0/4.0}"/>
+
+    <xacro:if value="${has_h_flow}">
+      <xacro:h_flow_sensor name="h_flow_1" parent_link="main_body" robot_ns="${robot_name}" xyz="0.08357 0 0.104" rpy="0 0 0"/>
+      <xacro:h_flow_sensor name="h_flow_2" parent_link="main_body" robot_ns="${robot_name}" xyz="0.06377 0 0.021" rpy="0 1.570796 0"/>
+      <xacro:h_flow_sensor name="h_flow_3" parent_link="main_body" robot_ns="${robot_name}" xyz="0 0.06377 0.021" rpy="0 1.570796 1.570796"/>
+      <xacro:h_flow_sensor name="h_flow_4" parent_link="main_body" robot_ns="${robot_name}" xyz="-0.06377 0 0.021" rpy="0 1.570796 3.141592"/>
+      <xacro:h_flow_sensor name="h_flow_5" parent_link="main_body" robot_ns="${robot_name}" xyz="0 -0.06377 0.021" rpy="0 1.570796 -1.570796"/>
+      <xacro:h_flow_sensor name="h_flow_6" parent_link="main_body" robot_ns="${robot_name}" xyz="-0.08357 0 -0.062" rpy="3.141592 0 0"/>
+    </xacro:if>
 
     <xacro:friction self="main_body"/>
   </xacro:macro>
@@ -205,8 +215,9 @@
 <!-- Define dragon_ball -->
   <xacro:arg name="robot_name" default="dragon-ball" />
   <xacro:property name="robot_name" value="$(arg robot_name)"/>
+  <xacro:arg name="has_h_flow" default="false" />
 
-  <xacro:dragon_ball_center_link child1="1" child2="2" child3="3" child4="4"/>
+  <xacro:dragon_ball_center_link child1="1" child2="2" child3="3" child4="4" has_h_flow="$(arg has_h_flow)"/>
   <xacro:dragon_ball_thrust_link self="1" rotor_direction="1"/>
   <xacro:dragon_ball_thrust_link self="2" rotor_direction="-1"/>
   <xacro:dragon_ball_thrust_link self="3" rotor_direction="1"/>
