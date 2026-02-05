@@ -52,7 +52,7 @@
     <joint name="root_joint" type="fixed">
       <parent link="root"/>
       <child link="main_body"/>
-      <origin rpy="0 0 0.78539816" xyz="0 0 0"/>
+      <origin rpy="0 0 -2.356194" xyz="0 0 0"/>
     </joint>
 
     <link name="fc">
@@ -67,8 +67,8 @@
     </link>
     <joint name="fc_joint" type="fixed">
       <child link="fc"/>
-      <parent link="root"/>
-      <origin rpy="0 0 0" xyz="-0.0175 -0.0015 0.075"/>  # should be aligned with the position of IMU
+      <parent link="main_body"/>
+      <origin rpy="0 0 2.356194" xyz="-0.0175 -0.0015 0.075"/>  # should be aligned with the position of IMU
     </joint>
 
     ## rotor arm macro
