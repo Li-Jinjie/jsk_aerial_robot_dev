@@ -44,7 +44,8 @@ anal_traj_list = [
     for name, cls in inspect.getmembers(trajs, inspect.isclass)
     # optionally ensure the class is defined in trajs and not an imported library
     if cls.__module__ == "aerial_robot_planning.trajs"
-    and name not in {"BaseTraj", "BaseTrajwFixedRotor", "PitchContinuousRotationTraj"}
+    and "Base" not in name
+    and name not in {"PitchContinuousRotationTraj"}
 ]
 traj_register.register_anal_traj_list("trajs", anal_traj_list)
 
@@ -53,7 +54,9 @@ from aerial_robot_planning.voice import sound_trajs
 anal_sound_traj_list = [
     cls
     for name, cls in inspect.getmembers(sound_trajs, inspect.isclass)
-    if cls.__module__ == "aerial_robot_planning.voice.sound_trajs" and name not in {"BaseTrajwSound", "StringNoteTraj"}
+    if cls.__module__ == "aerial_robot_planning.voice.sound_trajs"
+    and "Base" not in name
+    and name not in {"StringNoteTraj"}
 ]
 traj_register.register_anal_traj_list("sound_trajs", anal_sound_traj_list)
 
