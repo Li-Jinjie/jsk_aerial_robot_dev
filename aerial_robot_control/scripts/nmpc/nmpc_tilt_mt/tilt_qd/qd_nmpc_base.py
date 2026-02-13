@@ -22,6 +22,9 @@ class QDNMPCBase(RecedingHorizonBase):
         # - phys: Physical parameters of the robot.
         if not hasattr(self, "phys"):
             raise AttributeError("Physical parameters not set. Please set the phys attribute in the child class.")
+        # - num_rotors: Number of rotors for the multirotor system. Default is 4 for quadrotor.
+        if not hasattr(self, "num_rotors"):
+            self.num_rotors = 4  # Default to quadrotor
         # - tilt: Flag to include tiltable rotors. If not included, the quadrotor is assumed to be a fixed quadrotor.
         if not hasattr(self, "tilt"):
             raise AttributeError("Tilt flag not set. Please set the tilt attribute in the child class.")
@@ -103,21 +106,25 @@ class QDNMPCBase(RecedingHorizonBase):
         # Note: If servo angle is not used as control input the model for omnidirectional Quadrotor
         # has been observed to be unstable (see https://arxiv.org/abs/2405.09871).
         if self.tilt and self.include_servo_model:
-            self.a1s = ca.SX.sym("a1s")
-            self.a2s = ca.SX.sym("a2s")
-            self.a3s = ca.SX.sym("a3s")
-            self.a4s = ca.SX.sym("a4s")
-            self.a_s = ca.vertcat(self.a1s, self.a2s, self.a3s, self.a4s)
+            # Dynamically create servo angle state variables for each rotor
+            self.a_s_list = []
+            for i in range(1, self.num_rotors + 1):
+                a_s = ca.SX.sym(f"a{i}s")
+                setattr(self, f"a{i}s", a_s)
+                self.a_s_list.append(a_s)
+            self.a_s = ca.vertcat(*self.a_s_list)
             state = ca.vertcat(state, self.a_s)
 
         # - Extend state-space by dynamics of rotor (actual)
         # Differentiate between actual thrust and control thrust
         if self.include_thrust_model:
-            self.ft1s = ca.SX.sym("ft1s")
-            self.ft2s = ca.SX.sym("ft2s")
-            self.ft3s = ca.SX.sym("ft3s")
-            self.ft4s = ca.SX.sym("ft4s")
-            self.ft_s = ca.vertcat(self.ft1s, self.ft2s, self.ft3s, self.ft4s)
+            # Dynamically create thrust state variables for each rotor
+            self.ft_s_list = []
+            for i in range(1, self.num_rotors + 1):
+                ft_s = ca.SX.sym(f"ft{i}s")
+                setattr(self, f"ft{i}s", ft_s)
+                self.ft_s_list.append(ft_s)
+            self.ft_s = ca.vertcat(*self.ft_s_list)
             state = ca.vertcat(state, self.ft_s)
 
         # - Extend state-space by disturbance on CoG (actual)
@@ -135,25 +142,30 @@ class QDNMPCBase(RecedingHorizonBase):
 
         # Control inputs
         # - Forces from thrust at each rotor
-        self.ft1c = ca.SX.sym("ft1c")
-        self.ft2c = ca.SX.sym("ft2c")
-        self.ft3c = ca.SX.sym("ft3c")
-        self.ft4c = ca.SX.sym("ft4c")
-        self.ft_c = ca.vertcat(self.ft1c, self.ft2c, self.ft3c, self.ft4c)
-        controls = ca.vertcat(self.ft1c, self.ft2c, self.ft3c, self.ft4c)
+        # Dynamically create thrust control variables for each rotor
+        self.ft_c_list = []
+        for i in range(1, self.num_rotors + 1):
+            ft_c = ca.SX.sym(f"ft{i}c")
+            setattr(self, f"ft{i}c", ft_c)
+            self.ft_c_list.append(ft_c)
+        self.ft_c = ca.vertcat(*self.ft_c_list)
+        controls = ca.vertcat(*self.ft_c_list)
         # - Servo angle for tiltable rotors (actuated)
         if self.tilt:
-            self.a1c = ca.SX.sym("a1c")
-            self.a2c = ca.SX.sym("a2c")
-            self.a3c = ca.SX.sym("a3c")
-            self.a4c = ca.SX.sym("a4c")
+            # Dynamically create servo angle control variables for each rotor
+            self.a_c_list = []
+            self.ad_c_list = []
+            for i in range(1, self.num_rotors + 1):
+                a_c = ca.SX.sym(f"a{i}c")
+                setattr(self, f"a{i}c", a_c)
+                self.a_c_list.append(a_c)
             # Either use the time-derivative of the servo angle as control input directly
             if self.include_servo_derivative:
-                self.ad_c = ca.vertcat(self.a1c, self.a2c, self.a3c, self.a4c)
+                self.ad_c = ca.vertcat(*self.a_c_list)
                 controls = ca.vertcat(controls, self.ad_c)
             # Or use numerical differentation to calculate time-derivate in dynamical model
             else:
-                self.a_c = ca.vertcat(self.a1c, self.a2c, self.a3c, self.a4c)
+                self.a_c = ca.vertcat(*self.a_c_list)
                 controls = ca.vertcat(controls, self.a_c)
 
         # Model parameters
@@ -173,15 +185,17 @@ class QDNMPCBase(RecedingHorizonBase):
 
         kq_d_kt = ca.SX.sym("kq_d_kt")
 
-        dr1 = ca.SX.sym("dr1")
-        dr2 = ca.SX.sym("dr2")
-        dr3 = ca.SX.sym("dr3")
-        dr4 = ca.SX.sym("dr4")
+        # Dynamically create rotor direction and position parameters for each rotor
+        dr_list = []
+        p_b_list = []
+        for i in range(1, self.num_rotors + 1):
+            dr = ca.SX.sym(f"dr{i}")
+            setattr(self, f"dr{i}", dr)
+            dr_list.append(dr)
 
-        p1_b = ca.SX.sym("p1_b", 3)
-        p2_b = ca.SX.sym("p2_b", 3)
-        p3_b = ca.SX.sym("p3_b", 3)
-        p4_b = ca.SX.sym("p4_b", 3)
+            p_b = ca.SX.sym(f"p{i}_b", 3)
+            setattr(self, f"p{i}_b", p_b)
+            p_b_list.append(p_b)
 
         t_rotor = ca.SX.sym("t_rotor")
         t_servo = ca.SX.sym("t_servo")
@@ -191,9 +205,11 @@ class QDNMPCBase(RecedingHorizonBase):
         self.ee_p = ca.SX.sym("ee_p", 3)
         self.ee_q = ca.SX.sym("ee_qwxyz", 4)  # qw, qx, qy, qz
 
-        phy_params = ca.vertcat(mass, gravity, Ixx, Iyy, Izz, kq_d_kt,
-                                dr1, p1_b, dr2, p2_b, dr3, p3_b, dr4, p4_b, t_rotor, t_servo,
-                                self.ee_p, self.ee_q)
+        # Build phy_params by interleaving dr and p_b for each rotor
+        phy_params = ca.vertcat(mass, gravity, Ixx, Iyy, Izz, kq_d_kt)
+        for i in range(self.num_rotors):
+            phy_params = ca.vertcat(phy_params, dr_list[i], p_b_list[i])
+        phy_params = ca.vertcat(phy_params, t_rotor, t_servo, self.ee_p, self.ee_q)
         parameters = ca.vertcat(parameters, phy_params)
 
         # - Extend model parameters by CoG disturbance
@@ -228,110 +244,66 @@ class QDNMPCBase(RecedingHorizonBase):
         # Transformation matrices between coordinate systems World, Body, End-of-arm, Rotor using quaternions
         # - World to Body
         rot_wb = self._get_rot_wb_ca(self.qw, self.qx, self.qy, self.qz)
-        # - Body to End-of-arm
-        denominator = np.sqrt(p1_b[0] ** 2 + p1_b[1] ** 2)
-        rot_be1 = np.array(
-            [
-                [p1_b[0] / denominator, -p1_b[1] / denominator, 0],
-                [p1_b[1] / denominator,  p1_b[0] / denominator, 0],
-                [0, 0, 1],
-            ]
-        )
 
-        denominator = np.sqrt(p2_b[0] ** 2 + p2_b[1] ** 2)
-        rot_be2 = np.array(
-            [
-                [p2_b[0] / denominator, -p2_b[1] / denominator, 0],
-                [p2_b[1] / denominator,  p2_b[0] / denominator, 0],
-                [0, 0, 1],
-            ]
-        )
-
-        denominator = np.sqrt(p3_b[0] ** 2 + p3_b[1] ** 2)
-        rot_be3 = np.array(
-            [
-                [p3_b[0] / denominator, -p3_b[1] / denominator, 0],
-                [p3_b[1] / denominator,  p3_b[0] / denominator, 0],
-                [0, 0, 1],
-            ]
-        )
-
-        denominator = np.sqrt(p4_b[0] ** 2 + p4_b[1] ** 2)
-        rot_be4 = np.array(
-            [
-                [p4_b[0] / denominator, -p4_b[1] / denominator, 0],
-                [p4_b[1] / denominator,  p4_b[0] / denominator, 0],
-                [0, 0, 1],
-            ]
-        )
+        # - Body to End-of-arm (dynamically create for each rotor)
+        rot_be_list = []
+        for i in range(self.num_rotors):
+            p_b = p_b_list[i]
+            denominator = ca.sqrt(p_b[0] ** 2 + p_b[1] ** 2)
+            rot_be = ca.vertcat(
+                ca.horzcat(p_b[0] / denominator, -p_b[1] / denominator, 0),
+                ca.horzcat(p_b[1] / denominator,  p_b[0] / denominator, 0),
+                ca.horzcat(0, 0, 1)
+            )
+            rot_be_list.append(rot_be)
 
         # - End-of-arm to Rotor
         # Take tilt rotation with angle alpha (a) of R frame to E frame into account
+        rot_er_list = []
         if self.tilt:
             # If servo dynamics are modeled, use angle state.
             # Else use angle control which is then assumed to be equal to the angle state at all times.
-            if self.include_servo_model:
-                a1 = self.a1s
-                a2 = self.a2s
-                a3 = self.a3s
-                a4 = self.a4s
-            else:
-                a1 = self.a1c
-                a2 = self.a2c
-                a3 = self.a3c
-                a4 = self.a4c
-
-            rot_e1r1 = self._get_rot_around_x(a1)
-            rot_e2r2 = self._get_rot_around_x(a2)
-            rot_e3r3 = self._get_rot_around_x(a3)
-            rot_e4r4 = self._get_rot_around_x(a4)
+            for i in range(self.num_rotors):
+                if self.include_servo_model:
+                    a = self.a_s_list[i]
+                else:
+                    a = self.a_c_list[i]
+                rot_er = self._get_rot_around_x(a)
+                rot_er_list.append(rot_er)
         else:
-            rot_e1r1 = ca.SX.eye(3)
-            rot_e2r2 = ca.SX.eye(3)
-            rot_e3r3 = ca.SX.eye(3)
-            rot_e4r4 = ca.SX.eye(3)
+            for i in range(self.num_rotors):
+                rot_er_list.append(ca.SX.eye(3))
 
         # Wrench in Rotor frame
         # If rotor dynamics are modeled, explicitly use thrust state as force.
         # Else use thrust control which is then assumed to be equal to the thrust state at all times.
-        if self.include_thrust_model:
-            ft1 = self.ft1s
-            ft2 = self.ft2s
-            ft3 = self.ft3s
-            ft4 = self.ft4s
-        else:
-            ft1 = self.ft1c
-            ft2 = self.ft2c
-            ft3 = self.ft3c
-            ft4 = self.ft4c
+        ft_list = []
+        for i in range(self.num_rotors):
+            if self.include_thrust_model:
+                ft = self.ft_s_list[i]
+            else:
+                ft = self.ft_c_list[i]
+            ft_list.append(ft)
 
-        ft_r1 = ca.vertcat(0, 0, ft1)
-        ft_r2 = ca.vertcat(0, 0, ft2)
-        ft_r3 = ca.vertcat(0, 0, ft3)
-        ft_r4 = ca.vertcat(0, 0, ft4)
+        # Force and torque vectors in rotor frame for each rotor
+        ft_r_list = []
+        tau_r_list = []
+        for i in range(self.num_rotors):
+            ft_r = ca.vertcat(0, 0, ft_list[i])
+            tau_r = ca.vertcat(0, 0, -dr_list[i] * ft_list[i] * kq_d_kt)
+            ft_r_list.append(ft_r)
+            tau_r_list.append(tau_r)
 
-        tau_r1 = ca.vertcat(0, 0, -dr1 * ft1 * kq_d_kt)
-        tau_r2 = ca.vertcat(0, 0, -dr2 * ft2 * kq_d_kt)
-        tau_r3 = ca.vertcat(0, 0, -dr3 * ft3 * kq_d_kt)
-        tau_r4 = ca.vertcat(0, 0, -dr4 * ft4 * kq_d_kt)
+        # Wrench in Body frame - sum contributions from all rotors
+        fu_b = ca.SX.zeros(3)
+        tau_u_b = ca.SX.zeros(3)
+        for i in range(self.num_rotors):
+            # Force contribution
+            fu_b += ca.mtimes(rot_be_list[i], ca.mtimes(rot_er_list[i], ft_r_list[i]))
+            # Torque contribution (from rotor drag + moment arm)
+            tau_u_b += ca.mtimes(rot_be_list[i], ca.mtimes(rot_er_list[i], tau_r_list[i]))
+            tau_u_b += ca.cross(p_b_list[i], ca.mtimes(rot_be_list[i], ca.mtimes(rot_er_list[i], ft_r_list[i])))
 
-        # Wrench in Body frame
-        fu_b = (
-                  ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, ft_r1))
-                + ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, ft_r2))
-                + ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, ft_r3))
-                + ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, ft_r4))
-        )
-        tau_u_b = (
-                  ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, tau_r1))
-                + ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, tau_r2))
-                + ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, tau_r3))
-                + ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, tau_r4))
-                + ca.cross(p1_b, ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, ft_r1)))
-                + ca.cross(p2_b, ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, ft_r2)))
-                + ca.cross(p3_b, ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, ft_r3)))
-                + ca.cross(p4_b, ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, ft_r4)))
-        )
 
         # Compute Inertia
         I = ca.diag(ca.vertcat(Ixx, Iyy, Izz))
@@ -520,17 +492,25 @@ class QDNMPCBase(RecedingHorizonBase):
         # -- Index for vx, vy, vz, wx, wy, wz
         ocp.constraints.idxbx = np.array([3, 4, 5, 10, 11, 12])
 
-        # -- Index for a1s, a2s, a3s, a4s
+        # Calculate starting indices for servo and thrust states
+        base_state_size = 13  # p(3) + v(3) + q(4) + w(3)
+        servo_start_idx = base_state_size
+        thrust_start_idx = base_state_size + (self.num_rotors if (self.tilt and self.include_servo_model) else 0)
+
+        # -- Index for a1s, a2s, ..., aNs
         if self.tilt and self.include_servo_model:
-            ocp.constraints.idxbx = np.append(ocp.constraints.idxbx, [13, 14, 15, 16])
+            servo_indices = np.arange(servo_start_idx, servo_start_idx + self.num_rotors)
+            ocp.constraints.idxbx = np.append(ocp.constraints.idxbx, servo_indices)
 
-            # -- Index for ft1s, ft2s, ft3s, ft4s (When included servo AND thrust, add further indices)
+            # -- Index for ft1s, ft2s, ..., ftNs (When included servo AND thrust, add further indices)
             if self.include_thrust_model:
-                ocp.constraints.idxbx = np.append(ocp.constraints.idxbx, [17, 18, 19, 20])
+                thrust_indices = np.arange(thrust_start_idx, thrust_start_idx + self.num_rotors)
+                ocp.constraints.idxbx = np.append(ocp.constraints.idxbx, thrust_indices)
 
-        # -- Index for ft1s, ft2s, ft3s, ft4s (When only included thrust, use the same indices)
+        # -- Index for ft1s, ft2s, ..., ftNs (When only included thrust, use the same indices)
         elif self.include_thrust_model:
-            ocp.constraints.idxbx = np.append(ocp.constraints.idxbx, [13, 14, 15, 16])
+            thrust_indices = np.arange(thrust_start_idx, thrust_start_idx + self.num_rotors)
+            ocp.constraints.idxbx = np.append(ocp.constraints.idxbx, thrust_indices)
 
         # -- Lower State Bound
         # fmt: off
@@ -544,17 +524,11 @@ class QDNMPCBase(RecedingHorizonBase):
 
         if self.tilt and self.include_servo_model:
             ocp.constraints.lbx = np.append(ocp.constraints.lbx,
-                                            [self.params["a_min"],
-                                             self.params["a_min"],
-                                             self.params["a_min"],
-                                             self.params["a_min"]])
+                                            [self.params["a_min"]] * self.num_rotors)
 
         if self.include_thrust_model:
             ocp.constraints.lbx = np.append(ocp.constraints.lbx,
-                                            [self.params["thrust_min"],
-                                             self.params["thrust_min"],
-                                             self.params["thrust_min"],
-                                             self.params["thrust_min"]])
+                                            [self.params["thrust_min"]] * self.num_rotors)
 
         # -- Upper State Bound
         ocp.constraints.ubx = np.array(
@@ -567,33 +541,27 @@ class QDNMPCBase(RecedingHorizonBase):
 
         if self.tilt and self.include_servo_model:
             ocp.constraints.ubx = np.append(ocp.constraints.ubx,
-                                            [self.params["a_max"],
-                                             self.params["a_max"],
-                                             self.params["a_max"],
-                                             self.params["a_max"]])
+                                            [self.params["a_max"]] * self.num_rotors)
 
         if self.include_thrust_model:
             ocp.constraints.ubx = np.append(ocp.constraints.ubx,
-                                            [self.params["thrust_max"],
-                                             self.params["thrust_max"],
-                                             self.params["thrust_max"],
-                                             self.params["thrust_max"]])
+                                            [self.params["thrust_max"]] * self.num_rotors)
 
         # - Terminal state box constraints bx_e
         # -- Index for vx, vy, vz, wx, wy, wz
         ocp.constraints.idxbx_e = np.array([3, 4, 5, 10, 11, 12])
 
-        # -- Index for a1s, a2s, a3s, a4s
+        # -- Index for a1s, a2s, ..., aNs
         if self.tilt and self.include_servo_model:
-            ocp.constraints.idxbx_e = np.append(ocp.constraints.idxbx_e, [13, 14, 15, 16])
+            ocp.constraints.idxbx_e = np.append(ocp.constraints.idxbx_e, servo_indices)
 
-            # -- Index for ft1s, ft2s, ft3s, ft4s (When included servo AND thrust, add further indices)
+            # -- Index for ft1s, ft2s, ..., ftNs (When included servo AND thrust, add further indices)
             if self.include_thrust_model:
-                ocp.constraints.idxbx_e = np.append(ocp.constraints.idxbx_e, [17, 18, 19, 20])
+                ocp.constraints.idxbx_e = np.append(ocp.constraints.idxbx_e, thrust_indices)
 
-        # -- Index for ft1s, ft2s, ft3s, ft4s (When only included thrust, use the same indices)
+        # -- Index for ft1s, ft2s, ..., ftNs (When only included thrust, use the same indices)
         elif self.include_thrust_model:
-            ocp.constraints.idxbx_e = np.append(ocp.constraints.idxbx_e, [13, 14, 15, 16])
+            ocp.constraints.idxbx_e = np.append(ocp.constraints.idxbx_e, thrust_indices)
 
         # -- Lower Terminal State Bound
         ocp.constraints.lbx_e = np.array(
@@ -606,17 +574,11 @@ class QDNMPCBase(RecedingHorizonBase):
 
         if self.tilt and self.include_servo_model:
             ocp.constraints.lbx_e = np.append(ocp.constraints.lbx_e,
-                [self.params["a_min"],
-                 self.params["a_min"],
-                 self.params["a_min"],
-                 self.params["a_min"]])
+                [self.params["a_min"]] * self.num_rotors)
 
         if self.include_thrust_model:
             ocp.constraints.lbx_e = np.append(ocp.constraints.lbx_e,
-                [self.params["thrust_min"],
-                 self.params["thrust_min"],
-                 self.params["thrust_min"],
-                 self.params["thrust_min"]])
+                [self.params["thrust_min"]] * self.num_rotors)
 
         # -- Upper Terminal State Bound
         ocp.constraints.ubx_e = np.array(
@@ -629,75 +591,57 @@ class QDNMPCBase(RecedingHorizonBase):
 
         if self.tilt and self.include_servo_model:
             ocp.constraints.ubx_e = np.append(ocp.constraints.ubx_e,
-                [self.params["a_max"],
-                 self.params["a_max"],
-                 self.params["a_max"],
-                 self.params["a_max"]])
+                [self.params["a_max"]] * self.num_rotors)
 
         if self.include_thrust_model:
             ocp.constraints.ubx_e = np.append(ocp.constraints.ubx_e,
-                [self.params["thrust_max"],
-                 self.params["thrust_max"],
-                 self.params["thrust_max"],
-                 self.params["thrust_max"]])
+                [self.params["thrust_max"]] * self.num_rotors)
 
         # - Input box constraints bu
         # TODO Potentially a good idea to omit the input constraint when set the equivalent state
-        # -- Index for ft1c, ft2c, ft3c, ft4c
-        ocp.constraints.idxbu = np.array([0, 1, 2, 3])
-        # -- Index for a1c, a2c, a3c, a4c
+        # -- Index for ft1c, ft2c, ..., ftNc
+        ocp.constraints.idxbu = np.arange(0, self.num_rotors)
+        # -- Index for a1c, a2c, ..., aNc
         if self.tilt:
-            ocp.constraints.idxbu = np.append(ocp.constraints.idxbu, [4, 5, 6, 7])
+            ocp.constraints.idxbu = np.append(ocp.constraints.idxbu, np.arange(self.num_rotors, 2 * self.num_rotors))
 
         # -- Lower Input Bound
-        ocp.constraints.lbu = np.array(
-            [self.params["thrust_min"],
-             self.params["thrust_min"],
-             self.params["thrust_min"],
-             self.params["thrust_min"]])
+        ocp.constraints.lbu = np.array([self.params["thrust_min"]] * self.num_rotors)
 
         if self.tilt:
             ocp.constraints.lbu = np.append(ocp.constraints.lbu,
-                [self.params["a_min"],
-                 self.params["a_min"],
-                 self.params["a_min"],
-                 self.params["a_min"]])
+                [self.params["a_min"]] * self.num_rotors)
 
         # -- Upper Input Bound
-        ocp.constraints.ubu = np.array(
-            [self.params["thrust_max"],
-             self.params["thrust_max"],
-             self.params["thrust_max"],
-             self.params["thrust_max"]])
+        ocp.constraints.ubu = np.array([self.params["thrust_max"]] * self.num_rotors)
 
         if self.tilt:
             ocp.constraints.ubu = np.append(ocp.constraints.ubu,
-                [self.params["a_max"],
-                 self.params["a_max"],
-                 self.params["a_max"],
-                 self.params["a_max"]])
+                [self.params["a_max"]] * self.num_rotors)
         # fmt: on
 
         # Initial state and reference: Set all values such that robot is hovering
         x_ref = np.zeros(nx)
         x_ref[6] = 1.0  # Quaternion qw
 
+        # Set thrust reference for hovering (distributed equally among rotors)
+        thrust_hover = self.phys.mass * self.phys.gravity / self.num_rotors
         if self.tilt:
             # When included servo AND thrust, use further indices
             if self.include_servo_model and self.include_thrust_model:
-                x_ref[17:21] = self.phys.mass * self.phys.gravity / 4  # ft1s, ft2s, ft3s, ft4s
+                x_ref[thrust_start_idx : thrust_start_idx + self.num_rotors] = thrust_hover
             # When only included thrust, use the same indices
             elif self.include_thrust_model:
-                x_ref[13:17] = self.phys.mass * self.phys.gravity / 4  # ft1s, ft2s, ft3s, ft4s
+                x_ref[thrust_start_idx : thrust_start_idx + self.num_rotors] = thrust_hover
         else:
-            x_ref[13:17] = self.phys.mass * self.phys.gravity / 4  # ft1s, ft2s, ft3s, ft4s
+            x_ref[thrust_start_idx : thrust_start_idx + self.num_rotors] = thrust_hover
 
         ocp.constraints.x0 = x_ref  # TODO this should be set in control loop and updated before each solver call
 
         # Note: This is not really necessary, since the reference is always updated before solver is called
         u_ref = np.zeros(nu)
         # Obeserved to be worse than zero!
-        u_ref[0:4] = self.phys.mass * self.phys.gravity / 4  # ft1c, ft2c, ft3c, ft4c
+        u_ref[0 : self.num_rotors] = thrust_hover  # ft1c, ft2c, ..., ftNc
         ocp.cost.yref = np.concatenate((x_ref, u_ref))
         ocp.cost.yref_e = x_ref
 
@@ -705,8 +649,9 @@ class QDNMPCBase(RecedingHorizonBase):
         # same order: phy_params = ca.vertcat(mass, gravity, inertia, kq_d_kt, dr, p1_b, p2_b, p3_b, p4_b, t_rotor, t_servo)
         self.acados_init_p = np.zeros(n_param)
         self.acados_init_p[0] = x_ref[6]  # qw
-        if len(self.phys.physical_param_list) != 31:
-            raise ValueError("Physical parameters are not in the correct order. Please check the physical model.")
+        expected_param_length = 6 + 4 * self.num_rotors + 2 + 7  # mass, gravity, inertia(3), kq_d_kt + 4*num_rotors*(dr+p_b(3)) + t_rotor, t_servo + ee_p(3), ee_q(4)
+        if len(self.phys.physical_param_list) != expected_param_length:
+            raise ValueError(f"Physical parameters length mismatch. Expected {expected_param_length} for {self.num_rotors} rotors, got {len(self.phys.physical_param_list)}.")
         self.acados_init_p[4 : 4 + len(self.phys.physical_param_list)] = np.array(self.phys.physical_param_list)
 
         ocp.parameter_values = self.acados_init_p
@@ -738,9 +683,13 @@ class QDNMPCBase(RecedingHorizonBase):
     def _create_reference_generator(self) -> QDNMPCReferenceGenerator:
         # fmt: off
         # Pass the model's and robot's properties to the reference generator
+        # Dynamically gather rotor position and direction parameters
+        p_b_list = [getattr(self.phys, f"p{i}_b") for i in range(1, self.num_rotors + 1)]
+        dr_list = [getattr(self.phys, f"dr{i}") for i in range(1, self.num_rotors + 1)]
+
         return QDNMPCReferenceGenerator(self,
-                                        self.phys.p1_b,    self.phys.p2_b, self.phys.p3_b, self.phys.p4_b,
-                                        self.phys.dr1,     self.phys.dr2,  self.phys.dr3,  self.phys.dr4,
+                                        *p_b_list,  # p1_b, p2_b, ..., pN_b
+                                        *dr_list,   # dr1, dr2, ..., drN
                                         self.phys.kq_d_kt, self.phys.mass, self.phys.gravity)
         # fmt: on
 
