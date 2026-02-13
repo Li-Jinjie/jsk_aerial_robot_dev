@@ -649,9 +649,12 @@ class QDNMPCBase(RecedingHorizonBase):
         # same order: phy_params = ca.vertcat(mass, gravity, inertia, kq_d_kt, dr, p1_b, p2_b, p3_b, p4_b, t_rotor, t_servo)
         self.acados_init_p = np.zeros(n_param)
         self.acados_init_p[0] = x_ref[6]  # qw
-        expected_param_length = 6 + 4 * self.num_rotors + 2 + 7  # mass, gravity, inertia(3), kq_d_kt + 4*num_rotors*(dr+p_b(3)) + t_rotor, t_servo + ee_p(3), ee_q(4)
+        expected_param_length = 6 + 4 * self.num_rotors + 2 + 7
+        # mass, gravity, inertia(3), kq_d_kt + 4*num_rotors*(dr+p_b(3)) + t_rotor, t_servo + ee_p(3), ee_q(4)
         if len(self.phys.physical_param_list) != expected_param_length:
-            raise ValueError(f"Physical parameters length mismatch. Expected {expected_param_length} for {self.num_rotors} rotors, got {len(self.phys.physical_param_list)}.")
+            raise ValueError(
+                f"Physical parameters length mismatch. Expected {expected_param_length} for {self.num_rotors} rotors, got {len(self.phys.physical_param_list)}."
+            )
         self.acados_init_p[4 : 4 + len(self.phys.physical_param_list)] = np.array(self.phys.physical_param_list)
 
         ocp.parameter_values = self.acados_init_p

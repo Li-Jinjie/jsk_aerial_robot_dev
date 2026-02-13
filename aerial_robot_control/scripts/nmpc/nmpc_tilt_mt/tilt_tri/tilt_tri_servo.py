@@ -58,8 +58,9 @@ class NMPCTiltTriServo(QDNMPCBase):
         qe_y = self.qwr * self.qy - self.qw * self.qyr + self.qxr * self.qz - self.qx * self.qzr
         qe_z = -self.qxr * self.qy + self.qx * self.qyr + self.qwr * self.qz - self.qw * self.qzr
 
-        state_y = ca.vertcat(self.p, self.v, self.qwr, qe_x + self.qxr, qe_y + self.qyr, qe_z + self.qzr, self.w,
-                             self.a_s)
+        state_y = ca.vertcat(
+            self.p, self.v, self.qwr, qe_x + self.qxr, qe_y + self.qyr, qe_z + self.qzr, self.w, self.a_s
+        )
         state_y_e = state_y
         control_y = ca.vertcat(self.ft_c, (self.a_c - self.a_s))  # ac_ref must be zero!
 
