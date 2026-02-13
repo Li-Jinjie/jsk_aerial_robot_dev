@@ -369,9 +369,7 @@ void nmpc::TiltMtServoNMPC::initNMPCParams()
   acados_p[0] = 1.0;  // qw
   idx_p_quat_end_ = 3;
 
-  int idx;
-  // TODO: this condition is temporary for drones that don't pass in phys param (bi, tri, fix-qd)
-  if (mpc_solver_ptr_->NP_ > 4 + 6)  // 4 for quaternion, 6 for disturbances
+  if (mpc_solver_ptr_->NP_ > 4 + 6)  // 4 for quaternion, 6 for disturbances, now support quad, tri, bi
   {
     ROS_INFO("Set physical parameters for NMPC solver");
 
@@ -379,7 +377,7 @@ void nmpc::TiltMtServoNMPC::initNMPCParams()
     std::copy(phys_p.begin(), phys_p.end(), acados_p.begin() + idx_p_quat_end_ + 1);
     idx_p_phys_end_ = idx_p_quat_end_ + phys_p.size();
   }
-  else
+  else  // This condition is temporary for drones that don't pass in phys param (some experimental code)
   {
     idx_p_phys_end_ = idx_p_quat_end_;
   }
