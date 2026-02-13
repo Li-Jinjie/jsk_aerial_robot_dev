@@ -4,9 +4,11 @@
   <!--
     Macro: ball_end_effector
     params:
-      ee_mount_link : The base link that the ball tool is mounted to (e.g. "ee_mount").
+      ee_mount_link : The base link that the ball tool is mounted to (e.g. "ee_mount" or "ee_bottom_mount").
+      ee_contact_link : The contact link name (e.g. "ee_contact" or "ee_bottom_contact").
+      robot_ns      : ROS namespace
   -->
-  <xacro:macro name="ball_end_effector" params="ee_mount_link robot_ns">
+  <xacro:macro name="ball_end_effector" params="ee_mount_link ee_contact_link robot_ns">
 
     <!-- 1) Ball tool geometry and inertia -->
     <link name="ball">
@@ -45,10 +47,10 @@
     </joint>
 
     <!-- 3) Contact frame at the ball's contact point -->
-    <!-- ee_contact is assumed to be defined elsewhere -->
+    <!-- ee_contact_link is passed as parameter -->
     <joint name="ball_to_ee_contact" type="fixed">
       <parent link="ball"/>
-      <child link="ee_contact"/>
+      <child link="${ee_contact_link}"/>
       <origin xyz="0 0 0.11" rpy="0 0 0"/>
     </joint>
 

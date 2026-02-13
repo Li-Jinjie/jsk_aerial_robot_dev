@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<robot name="brush_short_end_effector" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Macro: brush_short_end_effector
+    params:
+      ee_mount_link : The base link connected to the end-effector (e.g. "ee_mount" or "ee_bottom_mount").
+      robot_ns      : ROS namespace
+  -->
+  <xacro:macro name="brush_short_end_effector" params="ee_mount_link ee_contact_link robot_ns">
+
+    <!-- 1) Main brush body link and joint -->
+    <link name="brush_short">
+      <inertial>
+        <origin xyz="0.00000000 0.00000000 0.02957524" rpy="0 0 0"/>
+        <mass value="0.079"/>
+        <inertia
+                ixx="0.00008667" iyy="0.00008667" izz="0.00011629"
+                ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+      </inertial>
+      <visual>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_brush_short.dae" scale="1 1 1"/>
+        </geometry>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <!-- You can reuse the same mesh for collision or a simplified one -->
+          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_brush_short.dae"
+                scale="1 1 1"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <joint name="ee_mount_to_brush" type="fixed">
+      <parent link="${ee_mount_link}"/>
+      <child link="brush_short"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- 2) Contact frame at the bristle tip, required by the outer framework -->
+    <!-- ee_contact_link is passed as parameter -->
+    <joint name="brush_to_ee_contact" type="fixed">
+      <parent link="brush_short"/>
+      <child link="${ee_contact_link}"/>
+      <origin xyz="0 0 0.076" rpy="0 0 0"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>

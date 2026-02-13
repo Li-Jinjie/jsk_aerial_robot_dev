@@ -1,6 +1,28 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="beetle_link" >
+  <!-- general attribute -->
+  <baselink name="fc" />
+  <thrust_link name="thrust" />
 
+  <m_f_rate value="-0.0165" /> <!-- drag torque rate -->
+  <xacro:property name="max_force" value="30.0" /> <!-- [N] -->
+  <xacro:property name="min_force" value="1.0" /> <!-- [N] -->
+
+  <!-- friction -->
+  <xacro:macro name="friction" params="self">
+    <gazebo reference="link${self}">
+      <mu1>0.1</mu1>
+      <mu2>0.1</mu2>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:macro name="damping_factor" params="link">
+    <gazebo reference="${link}">
+      <dampingFactor>0.00</dampingFactor>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- robot -->
   <xacro:macro name="beetle_center_link" params="child1 child2 child3 child4">
     ## dummy
     <link name="root"/>
@@ -33,7 +55,6 @@
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </joint>
 
-    ## fc: flight controller. Note that "baselink" is assigned to "fc" in common.xacro by default
     <link name="fc">
       <inertial>
         <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -198,7 +219,7 @@
   <xacro:property name="end_effector" value="$(arg end_effector)"/>
 
   <xacro:if value="${end_effector != 'fork' and end_effector != 'ball' and end_effector != 'sensor_ball'
-  and end_effector != 'brush' and end_effector != 'osmo'}">
+  and end_effector != 'brush' and end_effector != 'osmo' and end_effector != 'none'}">
     <xacro:error>Invalid end_effector type: ${end_effector}. Must be one of: fork, ball, sensor_ball, brush, osmo.</xacro:error>
   </xacro:if>
 
@@ -212,6 +233,16 @@
 
   <!-- Tool‑agnostic contact frame (pose set inside each branch) -->
   <link name="ee_contact"/>
+
+  <!-- ############# None ############# -->
+  <xacro:if value="${end_effector == 'none'}">
+    <!-- atach ee_contact to ee_mount -->
+    <joint name="ee_mount_to_ee_contact" type="fixed">
+      <parent link="ee_mount"/>
+      <child link="ee_contact"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+  </xacro:if>
 
   <!-- ############# Fork tool ############# -->
   <xacro:include filename="$(find beetle_omni)/urdf/effectors/fork_ee.xacro"/>
