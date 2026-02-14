@@ -77,16 +77,18 @@ void nmpc::TiltMtServoThrustDistNMPC::initNMPCConstraints()
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
 
-  double body_rate_max, body_rate_min, vel_max, vel_min;
-  double servo_angle_max, servo_angle_min;
+  double body_rate_max, body_rate_min;
   getParam<double>(nmpc_nh, "w_max", body_rate_max, 6.0);
   getParam<double>(nmpc_nh, "w_min", body_rate_min, -6.0);
-  getParam<double>(nmpc_nh, "v_max", vel_max, 1.0);
-  getParam<double>(nmpc_nh, "v_min", vel_min, -1.0);
+  getParam<double>(nmpc_nh, "v_max", vel_max_, 1.0);
+  getParam<double>(nmpc_nh, "v_min", vel_min_, -1.0);
   getParam<double>(nmpc_nh, "thrust_max", thrust_ctrl_max_, 0.0);
   getParam<double>(nmpc_nh, "thrust_min", thrust_ctrl_min_, 0.0);
-  getParam<double>(nmpc_nh, "a_max", servo_angle_max, 3.1416);
-  getParam<double>(nmpc_nh, "a_min", servo_angle_min, -3.1416);
+  getParam<double>(nmpc_nh, "a_max", servo_angle_max_, 3.1416);
+  getParam<double>(nmpc_nh, "a_min", servo_angle_min_, -3.1416);
+
+  //  TODO: this should be set in flight_navigation; don't know why set 0.2 results solver failure
+  getParam<double>(control_nh, "vel_limit_takeoff", vel_limit_takeoff_, 1.0);  // m/s
 
   // lbx and ubx
   std::vector<int> idxbx = mpc_solver_ptr_->getConstraintsIdxbx();
@@ -106,14 +108,14 @@ void nmpc::TiltMtServoThrustDistNMPC::initNMPCConstraints()
     ROS_ERROR("idxbx is not equal to idxbx_desired, we cannot set constraints lbx and ubx!");
   }
 
-  std::vector<double> lbx = { vel_min, vel_min, vel_min, body_rate_min, body_rate_min, body_rate_min };
-  std::vector<double> ubx = { vel_max, vel_max, vel_max, body_rate_max, body_rate_max, body_rate_max };
+  std::vector<double> lbx = { vel_min_, vel_min_, vel_min_, body_rate_min, body_rate_min, body_rate_min };
+  std::vector<double> ubx = { vel_max_, vel_max_, vel_max_, body_rate_max, body_rate_max, body_rate_max };
   lbx.resize(6 + joint_num_ + motor_num_);
   ubx.resize(6 + joint_num_ + motor_num_);
   for (int i = 0; i < joint_num_; i++)
   {
-    lbx[6 + i] = servo_angle_min;
-    ubx[6 + i] = servo_angle_max;
+    lbx[6 + i] = servo_angle_min_;
+    ubx[6 + i] = servo_angle_max_;
   }
   for (int i = 0; i < motor_num_; i++)
   {
@@ -158,8 +160,8 @@ void nmpc::TiltMtServoThrustDistNMPC::initNMPCConstraints()
   }
   for (int i = 0; i < joint_num_; i++)
   {
-    lbu[motor_num_ + i] = servo_angle_min;
-    ubu[motor_num_ + i] = servo_angle_max;
+    lbu[motor_num_ + i] = servo_angle_min_;
+    ubu[motor_num_ + i] = servo_angle_max_;
   }
   mpc_solver_ptr_->setConstraintsLbu(lbu);
   mpc_solver_ptr_->setConstraintsUbu(ubu);
