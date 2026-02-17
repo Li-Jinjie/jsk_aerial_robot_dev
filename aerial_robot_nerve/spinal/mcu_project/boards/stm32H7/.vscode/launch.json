@@ -1,0 +1,120 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // ========================================================
+    // Mode 1: Launch (debug only, no flash)
+    // VS Code automatically starts OpenOCD, software reset, stop at main
+    // Prerequisite: firmware already flashed via CubeIDE or STM32CubeProgrammer
+    // ========================================================
+    {
+      "name": "STM32H743 Debug (Launch)",
+      "type": "cortex-debug",
+      "request": "launch",
+      "servertype": "openocd",
+      "cwd": "${workspaceFolder}",
+
+      "executable": "${workspaceFolder}/STM32CubeIDE/Debug/spinal.elf",
+
+      "gdbPath": "${workspaceFolder}/.vscode/arm-gdb.sh",
+      "toolchainPrefix": "arm-none-eabi",
+      "objdumpPath": "/home/wentao/st/stm32cubeide_1.18.0/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.linux64_1.0.0.202410170706/tools/bin/arm-none-eabi-objdump",
+
+      "configFiles": [
+        "${workspaceFolder}/STM32CubeIDE/openocd_h743_stlink_v2.cfg"
+      ],
+
+      "svdFile": "/home/wentao/st/stm32cubeide_1.18.0/plugins/com.st.stm32cube.ide.mcu.productdb.debug_2.2.100.202502251557/resources/cmsis/STMicroelectronics_CMSIS_SVD/STM32H743.svd",
+
+      "runToEntryPoint": "main",
+
+      // No flash, only reset + load symbols
+      "overrideLaunchCommands": [
+        "monitor reset init",
+        "monitor halt",
+        "load"
+      ],
+
+      "overrideRestartCommands": [
+        "monitor reset init",
+        "monitor halt"
+      ],
+
+      "showDevDebugOutput": "raw"
+    },
+
+    // ========================================================
+    // Mode 2: Flash + Launch
+    // Flash firmware via GDB load command, then debug
+    // ========================================================
+    {
+      "name": "STM32H743 Debug (Flash + Launch)",
+      "type": "cortex-debug",
+      "request": "launch",
+      "servertype": "openocd",
+      "cwd": "${workspaceFolder}",
+
+      "executable": "${workspaceFolder}/STM32CubeIDE/Debug/spinal.elf",
+
+      "gdbPath": "${workspaceFolder}/.vscode/arm-gdb.sh",
+      "toolchainPrefix": "arm-none-eabi",
+      "objdumpPath": "/home/wentao/st/stm32cubeide_1.18.0/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.linux64_1.0.0.202410170706/tools/bin/arm-none-eabi-objdump",
+
+      "configFiles": [
+        "${workspaceFolder}/STM32CubeIDE/openocd_h743_stlink_v2.cfg"
+      ],
+
+      "svdFile": "/home/wentao/st/stm32cubeide_1.18.0/plugins/com.st.stm32cube.ide.mcu.productdb.debug_2.2.100.202502251557/resources/cmsis/STMicroelectronics_CMSIS_SVD/STM32H743.svd",
+
+      "runToEntryPoint": "main",
+
+      // Use GDB 'load' command to flash (more reliable than 'monitor flash write_image')
+      "overrideLaunchCommands": [
+        "monitor reset halt",
+        "load",
+        "monitor reset init",
+        "monitor halt"
+      ],
+
+      "overrideRestartCommands": [
+        "monitor reset init",
+        "monitor halt"
+      ],
+
+      "showDevDebugOutput": "raw"
+    },
+
+    // ========================================================
+    // Mode 3: Attach (manually start OpenOCD first)
+    // First run in terminal:
+    //   openocd -f STM32CubeIDE/openocd_h743_stlink_v2.cfg
+    // Then press F5 and select this configuration
+    // ========================================================
+    {
+      "name": "STM32H743 Debug (Attach to OpenOCD)",
+      "type": "cortex-debug",
+      "request": "attach",
+      "servertype": "external",
+      "cwd": "${workspaceFolder}",
+
+      "executable": "${workspaceFolder}/STM32CubeIDE/Debug/spinal.elf",
+
+      "gdbPath": "${workspaceFolder}/.vscode/arm-gdb.sh",
+      "toolchainPrefix": "arm-none-eabi",
+      "objdumpPath": "/home/wentao/st/stm32cubeide_1.18.0/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.linux64_1.0.0.202410170706/tools/bin/arm-none-eabi-objdump",
+
+      "gdbTarget": "localhost:3333",
+
+      "svdFile": "/home/wentao/st/stm32cubeide_1.18.0/plugins/com.st.stm32cube.ide.mcu.productdb.debug_2.2.100.202502251557/resources/cmsis/STMicroelectronics_CMSIS_SVD/STM32H743.svd",
+
+      "runToEntryPoint": "main",
+
+      "overrideRestartCommands": [
+        "monitor reset init",
+        "monitor halt"
+      ],
+
+      "showDevDebugOutput": "raw"
+    }
+  ]
+}
+

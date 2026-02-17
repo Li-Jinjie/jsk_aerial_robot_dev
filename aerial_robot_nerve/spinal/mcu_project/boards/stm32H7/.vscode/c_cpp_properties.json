@@ -1,0 +1,52 @@
+{
+  "configurations": [
+    {
+      "name": "STM32CubeIDE",
+      "intelliSenseMode": "gcc-arm",
+      "compilerPath": "/home/wentao/st/stm32cubeide_1.18.0/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.linux64_1.0.0.202410170706/tools/bin/arm-none-eabi-gcc",
+      "compilerArgs": [
+        "-mcpu=cortex-m7",
+        "-mfpu=fpv5-d16",
+        "-mfloat-abi=hard",
+        "-mthumb"
+      ],
+      "cStandard": "gnu11",
+      "cppStandard": "gnu++14",
+      "defines": [
+        "DEBUG",
+        "USE_HAL_DRIVER",
+        "STM32H743xx",
+        "STMCUBEMX_NEW_VERSION"
+      ],
+      "includePath": [
+        "${workspaceFolder}/Inc",
+        "${workspaceFolder}/Drivers/CMSIS/Include",
+        "${workspaceFolder}/Drivers/CMSIS/Device/ST/STM32H7xx/Include",
+        "${workspaceFolder}/Drivers/STM32H7xx_HAL_Driver/Inc",
+        "${workspaceFolder}/Drivers/STM32H7xx_HAL_Driver/Inc/Legacy",
+        "${workspaceFolder}/Drivers/BSP/Components/lan8742",
+        "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/include",
+        "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS",
+        "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/lwip",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/lwip/apps",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/lwip/priv",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/lwip/prot",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/netif",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/netif/ppp",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/compat/posix",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/compat/posix/arpa",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/compat/posix/net",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/compat/posix/sys",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/src/include/compat/stdc",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/system",
+        "${workspaceFolder}/Middlewares/Third_Party/LwIP/system/arch",
+        "${workspaceFolder}/ros_lib",
+        "${workspaceFolder}/../../lib/Jsk_Lib",
+        "${workspaceFolder}/../../lib/Hydrus_Lib"
+      ]
+    }
+  ],
+  "version": 4
+}
