@@ -49,6 +49,13 @@ class NMPCTiltQdServoImpedance(QDNMPCBase):
         qe_w, qe_x, qe_y, qe_z = self._quaternion_multiply(self.qwr, -self.qxr, -self.qyr, -self.qzr,
                                                            q_wt_w, q_wt_x, q_wt_y, q_wt_z)
 
+        # calculate log(qe)
+        qe_vec_norm = ca.sqrt(qe_x**2 + qe_y**2 + qe_z**2)
+        theta = 2 * ca.atan2(qe_vec_norm, qe_w)
+        log_qe_x = theta * qe_x / qe_vec_norm
+        log_qe_y = theta * qe_y / qe_vec_norm
+        log_qe_z = theta * qe_z / qe_vec_norm
+
         rot_wb = self._get_rot_wb_ca(self.qw, self.qx, self.qy, self.qz)
         skew_w = self._get_skew_symmetric_matrix(self.w)
 
@@ -59,9 +66,9 @@ class NMPCTiltQdServoImpedance(QDNMPCBase):
             self.p + rot_wb @ self.ee_p,
             self.v + rot_wb @ skew_w @ self.ee_p,
             self.qwr,
-            qe_x + self.qxr,
-            qe_y + self.qyr,
-            qe_z + self.qzr,
+            log_qe_x + self.qxr,
+            log_qe_y + self.qyr,
+            log_qe_z + self.qzr,
             rot_tb @ self.w,
             self.a_s,
             ca.times(lin_acc_w, self.mp) - self.fds_w,
