@@ -80,20 +80,26 @@ void nmpc::TiltMtServoDistNMPC::updateITerm()
   tf::Quaternion q = estimator_->getQuat(Frame::COG, estimate_mode_);
 
   /* get the target state */
-  // Note that the target state is the estimated state from NMPC solver.
-  tf::Vector3 pos_x0(mpc_solver_ptr_->xo_.at(0).at(0), mpc_solver_ptr_->xo_.at(0).at(1),
-                     mpc_solver_ptr_->xo_.at(0).at(2));
-  tf::Vector3 pos_x1(mpc_solver_ptr_->xo_.at(1).at(0), mpc_solver_ptr_->xo_.at(1).at(1),
-                     mpc_solver_ptr_->xo_.at(1).at(2));
-  tf::Vector3 target_pos = pos_x0 + (pos_x1 - pos_x0) * t_nmpc_samp_ / t_nmpc_step_;
+  tf::Vector3 target_pos;
+  tf::Quaternion target_q;
+  if (is_traj_tracking_)
+  {
+    target_pos.setX(x_u_ref_.x.data.at(0));
+    target_pos.setY(x_u_ref_.x.data.at(1));
+    target_pos.setZ(x_u_ref_.x.data.at(2));
 
-  tf::Quaternion quat_x0(mpc_solver_ptr_->xo_.at(0).at(7), mpc_solver_ptr_->xo_.at(0).at(8),
-                         mpc_solver_ptr_->xo_.at(0).at(9), mpc_solver_ptr_->xo_.at(0).at(6));
-  quat_x0.normalize();
-  tf::Quaternion quat_x1(mpc_solver_ptr_->xo_.at(1).at(7), mpc_solver_ptr_->xo_.at(1).at(8),
-                         mpc_solver_ptr_->xo_.at(1).at(9), mpc_solver_ptr_->xo_.at(1).at(6));
-  quat_x1.normalize();
-  tf::Quaternion target_q = quat_x0.slerp(quat_x1, t_nmpc_samp_ / t_nmpc_step_);
+    target_q.setW(x_u_ref_.x.data.at(6));
+    target_q.setX(x_u_ref_.x.data.at(7));
+    target_q.setY(x_u_ref_.x.data.at(8));
+    target_q.setZ(x_u_ref_.x.data.at(9));
+  }
+  else
+  {
+    target_pos = navigator_->getTargetPos();
+
+    tf::Vector3 target_rpy = navigator_->getTargetRPY();
+    target_q.setRPY(target_rpy.x(), target_rpy.y(), target_rpy.z());
+  }
 
   /* update I term */
   wrench_est_i_term_.update(target_pos, target_q, pos, q);
