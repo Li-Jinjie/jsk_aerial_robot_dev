@@ -62,12 +62,6 @@ def main(args):
 
     # Disturbance Initialization
     disturb_init = np.zeros(6)
-    # disturb_init[0] = 1.0
-    # disturb_init[1] = -1.0
-    # disturb_init[2] = 1.0  # N, fz
-    # disturb_init[3] = 0.1
-    # disturb_init[4] = -0.1
-    # disturb_init[5] = 0.1
 
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
@@ -88,7 +82,7 @@ def main(args):
         include_servo_model=sim_nmpc.include_servo_model,
         include_thrust_model=sim_nmpc.include_thrust_model,
         include_cog_dist_model=sim_nmpc.include_cog_dist_model,
-        is_record_diff_u=True,
+        include_cog_dist_est=True,
     )
 
     # ---------- Sensors ----------
@@ -247,18 +241,21 @@ def main(args):
                     wrench_u_imu_b[3:6] - wrench_u_sensor_b[3:6]
                 )  # Body frame
 
+                viz.update_est_disturb(i, disturb_estimated[0:3], disturb_estimated[3:6])
+
         # --------- Update simulation ----------
         disturb = copy.deepcopy(disturb_init)
 
-        # sweep frequency of disturbance
-        dist_freq = 5  # Hz
-        disturb[0] = 5.0 * np.sin(2 * np.pi * dist_freq * t_now)  # fx in N
-        # Simulate random disturbance
+        # # sweep frequency of disturbance
+        # dist_freq = 5  # Hz
+        # disturb[0] = 5.0 * np.sin(2 * np.pi * dist_freq * t_now)  # fx in N
+
+        # # Simulate random disturbance
         # disturb[2] = np.random.normal(1.0, 3.0)  # fz in N
 
         # Simulate fixed disturbance at singular points
-        # if 2.0 <= t_now < 3.0:
-        #     disturb[0] = 5.0
+        if 2.0 <= t_now:
+            disturb[0] = 5.0
         #     disturb[1] = -5.0
         #     disturb[2] = -5.0
         #
