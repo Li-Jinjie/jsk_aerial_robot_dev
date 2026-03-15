@@ -63,7 +63,8 @@ class NMPCTiltQdServoDist(QDNMPCBase):
             qe_z + self.qzr,
             rot_tb @ self.w,
             self.a_s,
-            self.fds_w,
+            self.fds_w - 3.0 * self.p,
+            # self.fds_w,
             self.tau_ds_b,
         )
 
@@ -98,9 +99,9 @@ class NMPCTiltQdServoDist(QDNMPCBase):
                 self.params["Qa"],
                 self.params["Qa"],
                 self.params["Qa"],
-                0.0,
-                0.0,
-                0.0,
+                100,
+                100,
+                100,
                 0.0,
                 0.0,
                 0.0,

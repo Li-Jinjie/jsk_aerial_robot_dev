@@ -115,7 +115,7 @@ def main(args):
             x_now = x_now_sim[:nx]  # The dimension of x_now may be smaller than x_now_sim
 
         # -------- Update control target --------
-        target_xyz = np.array([[0.3, 0.6, 1.0]]).T
+        target_xyz = np.array([[0.0, 0.0, 0.264]]).T
         target_rpy = np.array([[0.0, 0.0, 0.0]]).T
 
         if args.plot_type == 2:
@@ -254,7 +254,7 @@ def main(args):
         # disturb[2] = np.random.normal(1.0, 3.0)  # fz in N
 
         # Simulate fixed disturbance at singular points
-        if 2.0 <= t_now:
+        if 5.0 <= t_now:
             disturb[0] = 5.0
         #     disturb[1] = -5.0
         #     disturb[2] = -5.0
