@@ -8,11 +8,11 @@
     ## main body
     <link name="main_body">
       <inertial>
-        <origin xyz="-0.00027907 0.00036976 0.03599093" rpy="0 0 0"/>
-        <mass value="1.51931225"/>
+        <origin xyz="-0.00034742 0.00036736 0.03608269" rpy="0 0 0"/>
+        <mass value="1.52925596"/>
         <inertia
-            ixx="0.00913984" iyy="0.00912399" izz="0.00466230"
-            ixy="0.00000741" ixz="0.00013082" iyz="0.00007583"/>
+            ixx="0.00714742" iyy=" 0.00722236" izz="0.00472163"
+            ixy="0.00000654" ixz=" 0.00015170" iyz="0.00005556"/>
       </inertial>   
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -73,12 +73,11 @@
       ## female extendable arm link 
       <link name="chain_link${id}">
         <inertial>
-          <origin xyz="-0.0916461 -0.000000 -0.0011561" rpy="0 0 0"/>
+          <origin xyz="-0.0917549 -0.000000 -0.0010835" rpy="0 0 0"/>
           <mass value="0.1110974"/>
           <inertia
-              ixx="0.0000192" ixy="0.0" ixz="0.0000010"
-              iyy="0.0013666" iyz="0.0"
-              izz="0.0013682"/>
+              ixx="0.0000194" ixy="0.0" ixz="-0.0000107"
+              iyy="0.0004353" iyz="0.0" izz="0.0004368"/>
         </inertial>
         <!-- the motor_case's limit pin is 87mm from the servo -->
         <collision>
@@ -133,12 +132,12 @@
       <!-- <xacro:if value="${id == 1 or id == 3}">
         <link name="percher${id}">
           <inertial>
-            <origin xyz="0.07203636 -0.00070189 0.00924944" rpy="0 0 0"/>
-            <mass value="0.23213"/>
+            <origin xyz="0.07388950 -0.00071388 0.00937349" rpy="0 0 0"/>
+            <mass value="0.22913000"/>
             <inertia
-                ixx="0.00093823" ixy="-0.00002851" ixz="0.00044947"
-                iyy="0.00455027" iyz="-0.00000728"
-                izz="0.00451444"/>
+                ixx="0.00091761" ixy="-0.00001638" ixz="0.00029072"
+                iyy="0.00326461" iyz="-0.00000574"
+                izz="0.00324848"/>
           </inertial>
           <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -176,11 +175,11 @@
     #### rotor parent link (virtual) ####
     <link name="gimbal_link${self}">
       <inertial>
-        <origin xyz="0.02554008 -0.00002352 -0.01513287" rpy="0 0 0"/>
+        <origin xyz="0.02786199 -0.00000778 -0.01385805" rpy="0 0 0"/>
         <mass value="0.1702000"/>
         <inertia
-            ixx="0.00020423" iyy="0.00031264" izz="0.00034511"
-            ixy="0.0" ixz="0.0" iyz="0.0"/>
+            ixx="0.00017696" iyy="0.00018593" izz="0.00027041"
+            ixy="0.00000002" ixz="-0.00002708" iyz="0.0"/>
       </inertial>
       <collision>
         <origin xyz="0.06 0 0" rpy="0 0 0"/>
