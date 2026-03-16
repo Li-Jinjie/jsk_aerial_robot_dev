@@ -188,7 +188,7 @@ def main(file_path, plot_type):
         ax.plot(t_imu, data_imu_sel["az"], linestyle=":", label="az")
         ax.legend(framealpha=legend_alpha, loc="center", ncol=3)
         ax.set_ylabel("$^B\hat{a}$ [m/s$^2$]", fontsize=label_size)
-        ax.set_xlabel("Time $t$ [s]", fontsize=label_size)
+        ax.set_xlabel("Time [s]", fontsize=label_size)
         # --------------- Gyro -----------------
         ax = axes[7]
         ax.plot(t_imu, data_imu_sel["wx"], linestyle="-", label="$\omega_x$")
@@ -196,7 +196,7 @@ def main(file_path, plot_type):
         ax.plot(t_imu, data_imu_sel["wz"], linestyle=":", label="$\omega_z$")
         ax.legend(framealpha=legend_alpha, loc="upper center", ncol=3)
         ax.set_ylabel("$^B\hat{\omega}$ [rad/s]", fontsize=label_size)
-        ax.set_xlabel("Time $t$ [s]", fontsize=label_size)
+        ax.set_xlabel("Time [s]", fontsize=label_size)
 
         # --------------------------------
         plt.tight_layout()

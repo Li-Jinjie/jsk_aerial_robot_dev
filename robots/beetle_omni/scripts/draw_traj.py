@@ -846,7 +846,7 @@ def main(file_path, type, if_hand_teleop):
     elif type == 4:
         plt.style.use(["science", "grid"])
 
-        plt.rcParams.update({"font.size": 12})
+        plt.rcParams.update({"font.size": 14})
         label_size = 14
 
         color_px = "#0C5DA5"
@@ -886,6 +886,9 @@ def main(file_path, type, if_hand_teleop):
 
         ax_pos.legend(framealpha=legend_alpha, loc="center left")
 
+        ax_pos.set_xlim(0, 30)
+        ax_pos.set_ylim(0.5, 1.65)
+
         # ----------------------------
         # Right y-axis: force
         # ----------------------------
@@ -905,10 +908,7 @@ def main(file_path, type, if_hand_teleop):
 
         ax_force.legend(framealpha=legend_alpha, loc="center right")
 
-        ax_pos.tick_params(axis="y")
-        ax_force.tick_params(axis="y")
-
-        ax_pos.set_xlim(0, 30)
+        ax_force.set_ylim(-14, 1)
 
         plt.tight_layout()
         plt.show()
