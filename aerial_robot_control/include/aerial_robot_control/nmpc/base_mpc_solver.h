@@ -71,6 +71,10 @@ public:
     W_ = std::vector<double>(NY_ * NY_, 0);   // NY = NX + NU
     WN_ = std::vector<double>(NX_ * NX_, 0);  // WN has the same size as NX
 
+    // get weight from NMPC python, mainly for non-diagonal weight matrix, for example, for impedance control.
+    getCostWeightMid(W_);
+    getCostWeightEnd(WN_);
+
     setRTIPhase();
   };
 
@@ -446,7 +450,16 @@ protected:
   ocp_nlp_solver* nlp_solver_ = nullptr;
   void* nlp_opts_ = nullptr;
 
-  void setCostWeightMid(std::vector<double> W)  // if you want to make this function public, make sure W_ = W
+  void getCostWeightMid(std::vector<double>& W) const
+  {
+    if (W.size() != NY_ * NY_)
+      throw std::length_error("W size is not equal to NY_ * NY_, please check.");
+
+    ocp_nlp_cost_model_get(nlp_config_, nlp_dims_, nlp_in_, 0, "W", W.data());
+  }
+
+  void setCostWeightMid(std::vector<double>& W) const
+  // if you want to make this function public, make sure W_ = W
   {
     if (W.size() != NY_ * NY_)
       throw std::length_error("W size is not equal to NY_ * NY_, please check.");
@@ -455,7 +468,16 @@ protected:
       ocp_nlp_cost_model_set(nlp_config_, nlp_dims_, nlp_in_, i, "W", W.data());
   }
 
-  void setCostWeightEnd(std::vector<double> WN)  // if you want to make this function public, make sure WN_ = WN
+  void getCostWeightEnd(std::vector<double>& WN) const
+  {
+    if (WN.size() != NX_ * NX_)
+      throw std::length_error("WN size is not equal to NX_ * NX_, please check.");
+
+    ocp_nlp_cost_model_get(nlp_config_, nlp_dims_, nlp_in_, NN_, "W", WN.data());
+  }
+
+  void setCostWeightEnd(std::vector<double>& WN) const
+  // if you want to make this function public, make sure WN_ = WN
   {
     if (WN.size() != NX_ * NX_)
       throw std::length_error("W size is not equal to NX_ * NX_, please check.");
@@ -463,7 +485,7 @@ protected:
     ocp_nlp_cost_model_set(nlp_config_, nlp_dims_, nlp_in_, NN_, "W", WN.data());
   }
 
-  inline void setFeedbackConstraints(const std::vector<double>& bx0)
+  void setFeedbackConstraints(const std::vector<double>& bx0) const
   {
     if (bx0.size() != NBX0_)
       throw std::length_error("bx0 size is not equal to NBX0_");
