@@ -25,8 +25,8 @@ controller:
     a_min: -3.15
 
     # params for the cost function
-    Qp_xy: 300
-    Qp_z: 400
+    Qp_xy: 100
+    Qp_z: 100
     Qv_xy: 10
     Qv_z: 10
     Qq_xy: 300

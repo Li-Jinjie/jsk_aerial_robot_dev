@@ -63,8 +63,7 @@ class NMPCTiltQdServoDist(QDNMPCBase):
             qe_z + self.qzr,
             rot_tb @ self.w,
             self.a_s,
-            self.fds_w - 3.0 * self.p,
-            # self.fds_w,
+            self.fds_w,
             self.tau_ds_b,
         )
 
@@ -99,14 +98,25 @@ class NMPCTiltQdServoDist(QDNMPCBase):
                 self.params["Qa"],
                 self.params["Qa"],
                 self.params["Qa"],
-                100,
-                100,
-                100,
+                1,
+                1,
+                1,
                 0.0,
                 0.0,
                 0.0,
             ]
         )
+
+        # set non-diagonal weights.
+        pk_imp = np.diag([np.sqrt(self.params["Qp_xy"]), np.sqrt(self.params["Qp_xy"]), np.sqrt(self.params["Qp_z"])])
+        pm_imp = np.diag([-1, -1, -1])
+        p_weight = np.concatenate([pk_imp, pm_imp])
+        p_weight_mtx = np.dot(p_weight, p_weight.T)
+
+        Q[0:3, 17:20] = p_weight_mtx[0:3, 3:6]
+        Q[17:20, 0:3] = p_weight_mtx[3:6, 0:3]
+
+        # force print one row in one line
         print("Q: \n", Q)
 
         R = np.diag(
