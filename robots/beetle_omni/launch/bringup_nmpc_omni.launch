@@ -14,7 +14,10 @@
        default="$(eval
          find('aerial_robot_simulation') +
          '/gazebo_model/world/' +
-         ('empty.world' if arg('world_type') == 0 else '0066.world')
+         ('empty.world' if int(arg('world_type')) == 0 else
+         '0066.world' if int(arg('world_type')) == 1 else
+         '0066_contact.world' if int(arg('world_type')) == 2 else
+         'empty.world')
      )" />
 
   <arg name="launch_gazebo" default="True" />

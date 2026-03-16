@@ -1,0 +1,94 @@
+<?xml version="1.0" ?>
+<sdf version='1.4'>
+  <world name='default'>
+
+    <physics type='ode'>
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <magnetic_field>34 0 -36</magnetic_field>
+      <gravity>0 0 -9.80665</gravity>
+    </physics>
+
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <latitude_deg>35.71473478232903</latitude_deg>
+      <longitude_deg>139.7608775182645</longitude_deg>
+      <elevation>0</elevation>
+      <heading_deg>0</heading_deg>
+    </spherical_coordinates>
+
+
+    <!-- A global light source -->
+    <scene>
+      <ambient>0.4 0.4 0.4 1</ambient>
+      <background>0.8 0.8 0.8 1</background>
+      <shadows>false</shadows>
+      <sky>
+        <clouds>
+          <speed>12</speed>
+        </clouds>
+      </sky>
+    </scene>
+
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <!-- Vertical wall for contact tests -->
+    <model name='vertical_plane'>
+      <static>1</static>
+      <pose>1 0 1.0 0 0 0</pose>
+      <link name='wall'>
+        <collision name='wall_collision'>
+          <geometry>
+            <box>
+              <size>0.05 1 1</size>
+            </box>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>1.0</mu>
+                <mu2>1.0</mu2>
+              </ode>
+            </friction>
+            <bounce>
+              <restitution_coefficient>0.1</restitution_coefficient>
+              <threshold>100.0</threshold>
+            </bounce>
+            <contact>
+              <ode>
+                <kp>1e6</kp>
+                <kd>1e3</kd>
+                <max_vel>1.0</max_vel>
+                <min_depth>0.001</min_depth>
+              </ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name='wall_visual'>
+          <geometry>
+            <box>
+              <size>0.05 1 1</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1 1 1 1</ambient>
+            <diffuse>1 1 1 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!--  0066 model now has both visual part and collision part -->
+    <model name="0066">
+      <static>1</static>
+      <include>
+        <uri>model://0066</uri>
+      </include>
+    </model>
+
+  </world>
+</sdf>
