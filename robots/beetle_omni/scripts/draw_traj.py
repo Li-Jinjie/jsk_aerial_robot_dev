@@ -913,6 +913,48 @@ def main(file_path, type, if_hand_teleop):
         plt.tight_layout()
         plt.show()
 
+    elif type == 5:
+        plt.style.use(["science", "grid"])
+
+        plt.rcParams.update({"font.size": 14})
+        label_size = 14
+
+        color_px = "#0C5DA5"
+        color_att = "#FF2C00"
+        # color_force = "#f29619"  # the orange in scienceplots
+
+        line_width = 1.5
+
+        t_bias = max(
+            data_xyz["__time"].iloc[0],
+            data_euler["__time"].iloc[0],
+        )
+
+        fig, ax_pos = plt.subplots(figsize=(7, 2))
+        ax_attitude = ax_pos.twinx()
+
+        t_pos = np.array(data_xyz["__time"]) - t_bias
+        x_pos = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/x"])
+        line1 = ax_pos.plot(t_pos, x_pos, label="X of ee", linestyle="-.", color=color_px, linewidth=line_width)
+
+        ax_pos.set_ylabel("X [m]", fontsize=label_size)
+        ax_pos.set_xlabel("Time [s]", fontsize=label_size)
+        ax_pos.legend(framealpha=legend_alpha, loc="center left")
+        ax_pos.set_ylim(-0.1, 0.4)
+
+        t_att = np.array(data_euler["__time"]) - t_bias
+        pitch_att = np.array(data_euler["pitch"])
+        line2 = ax_attitude.plot(
+            t_att, pitch_att * 180 / np.pi, label="Pitch of ee", linestyle="-", color=color_att, linewidth=line_width
+        )
+        ax_attitude.set_ylabel("Pitch [$^\\circ$]", fontsize=label_size)
+        ax_attitude.legend(framealpha=legend_alpha, loc="center right")
+
+        ax_attitude.set_ylim(-2, 13)
+
+        plt.tight_layout()
+        plt.show()
+
     else:
         print("Invalid type")
 
