@@ -20,9 +20,11 @@
   <depend>roscpp</depend>
   <depend>spinal</depend>
   <depend>tf</depend>
+  <depend>acados</depend>
 
   <export>
     <aerial_robot_control plugin="${prefix}/plugins/flight_control_plugins.xml" />
+    <aerial_robot_control plugin="${prefix}/plugins/mpc_solver_plugins.xml" />
   </export>
 
 </package>
