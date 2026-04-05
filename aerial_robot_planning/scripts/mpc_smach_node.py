@@ -72,6 +72,9 @@ from aerial_robot_planning.teleoperation.teleop_smach import create_teleop_state
 # === voice control ===
 from aerial_robot_planning.voice.voice_smach import create_voice_state_machine
 
+# === interactive marker ===
+from aerial_robot_planning.interactive_marker.interactive_marker_smach import create_interactive_marker_state_machine
+
 
 ###############################################
 # SMACH States
@@ -86,7 +89,7 @@ class IdleState(smach.State):
     def __init__(self):
         smach.State.__init__(
             self,
-            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop", "go_voice"],
+            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop", "go_voice", "go_interactive_marker"],
             input_keys=["robot_name"],
             output_keys=["robot_name", "traj_type", "loop_num"],
         )
@@ -99,14 +102,18 @@ class IdleState(smach.State):
 
             traj_register.index_all_traj_and_print(has_csv=is_beetle)
 
+            print("\n===== Other Choices =====")
+            print("i: Interactive Marker Mode (RVIZ)")
             if is_beetle:
-                print("\n===== Other Choices =====")
                 print("t: Teleoperation Mode")
                 print("v: Voice Mode")
 
             traj_type_str = input(f"\nEnter trajectory number/letter above to select or 'q' to quit: ")
             if traj_type_str.lower() == "q":
                 return "shutdown"
+
+            if traj_type_str.lower() == "i":
+                return "go_interactive_marker"
 
             if traj_type_str.lower() == "t":
                 return "go_teleop"
@@ -289,6 +296,7 @@ def main(args):
                 "shutdown": "DONE",
                 "go_teleop": "TELEOP",
                 "go_voice": "VOICE",
+                "go_interactive_marker": "INTERACTIVE_MARKER",
             },
         )
 
@@ -311,6 +319,14 @@ def main(args):
             "VOICE",
             create_voice_state_machine(),
             transitions={"DONE_VOICE": "IDLE"},
+            remapping={"robot_name": "robot_name"},
+        )
+
+        # INTERACTIVE_MARKER
+        smach.StateMachine.add(
+            "INTERACTIVE_MARKER",
+            create_interactive_marker_state_machine(),
+            transitions={"DONE_INTERACTIVE_MARKER": "IDLE"},
             remapping={"robot_name": "robot_name"},
         )
 
