@@ -87,8 +87,14 @@ void nmpc::TiltMtServoNMPC::reset()
   std::vector<double> xr_vec(mpc_solver_ptr_->NX_, 0);
   std::vector<double> u_vec(mpc_solver_ptr_->NU_, 0);
 
+  Eigen::MatrixXd alloc_mat_pinv;
+  {
+    std::lock_guard<std::mutex> lock(alloc_mat_mutex_);
+    alloc_mat_pinv = alloc_mat_pinv_;
+  }
+
   // Only compute hover u if physical parameters are initialized (not available during first initialization)
-  if (mass_ > 0 && alloc_mat_pinv_.size() > 0)
+  if (mass_ > 0 && alloc_mat_pinv.size() > 0)
   {
     // Get current orientation
     tf::Quaternion quat = estimator_->getQuat(Frame::COG, estimate_mode_);
@@ -340,42 +346,40 @@ void nmpc::TiltMtServoNMPC::calcFtThresh()
 
 void nmpc::TiltMtServoNMPC::initAllocMat()
 {
-  /* get physical param */
   int rotor_num = robot_model_->getRotorNum();  // For tilt-rotor, rotor_num = servo_num
   const auto& rotor_p = robot_model_->getRotorsOriginFromCog<Eigen::Vector3d>();
-  const map<int, int> rotor_dr = robot_model_->getRotorDirection();
-  double kq_d_kt = abs(robot_model_->getMFRate());  // PAY ATTENTION: should be positive value
+  const auto rotor_dr = robot_model_->getRotorDirection();
+  double kq_d_kt = std::abs(robot_model_->getMFRate());
 
-  /* alloc mat */
-  alloc_mat_.resize(0, 0);
-  alloc_mat_pinv_.resize(0, 0);
-
-  // construct alloc_mat_
-  alloc_mat_ = Eigen::MatrixXd::Zero(6, 2 * rotor_num);
+  Eigen::MatrixXd alloc_mat = Eigen::MatrixXd::Zero(6, 2 * rotor_num);
 
   for (int i = 0; i < rotor_num; i++)
   {
-    Eigen::Vector3d p_b = rotor_p[i];
+    const Eigen::Vector3d& p_b = rotor_p[i];
     int dr = rotor_dr.find(i + 1)->second;  // PAY ATTENTION: the rotor index starts from 1!!!!!!!!!!!!!!!!!!!!!
 
-    double sqrt_p_xy = sqrt(p_b.x() * p_b.x() + p_b.y() * p_b.y());
+    double sqrt_p_xy = std::sqrt(p_b.x() * p_b.x() + p_b.y() * p_b.y());
 
-    // - force
-    alloc_mat_(0, 2 * i) = p_b.y() / sqrt_p_xy;
-    alloc_mat_(1, 2 * i) = -p_b.x() / sqrt_p_xy;
-    alloc_mat_(2, 2 * i + 1) = 1;
-
+    alloc_mat(0, 2 * i) = p_b.y() / sqrt_p_xy;
+    alloc_mat(1, 2 * i) = -p_b.x() / sqrt_p_xy;
+    alloc_mat(2, 2 * i + 1) = 1;
     // - torque
-    alloc_mat_(3, 2 * i) = -dr * kq_d_kt * p_b.y() / sqrt_p_xy + p_b.x() * p_b.z() / sqrt_p_xy;
-    alloc_mat_(4, 2 * i) = dr * kq_d_kt * p_b.x() / sqrt_p_xy + p_b.y() * p_b.z() / sqrt_p_xy;
-    alloc_mat_(5, 2 * i) = -p_b.x() * p_b.x() / sqrt_p_xy - p_b.y() * p_b.y() / sqrt_p_xy;
+    alloc_mat(3, 2 * i) = -dr * kq_d_kt * p_b.y() / sqrt_p_xy + p_b.x() * p_b.z() / sqrt_p_xy;
+    alloc_mat(4, 2 * i) = dr * kq_d_kt * p_b.x() / sqrt_p_xy + p_b.y() * p_b.z() / sqrt_p_xy;
+    alloc_mat(5, 2 * i) = -p_b.x() * p_b.x() / sqrt_p_xy - p_b.y() * p_b.y() / sqrt_p_xy;
 
-    alloc_mat_(3, 2 * i + 1) = p_b.y();
-    alloc_mat_(4, 2 * i + 1) = -p_b.x();
-    alloc_mat_(5, 2 * i + 1) = -dr * kq_d_kt;
+    alloc_mat(3, 2 * i + 1) = p_b.y();
+    alloc_mat(4, 2 * i + 1) = -p_b.x();
+    alloc_mat(5, 2 * i + 1) = -dr * kq_d_kt;
   }
 
-  alloc_mat_pinv_ = aerial_robot_model::pseudoinverse(alloc_mat_);
+  Eigen::MatrixXd alloc_mat_pinv = aerial_robot_model::pseudoinverse(alloc_mat);
+
+  {
+    std::lock_guard<std::mutex> lock(alloc_mat_mutex_);
+    alloc_mat_ = std::move(alloc_mat);
+    alloc_mat_pinv_ = std::move(alloc_mat_pinv);
+  }  // when the code leaves {}, the lock will be released.
 }
 
 /* Note: The difference between this function and prepareNMPCParams() is:
@@ -550,6 +554,9 @@ void nmpc::TiltMtServoNMPC::controlCore(bool is_warmup)
     gimbal_ctrl_cmd_.name.emplace_back("gimbal" + std::to_string(i + 1));
     gimbal_ctrl_cmd_.position.push_back(getCommand(motor_num_ + i));
   }
+
+  // update alloc matrix
+  initAllocMat();
 }
 
 void nmpc::TiltMtServoNMPC::sendCmd()
@@ -768,9 +775,14 @@ void nmpc::TiltMtServoNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf:
     return;
   }
   // =============================================================
+  Eigen::MatrixXd alloc_mat_pinv;
+  {
+    std::lock_guard<std::mutex> lock(alloc_mat_mutex_);
+    alloc_mat_pinv = alloc_mat_pinv_;
+  }
 
   // 1) do one allocation
-  Eigen::VectorXd x_lambda = alloc_mat_pinv_ * ref_wrench_b;
+  Eigen::VectorXd x_lambda = alloc_mat_pinv * ref_wrench_b;
   std::vector<double> ft_ref_vec(motor_num_);
   std::vector<double> a_ref_vec(joint_num_);
 
@@ -848,11 +860,17 @@ void nmpc::TiltMtServoNMPC::allocateToXUwOneFixedRotor(int fix_rotor_idx, double
   double fix_ft_x = fix_ft * sin(fix_alpha);
   double fix_ft_y = fix_ft * cos(fix_alpha);
 
+  Eigen::MatrixXd alloc_mat;
+  {
+    std::lock_guard<std::mutex> lock(alloc_mat_mutex_);
+    alloc_mat = alloc_mat_;
+  }
+
   // 1) construct tgt_wrench from z_from_rotor
   Eigen::VectorXd z_from_rotor = Eigen::VectorXd::Zero(motor_num_ * 2);
   z_from_rotor(2 * fix_rotor_idx) = fix_ft_x;
   z_from_rotor(2 * fix_rotor_idx + 1) = fix_ft_y;
-  Eigen::VectorXd tgt_wrench_from_rotor = alloc_mat_ * z_from_rotor;
+  Eigen::VectorXd tgt_wrench_from_rotor = alloc_mat * z_from_rotor;
 
   // 2) calculate alloc_mat with this rotor's contribution
   Eigen::VectorXd tgt_wrench_modified = ref_wrench_b - tgt_wrench_from_rotor;
@@ -860,13 +878,13 @@ void nmpc::TiltMtServoNMPC::allocateToXUwOneFixedRotor(int fix_rotor_idx, double
   // 3) calculate the allocation matrix without this rotor, which is 6*6
   if (fix_rotor_idx != fix_rotor_idx_prev_)
   {
-    Eigen::MatrixXd alloc_mat_del_rotor(alloc_mat_.rows(), alloc_mat_.cols() - 2);
+    Eigen::MatrixXd alloc_mat_del_rotor(alloc_mat.rows(), alloc_mat.cols() - 2);
     int j = 0;
-    for (int k = 0; k < alloc_mat_.cols(); ++k)
+    for (int k = 0; k < alloc_mat.cols(); ++k)
     {
       if (k == 2 * fix_rotor_idx || k == 2 * fix_rotor_idx + 1)
         continue;
-      alloc_mat_del_rotor.col(j++) = alloc_mat_.col(k);
+      alloc_mat_del_rotor.col(j++) = alloc_mat.col(k);
     }
     alloc_mat_del_rotor_inv_ = alloc_mat_del_rotor.inverse();
   }

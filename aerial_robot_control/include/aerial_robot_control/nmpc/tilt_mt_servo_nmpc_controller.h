@@ -27,14 +27,6 @@
 #include "spinal/FlightConfigCmd.h"
 #include "spinal/DesireCoord.h"
 
-/* action */
-#include "actionlib/server/simple_action_server.h"
-#include "aerial_robot_msgs/PredXU.h"
-#include "aerial_robot_msgs/TrackTrajAction.h"
-#include "aerial_robot_msgs/TrackTrajFeedback.h"
-#include "aerial_robot_msgs/TrackTrajGoal.h"
-#include "aerial_robot_msgs/TrackTrajResult.h"
-
 using NMPCControlDynamicConfig = dynamic_reconfigure::Server<aerial_robot_control::NMPCConfig>;
 
 namespace aerial_robot_control
@@ -204,6 +196,8 @@ protected:
 
 private:
   tf::Quaternion quat_prev_;  // To deal with the discontinuity of the quaternion.
+
+  std::mutex alloc_mat_mutex_;  // avoid multi thread change alloc_mat at the same time
 };
 
 }  // namespace nmpc
