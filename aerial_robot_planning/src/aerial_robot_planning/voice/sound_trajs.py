@@ -170,18 +170,34 @@ class HappyBirthdayFixedRotorTraj(BaseTrajwSound):
     def __init__(self, loop_num: int = 1):
         super().__init__(loop_num)
 
+        # fmt: off
         self.sequence = [
-            ("g4", 1.0),  # lyrics: Happy
+            ("g4", 1.0),  # Happy
             ("a4", 1.0),  # Birth-
             ("g4", 1.0),  # day
             ("c5", 1.0),  # to
             ("b4", 2.0),  # You
+
             ("g4", 1.0),  # Happy
             ("a4", 1.0),  # Birth-
             ("g4", 1.0),  # day
             ("d5", 1.0),  # to
             ("c5", 2.0),  # You
+
+            ("g4", 1.0),  # Happy
+            ("e5", 1.0),  # Birth-
+            ("c5", 1.0),  # day
+            ("b4", 1.0),  # dear
+            ("a4", 1.0),  # [Name]
+            ("g4", 1.0),  # --
+
+            ("d5sharp", 1.0),  # Happy
+            ("d5", 1.0),  # Birth-
+            ("c5", 1.0),  # day
+            ("d5", 1.0),  # to
+            ("c5", 2.0),  # You
         ]
+        # fmt: on
 
         self.set_sequence(self.sequence)
 
