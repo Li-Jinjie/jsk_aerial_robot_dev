@@ -981,6 +981,8 @@ class PushWallYawRotationTraj(PushWallTraj):
             t_rotation = t - self.t_start_stable_apply_force
             yaw += self.omega * t_rotation
             yaw_rate = self.omega
+        elif t > self.t_end_apply_force:
+            yaw += self.omega * self.rotation_period
 
         (qx, qy, qz, qw) = tf.transformations.quaternion_from_euler(roll, pitch, yaw, axes="rxyz")
 
