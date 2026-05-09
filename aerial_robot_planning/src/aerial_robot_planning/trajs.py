@@ -812,6 +812,21 @@ class PushWallTraj(BaseTraj):
         self.T = 30
         self.x = 0.0
 
+        self.t_period_wait_converge = 2.0
+        self.t_period_calibrate = 3.0
+        self.t_period_move_to_wall = 3.0  # s
+        self.t_period_keep_contact = 15.0  # s
+        self.t_period_move_back_wall = 3.0  # s
+
+        self.t_period_accum_force = 2.5  # s
+        self.t_period_apply_force = 10.0  # s
+        self.t_period_gradually_increase_force = 3.0  # s  # included in t_period_apply_force
+
+        self.target_distance = 1.1  # m
+
+        self.desired_force = 10.0  # N
+        self.K_p = 20.0  # hard-coded. Ensure that the outer side has the same value.
+
         # calibrate wrench estimator once when this trajectory starts
         self._is_calibrated = False
 
@@ -828,66 +843,73 @@ class PushWallTraj(BaseTraj):
 
         self.x_final_target = 0.0
 
+    @property
+    def t_start_move_wall(self) -> float:
+        return self.t_period_wait_converge + self.t_period_calibrate
+
+    @property
+    def t_reach_wall(self) -> float:
+        return self.t_start_move_wall + self.t_period_move_to_wall
+
+    @property
+    def t_start_apply_extra_force(self) -> float:
+        return self.t_reach_wall + self.t_period_accum_force + 0.5
+
+    @property
+    def t_start_stable_apply_force(self) -> float:
+        return self.t_start_apply_extra_force + self.t_period_gradually_increase_force
+
+    @property
+    def t_end_apply_force(self) -> float:
+        return self.t_start_apply_extra_force + self.t_period_apply_force
+
+    @property
+    def t_start_move_back(self) -> float:
+        return self.t_reach_wall + self.t_period_keep_contact
+
+    @property
+    def t_end_move_back(self) -> float:
+        return self.t_start_move_back + self.t_period_move_back_wall
+
     def get_3d_pt(self, t: float) -> Tuple[float, float, float, float, float, float, float, float, float]:
         y, z, vx, vy, vz, ax, ay, az = 1.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
-        t_period_wait_converge = 2.0
-        t_period_calibrate = 3.0
-        t_period_move_to_wall = 3.0  # s
-        t_period_keep_contact = 15.0  # s
-        t_period_move_back_wall = 3.0  # s
-
-        t_period_accum_force = 2.5  # s
-        t_period_apply_force = 10  # s
-        t_period_gradually_increase_force = 3  # s  # included in t_period_apply_force
-
-        target_distance = 1.1  # m
-
-        desired_force = 10  # N
-        K_p = 20  # hard-coded. Ensure that the outer side has the same value.
-
-        if t > t_period_wait_converge and not self._is_calibrated:
+        if t > self.t_period_wait_converge and not self._is_calibrated:
             self._call_wrench_calibration()
             self._is_calibrated = True
 
-        t_start_move_wall = t_period_wait_converge + t_period_calibrate
         # when t is from 2 to 5, the position x is linearly increased
-        if t_start_move_wall + t_period_move_to_wall >= t > t_start_move_wall:
-            self.x = target_distance * (t - t_start_move_wall) / t_period_move_to_wall
+        if self.t_reach_wall >= t > self.t_start_move_wall:
+            self.x = self.target_distance * (t - self.t_start_move_wall) / self.t_period_move_to_wall
 
-        t_reach_wall = t_start_move_wall + t_period_move_to_wall
-        if t_reach_wall + t_period_accum_force >= t > t_reach_wall:
+        if self.t_reach_wall + self.t_period_accum_force >= t > self.t_reach_wall:
             if abs(self.ext_wrench_body_frame_msg.wrench.force.z) > 0.5:  # Note: body frame
                 self.init_contact_force_sum += self.ext_wrench_body_frame_msg.wrench.force.z
                 self.init_contact_force_num += 1
 
-        t_start_apply_extra_force = t_start_move_wall + t_period_move_to_wall + t_period_accum_force + 0.5
-        if t_start_apply_extra_force + t_period_apply_force >= t > t_start_apply_extra_force:
+        # apply force period
+        if self.t_end_apply_force >= t > self.t_start_apply_extra_force:
             if self.init_contact_force == 0.0:
                 self.init_contact_force = -self.init_contact_force_sum / self.init_contact_force_num  # negative value
                 rospy.loginfo(f"Initial contact force: {self.init_contact_force:.2f} N")
 
-                self.x_final_target = target_distance + (desired_force - self.init_contact_force) / K_p
+                self.x_final_target = self.target_distance + (self.desired_force - self.init_contact_force) / self.K_p
                 rospy.loginfo(f"Applying extra force. Current x: {self.x:.2f} m, x_final: {self.x_final_target} m")
 
-            if t_start_apply_extra_force + t_period_gradually_increase_force >= t:
-                self.x = (self.x_final_target - target_distance) * (
-                    t - t_start_apply_extra_force
-                ) / t_period_gradually_increase_force + target_distance
-            else:
+            if self.t_start_stable_apply_force >= t:  # gradually increase force
+                self.x = (self.x_final_target - self.target_distance) * (
+                    t - self.t_start_apply_extra_force
+                ) / self.t_period_gradually_increase_force + self.target_distance
+            else:  # stable apply force
                 self.x = self.x_final_target
 
-        if (
-            t_start_move_wall + t_period_move_to_wall + t_period_keep_contact
-            > t
-            > t_start_apply_extra_force + t_period_apply_force
-        ):
-            self.x = target_distance
+        # remove force
+        if self.t_start_move_back > t > self.t_end_apply_force:
+            self.x = self.target_distance
 
         # then x is linearly decreased
-        t_start_move_back = t_start_move_wall + t_period_move_to_wall + t_period_keep_contact
-        if t_start_move_back + t_period_move_back_wall >= t > t_start_move_back:
-            self.x = target_distance * (t_start_move_back + t_period_move_back_wall - t) / t_period_move_back_wall
+        if self.t_end_move_back >= t > self.t_start_move_back:
+            self.x = self.target_distance * (self.t_end_move_back - t) / self.t_period_move_back_wall
 
         return self.x, y, z, vx, vy, vz, ax, ay, az
 
@@ -930,3 +952,43 @@ class PushWallTraj(BaseTraj):
 
     def _sub_ext_wrench_body_frame_callback(self, msg):
         self.ext_wrench_body_frame_msg = msg
+
+
+class PushWallYawRotationTraj(PushWallTraj):
+    def __init__(self, loop_num) -> None:
+        super().__init__(loop_num)
+
+        self.rotation_period = 30.0
+        self.omega = 2 * np.pi / self.rotation_period
+        self.t_period_apply_force = self.t_period_gradually_increase_force + self.rotation_period
+
+        # Keep the original PushWallTraj 2 s gap between force release and moving back.
+        t_period_release_force = 2.0
+        self.t_period_keep_contact = (
+            self.t_start_apply_extra_force + self.t_period_apply_force + t_period_release_force - self.t_reach_wall
+        )
+        self.T = self.t_end_move_back
+
+    def get_3d_orientation(
+        self, t: float
+    ) -> Tuple[float, float, float, float, float, float, float, float, float, float]:
+        pitch = np.pi / 2
+        roll = 0.0
+        yaw = np.pi / 4
+        yaw_rate = 0.0
+
+        if self.t_end_apply_force >= t >= self.t_start_stable_apply_force:
+            t_rotation = t - self.t_start_stable_apply_force
+            yaw += self.omega * t_rotation
+            yaw_rate = self.omega
+
+        (qx, qy, qz, qw) = tf.transformations.quaternion_from_euler(roll, pitch, yaw, axes="rxyz")
+
+        roll_rate = 0.0
+        pitch_rate = 0.0
+
+        roll_acc = 0.0
+        pitch_acc = 0.0
+        yaw_acc = 0.0
+
+        return qw, qx, qy, qz, roll_rate, pitch_rate, yaw_rate, roll_acc, pitch_acc, yaw_acc
