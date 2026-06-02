@@ -2,7 +2,7 @@
 estimation:
   # sensor plugin
   sensor_list:
-    - sensor_plugin/imu_4_wrench_est
+    - sensor_plugin/imu
     - sensor_plugin/mocap
     - sensor_plugin/alt
 
