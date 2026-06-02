@@ -83,6 +83,7 @@ add_library(flight_control_pluginlib
   src/control/under_actuated_lqi_controller.cpp
   src/control/under_actuated_tilted_lqi_controller.cpp
   src/nmpc/base_mpc_controller.cpp
+  src/nmpc/fix_qd_thrust_out_mdl/nmpc_controller.cpp
   src/nmpc/tilt_mt_servo_nmpc_controller.cpp
   src/nmpc/tilt_mt_servo_dist_nmpc_controller.cpp
 )
