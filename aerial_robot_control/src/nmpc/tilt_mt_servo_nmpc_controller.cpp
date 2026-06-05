@@ -489,10 +489,11 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
   }
   else if (traj_child_frame_id_ == "ee")
   {
-    if (robot_model_->hasFrame("ee_contact"))
-      robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
-    else
-      ROS_WARN_THROTTLE(5, "No frame named ee_contact in the robot model! The end-effector pose will be set to CoG.");
+    // if (robot_model_->hasFrame("ee_contact"))
+    //   robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
+    // else
+    //   ROS_WARN_THROTTLE(5, "No frame named ee_contact in the robot model! The end-effector pose will be set to
+    //   CoG.");
   }
   else
   {
@@ -1033,9 +1034,25 @@ void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJo
       geometry_msgs::Quaternion quat = point.transforms[0].rotation;
       geometry_msgs::Vector3 omega = point.velocities[0].angular;
       geometry_msgs::Vector3 ang_acc = point.accelerations[0].angular;
-      setXrUrRef(tf::Vector3(pos.x, pos.y, pos.z), tf::Vector3(vel.x, vel.y, vel.z), tf::Vector3(acc.x, acc.y, acc.z),
-                 tf::Quaternion(quat.x, quat.y, quat.z, quat.w), tf::Vector3(omega.x, omega.y, omega.z),
-                 tf::Vector3(ang_acc.x, ang_acc.y, ang_acc.z), i);
+
+      if (msg->joint_names[0] == "ee")
+      {
+        // convert the position and velocity from CoG to end-effector frame
+        tf::Vector3 cog_pos, cog_vel, cog_omega;
+        tf::Quaternion cog_quat;
+        robot_model_->convertFromEEContactToCoG(tf::Vector3(pos.x, pos.y, pos.z), tf::Vector3(vel.x, vel.y, vel.z),
+                                                tf::Quaternion(quat.x, quat.y, quat.z, quat.w),
+                                                tf::Vector3(omega.x, omega.y, omega.z), cog_pos, cog_vel, cog_quat,
+                                                cog_omega);
+        setXrUrRef(cog_pos, cog_vel, tf::Vector3(acc.x, acc.y, acc.z), cog_quat, cog_omega,
+                   tf::Vector3(ang_acc.x, ang_acc.y, ang_acc.z), i);
+      }
+      else
+      {
+        setXrUrRef(tf::Vector3(pos.x, pos.y, pos.z), tf::Vector3(vel.x, vel.y, vel.z), tf::Vector3(acc.x, acc.y, acc.z),
+                   tf::Quaternion(quat.x, quat.y, quat.z, quat.w), tf::Vector3(omega.x, omega.y, omega.z),
+                   tf::Vector3(ang_acc.x, ang_acc.y, ang_acc.z), i);
+      }
     }
   }
 
