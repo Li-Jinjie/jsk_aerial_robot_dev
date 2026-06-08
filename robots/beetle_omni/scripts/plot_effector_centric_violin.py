@@ -11,7 +11,7 @@ Usage:
 
 import argparse
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -135,14 +135,22 @@ def rmse(values: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(values))))
 
 
-def add_violin(ax, values, labels, ylabel: str) -> None:
+def add_violin(ax, values, labels, ylabel: str, colors: Optional[list] = None) -> None:
     parts = ax.violinplot(values, positions=np.arange(1, len(values) + 1), showmeans=True, showextrema=True)
-    for body in parts["bodies"]:
-        body.set_alpha(0.65)
+
+    # Change colors for violin bodies
+    if colors:
+        for i, body in enumerate(parts["bodies"]):
+            if i < len(colors):
+                body.set_facecolor(colors[i])
+            body.set_alpha(0.65)
+    else:
+        for body in parts["bodies"]:
+            body.set_alpha(0.65)
 
     ax.set_xticks(np.arange(1, len(labels) + 1))
     ax.set_xticklabels(labels)
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(ylabel, fontsize=14)
     ax.grid(True, axis="y", alpha=0.35)
 
 
@@ -160,10 +168,14 @@ def plot_errors(errors: Dict[str, ErrorData], output_path: str | None) -> None:
     x_errors = [errors[label].x_abs_error for label in labels]
     pitch_errors = [errors[label].pitch_abs_error_deg for label in labels]
 
-    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.8))
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.2))
 
-    add_violin(axes[0], x_errors, labels, r"$|e_x|$ [m]")
-    add_violin(axes[1], pitch_errors, labels, r"$|e_{\mathrm{pitch}}|$ [$^\circ$]")
+    # Colors: blue for CoG (left), orange for EE (right)
+    colors_x = ["#0072BD", "#FF9900"]
+    colors_pitch = ["#0072BD", "#FF9900"]
+
+    add_violin(axes[0], x_errors, labels, r"$|e_x|$ [m]", colors_x)
+    add_violin(axes[1], pitch_errors, labels, r"$|e_{\mathrm{pitch}}|$ [$^\circ$]", colors_pitch)
 
     fig.tight_layout()
 
@@ -194,8 +206,8 @@ def main() -> None:
     args = parser.parse_args()
 
     errors = {
-        "EE NMPC": load_error_data(args.inside_nmpc_file_path),
-        "CoG NMPC": load_error_data(args.outside_nmpc_file_path),
+        "CoG-Centric": load_error_data(args.outside_nmpc_file_path),
+        "EE-Centric": load_error_data(args.inside_nmpc_file_path),
     }
 
     for name, err in errors.items():
