@@ -327,6 +327,19 @@ def main(file_path, type, if_hand_teleop):
         rmse_roll = calculate_rmse(t, roll, t_ref, roll_ref)
         print(f"RMSE Roll [rad]: {rmse_roll}")
         print(f"RMSE Roll [deg]: {rmse_roll * 180 / np.pi}")
+        # ----------------------------
+        # absolute tracking error (right y-axis) for Roll
+        ax = plt.gca()
+        ax2 = ax.twinx()
+        # interpolate reference to the real timestamps
+        roll_ref_interp = np.interp(t, t_ref, roll_ref)
+        # absolute error in degrees
+        roll_err_deg = np.abs((roll - roll_ref_interp) * 180.0 / np.pi)
+        ax2.plot(t, roll_err_deg, label="absolute error", color=matlab_green, alpha=0.5)
+        # fill between error curve and zero baseline to show shaded error area
+        ax2.fill_between(t, roll_err_deg, 0.0, color=matlab_green, alpha=0.2)
+        ax2.set_ylabel("Abs. Err. [$^\\circ$]", fontsize=label_size)
+        ax2.legend(framealpha=legend_alpha)  #  loc="center right"
 
         # --------------------------------
         plt.subplot(4, 2, 3)
@@ -381,6 +394,15 @@ def main(file_path, type, if_hand_teleop):
         rmse_pitch = calculate_rmse(t, pitch, t_ref, pitch_ref)
         print(f"RMSE Pitch [rad]: {rmse_pitch}")
         print(f"RMSE Pitch [deg]: {rmse_pitch * 180 / np.pi}")
+        # ----------------------------
+        # absolute tracking error (right y-axis) for Pitch
+        ax = plt.gca()
+        ax2 = ax.twinx()
+        pitch_ref_interp = np.interp(t, t_ref, pitch_ref)
+        pitch_err_deg = np.abs((pitch - pitch_ref_interp) * 180.0 / np.pi)
+        ax2.plot(t, pitch_err_deg, label="absolute error", color=matlab_green, alpha=0.5)
+        ax2.fill_between(t, pitch_err_deg, 0.0, color=matlab_green, alpha=0.2)
+        ax2.set_ylabel("Abs. Err. [$^\\circ$]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 5)
@@ -434,6 +456,15 @@ def main(file_path, type, if_hand_teleop):
         rmse_yaw = calculate_rmse(t, yaw, t_ref, yaw_ref, is_yaw=True)
         print(f"RMSE Yaw [rad]: {rmse_yaw}")
         print(f"RMSE Yaw [deg]: {rmse_yaw * 180 / np.pi}")
+        # ----------------------------
+        # absolute tracking error (right y-axis) for Yaw
+        ax = plt.gca()
+        ax2 = ax.twinx()
+        yaw_ref_interp = np.interp(t, t_ref, yaw_ref)
+        yaw_err_deg = np.abs((yaw - yaw_ref_interp) * 180.0 / np.pi)
+        ax2.plot(t, yaw_err_deg, label="abs_err", color=matlab_green, alpha=0.5)
+        ax2.fill_between(t, yaw_err_deg, 0.0, color=matlab_green, alpha=0.2)
+        ax2.set_ylabel("Abs. Err. [$^\\circ$]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 7)
