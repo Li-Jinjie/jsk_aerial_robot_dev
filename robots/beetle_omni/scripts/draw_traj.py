@@ -252,18 +252,18 @@ def main(file_path, type, if_hand_teleop):
         plt.rcParams.update({"font.size": 11})  # default is 10
         label_size = 14
 
-        fig = plt.figure(figsize=(7, 7))
+        fig = plt.figure(figsize=(7, 7))  # (7, 5.5) for teleop
 
         t_bias = max(data_xyz["__time"].iloc[0], data_xyz_ref["__time"].iloc[0], data_xyz_cog["__time"].iloc[0])
         color_ref = "#0C5DA5"
         color_real = "#FF2C00"
         color_cog = "#f29619"  # the orange in scienceplots
 
-        inside_valve_t_start = 13.7
-        inside_valve_t_stop = 58.9
+        inside_valve_t_start = 9.3
+        inside_valve_t_stop = 54.7
 
-        con_rot_t_start = 39.0
-        con_rot_t_stop = 68.6
+        con_rot_t_start = 18.8
+        con_rot_t_stop = 48.4
 
         # --------------------------------
         plt.subplot(4, 2, 1)
@@ -271,9 +271,10 @@ def main(file_path, type, if_hand_teleop):
         x_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/x"])
         plt.plot(t_ref, x_ref, label="ref_ee", linestyle="--", color=color_ref)
 
-        t_cog = np.array(data_xyz_cog["__time"]) - t_bias
-        x_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/x"])
-        plt.plot(t_cog, x_cog, label="cog", linestyle="-.", color=color_cog)
+        if not if_hand_teleop:
+            t_cog = np.array(data_xyz_cog["__time"]) - t_bias
+            x_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/x"])
+            plt.plot(t_cog, x_cog, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_xyz["__time"]) - t_bias
         x = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/x"])
@@ -281,6 +282,9 @@ def main(file_path, type, if_hand_teleop):
 
         if if_hand_teleop:
             plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
+            plt.axvspan(
+                con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
+            )
 
         plt.legend(framealpha=legend_alpha, ncol=2)
         plt.ylabel("X [m]", fontsize=label_size)
@@ -314,7 +318,7 @@ def main(file_path, type, if_hand_teleop):
         plt.ylabel("Roll [$^\\circ$]", fontsize=label_size)
 
         if if_hand_teleop:
-            plt.axvspan(con_rot_t_start, con_rot_t_stop, facecolor=matlab_green, alpha=0.2)
+            plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
             plt.axvspan(
                 con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
             )
@@ -330,9 +334,10 @@ def main(file_path, type, if_hand_teleop):
         y_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/y"])
         plt.plot(t_ref, y_ref, label="ref_ee", linestyle="--", color=color_ref)
 
-        t_cog = np.array(data_xyz_cog["__time"]) - t_bias
-        y_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/y"])
-        plt.plot(t_cog, y_cog, label="cog", linestyle="-.", color=color_cog)
+        if not if_hand_teleop:
+            t_cog = np.array(data_xyz_cog["__time"]) - t_bias
+            y_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/y"])
+            plt.plot(t_cog, y_cog, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_xyz["__time"]) - t_bias
         y = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/y"])
@@ -341,6 +346,9 @@ def main(file_path, type, if_hand_teleop):
 
         if if_hand_teleop:
             plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
+            plt.axvspan(
+                con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
+            )
 
         # plt.legend(framealpha=legend_alpha, ncol=2)
 
@@ -364,7 +372,7 @@ def main(file_path, type, if_hand_teleop):
         plt.ylabel("Pitch [$^\\circ$]", fontsize=label_size)
 
         if if_hand_teleop:
-            plt.axvspan(con_rot_t_start, con_rot_t_stop, facecolor=matlab_green, alpha=0.2)
+            plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
             plt.axvspan(
                 con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
             )
@@ -380,9 +388,10 @@ def main(file_path, type, if_hand_teleop):
         z_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/z"])
         plt.plot(t_ref, z_ref, label="ref", linestyle="--", color=color_ref)
 
-        t_cog = np.array(data_xyz_cog["__time"]) - t_bias
-        z_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/z"])
-        plt.plot(t_cog, z_cog, label="cog", linestyle="-.", color=color_cog)
+        if not if_hand_teleop:
+            t_cog = np.array(data_xyz_cog["__time"]) - t_bias
+            z_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/z"])
+            plt.plot(t_cog, z_cog, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_xyz["__time"]) - t_bias
         z = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/z"])
@@ -392,6 +401,9 @@ def main(file_path, type, if_hand_teleop):
 
         if if_hand_teleop:
             plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
+            plt.axvspan(
+                con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
+            )
 
         # calculate RMSE
         rmse_z = calculate_rmse(t, z, t_ref, z_ref)
@@ -413,7 +425,7 @@ def main(file_path, type, if_hand_teleop):
         plt.ylabel("Yaw [$^\\circ$]", fontsize=label_size)
 
         if if_hand_teleop:
-            plt.axvspan(con_rot_t_start, con_rot_t_stop, facecolor=matlab_green, alpha=0.2)
+            plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
             plt.axvspan(
                 con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
             )
