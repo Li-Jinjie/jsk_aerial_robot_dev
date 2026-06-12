@@ -468,34 +468,58 @@ def main(file_path, type, if_hand_teleop):
 
         # --------------------------------
         plt.subplot(4, 2, 7)
-        t = np.array(data_thrust_cmd["__time"]) - t_bias
-        thrust1 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[0]"])
-        plt.plot(t, thrust1, label="$f_{c1}$", linestyle="-")
-        thrust2 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[1]"])
-        plt.plot(t, thrust2, label="$f_{c2}$", linestyle="--")
-        thrust3 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[2]"])
-        plt.plot(t, thrust3, label="$f_{c3}$", linestyle="-.")
-        thrust4 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[3]"])
-        plt.plot(t, thrust4, label="$f_{c4}$", linestyle=":")
-        plt.ylabel("Thrust Cmd [N]", fontsize=label_size)
-        plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="lower left", ncol=2)
+        if if_hand_teleop and "data_ext_wrench_est" in locals():
+            t = np.array(data_ext_wrench_est["__time"]) - t_bias
+            fx = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/x"])
+            fy = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/y"])
+            fz = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/z"])
+            plt.plot(t, fx, label="$f_x$", linestyle="-")
+            plt.plot(t, fy, label="$f_y$", linestyle="--")
+            plt.plot(t, fz, label="$f_z$", linestyle="-.")
+            plt.ylabel("${^B\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
+            plt.xlabel("Time [s]", fontsize=label_size)
+            plt.legend(framealpha=legend_alpha)
+        else:
+            t = np.array(data_thrust_cmd["__time"]) - t_bias
+            thrust1 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[0]"])
+            plt.plot(t, thrust1, label="$f_{c1}$", linestyle="-")
+            thrust2 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[1]"])
+            plt.plot(t, thrust2, label="$f_{c2}$", linestyle="--")
+            thrust3 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[2]"])
+            plt.plot(t, thrust3, label="$f_{c3}$", linestyle="-.")
+            thrust4 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[3]"])
+            plt.plot(t, thrust4, label="$f_{c4}$", linestyle=":")
+            plt.ylabel("Thrust Cmd [N]", fontsize=label_size)
+            plt.xlabel("Time [s]", fontsize=label_size)
+            plt.legend(framealpha=legend_alpha, loc="lower left", ncol=2)
 
         # --------------------------------
         plt.subplot(4, 2, 8)
-        t = np.array(data_servo_angle_cmd["__time"]) - t_bias
-        servo1 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal1/position"]) * 180 / np.pi
-        plt.plot(t, servo1, label="$\\alpha_{c1}$", linestyle="-")
-        servo2 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal2/position"]) * 180 / np.pi
-        plt.plot(t, servo2, label="$\\alpha_{c2}$", linestyle="--")
-        servo3 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal3/position"]) * 180 / np.pi
-        plt.plot(t, servo3, label="$\\alpha_{c3}$", linestyle="-.")
-        servo4 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal4/position"]) * 180 / np.pi
-        plt.plot(t, servo4, label="$\\alpha_{c4}$", linestyle=":")
+        if if_hand_teleop and "data_ext_wrench_est" in locals():
+            t = np.array(data_ext_wrench_est["__time"]) - t_bias
+            torque_x = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/torque/x"])
+            torque_y = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/torque/y"])
+            torque_z = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/torque/z"])
+            plt.plot(t, torque_x, label="$\\tau_x$", linestyle="-")
+            plt.plot(t, torque_y, label="$\\tau_y$", linestyle="--")
+            plt.plot(t, torque_z, label="$\\tau_z$", linestyle="-.")
+            plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{de,0}}$ [N$\cdot$m]", fontsize=label_size)
+            plt.xlabel("Time [s]", fontsize=label_size)
+            plt.legend(framealpha=legend_alpha)
+        else:
+            t = np.array(data_servo_angle_cmd["__time"]) - t_bias
+            servo1 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal1/position"]) * 180 / np.pi
+            plt.plot(t, servo1, label="$\\alpha_{c1}$", linestyle="-")
+            servo2 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal2/position"]) * 180 / np.pi
+            plt.plot(t, servo2, label="$\\alpha_{c2}$", linestyle="--")
+            servo3 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal3/position"]) * 180 / np.pi
+            plt.plot(t, servo3, label="$\\alpha_{c3}$", linestyle="-.")
+            servo4 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal4/position"]) * 180 / np.pi
+            plt.plot(t, servo4, label="$\\alpha_{c4}$", linestyle=":")
 
-        plt.ylabel("Servo Cmd [$^\\circ$]", fontsize=label_size)
-        plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="center left", ncol=2)
+            plt.ylabel("Servo Cmd [$^\\circ$]", fontsize=label_size)
+            plt.xlabel("Time [s]", fontsize=label_size)
+            plt.legend(framealpha=legend_alpha, loc="center left", ncol=2)
 
         # --------------------------------
         plt.tight_layout()
