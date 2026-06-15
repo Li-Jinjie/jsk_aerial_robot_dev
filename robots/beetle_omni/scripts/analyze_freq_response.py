@@ -16,6 +16,8 @@ plt.rcParams.update(
 )
 label_size = 15
 
+linewidth = 1.5
+
 # =========================
 # Parameters
 # =========================
@@ -75,14 +77,14 @@ _, mag_fdm_fother, phase_fdm_fother = signal.bode(H_fdm_fother, w=w)
 # =========================
 # Combined magnitude and phase plot
 # =========================
-fig, axes = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
+fig, axes = plt.subplots(2, 1, figsize=(8, 3.5), sharex=True)
 
 ax_mag, ax_phase = axes
 
 # Magnitude
-ax_mag.semilogx(f, mag_He, label=r"$\hat{f}_{de}/f_{de}$")
-ax_mag.semilogx(f, mag_fdm_fde, label=r"$f_{dm}/f_{de}$")
-ax_mag.semilogx(f, mag_fdm_fother, label=r"$f_{dm}/f_{\mathrm{other}}$")
+ax_mag.semilogx(f, mag_He, label=r"${^W\hat{f}_{de}}/{^Wf_{de}}$", linestyle="--", linewidth=linewidth)
+ax_mag.semilogx(f, mag_fdm_fde, label=r"${^Wf_{dm}}/{^Wf_{de}}$", linewidth=linewidth)
+ax_mag.semilogx(f, mag_fdm_fother, label=r"${^Wf_{dm}}/{^Wf_{\mathrm{other}}}$", linewidth=linewidth)
 
 ax_mag.set_ylabel(r"Magnitude [dB]")
 ax_mag.legend(
@@ -91,16 +93,16 @@ ax_mag.legend(
     handlelength=1.6,
     borderpad=0.3,
     labelspacing=0.25,
-    framealpha=0.85,
+    framealpha=0.6,
 )
 
 # Phase
-ax_phase.semilogx(f, phase_He)
-ax_phase.semilogx(f, phase_fdm_fde)
-ax_phase.semilogx(f, phase_fdm_fother)
+ax_phase.semilogx(f, phase_He, linestyle="--", linewidth=linewidth)
+ax_phase.semilogx(f, phase_fdm_fde, linewidth=linewidth)
+ax_phase.semilogx(f, phase_fdm_fother, linewidth=linewidth)
 
 ax_phase.set_xlabel(r"Frequency [Hz]", fontsize=label_size)
-ax_phase.set_ylabel(r"Phase [deg]", fontsize=label_size)
+ax_phase.set_ylabel(r"Phase [$^\circ$]", fontsize=label_size)
 
 # Axis and layout
 for ax in axes:
