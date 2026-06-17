@@ -133,6 +133,7 @@ install(TARGETS trajectory_generation_node
 
 install(FILES ${ACADOS_GENERATED_LIBS}
   DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  OPTIONAL
 )
 
 install(DIRECTORY scripts plugins

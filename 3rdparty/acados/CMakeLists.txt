@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.5.1)
 project(acados)
 include(ExternalProject)
 
+set(ACADOS_EXTERNAL_SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/acados-prefix/src/acados)
+
 ExternalProject_Add(
   acados
   GIT_REPOSITORY https://github.com/acados/acados.git
@@ -57,3 +59,13 @@ ExternalProject_Add(
 
 
 install(CODE "execute_process(COMMAND make install WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/acados-prefix/src/acados-build)")
+
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/env-hooks/50.acados.sh.in
+  ${CMAKE_CURRENT_BINARY_DIR}/50.acados.sh
+  @ONLY
+)
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/50.acados.sh
+  DESTINATION etc/catkin/profile.d
+)
