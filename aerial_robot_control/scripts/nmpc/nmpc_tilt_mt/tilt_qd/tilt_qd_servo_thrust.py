@@ -28,7 +28,7 @@ class NMPCTiltQdServoThrust(QDNMPCBase):
         self.include_impedance = False
 
         # Read parameters from configuration file in the robot's package
-        self.read_params("controller", "nmpc", "beetle", "BeetleNMPCFull.yaml")
+        self.read_params("controller", "nmpc", "beetle_omni", "BeetleNMPCFullDist.yaml")
 
         # Create acados model & solver and generate c code
         super().__init__(build)
