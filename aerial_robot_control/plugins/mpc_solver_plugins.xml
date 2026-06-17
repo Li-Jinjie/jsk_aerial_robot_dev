@@ -4,10 +4,6 @@
         <description>Nonlinear Model Predictive Control with Fixed Qd Model.</description>
     </class>
 
-    <!-- tilt qd -->
-    <class type="aerial_robot_control::mpc_solver::TiltQdServoMdlMPCSolver" base_class_type="aerial_robot_control::mpc_solver::BaseMPCSolver">
-        <description>Nonlinear Model Predictive Control with Tilt Qd Servo Model.</description>
-    </class>
     <class type="aerial_robot_control::mpc_solver::TiltQdServoDistMdlMPCSolver" base_class_type="aerial_robot_control::mpc_solver::BaseMPCSolver">
         <description>Nonlinear Model Predictive Control with Tilt Qd Servo Disturbance Model.</description>
     </class>

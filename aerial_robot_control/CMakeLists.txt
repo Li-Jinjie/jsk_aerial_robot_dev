@@ -21,9 +21,7 @@ find_package(acados) # if we use REQUIRED, then will cause OpenBLAS and FortranL
 
 set(ACADOS_GENERATED_LIBS
   ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/fix_qd_thrust_out_mdl/c_generated_code/libacados_ocp_solver_fix_qd_thrust_out_mdl.so
-  ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_mdl.so
   ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_dist_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_dist_mdl.so
-  ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_dist_mdl/c_generated_code/libacados_sim_solver_tilt_qd_servo_dist_mdl.so
 )
 
 generate_dynamic_reconfigure_options(
@@ -121,6 +119,7 @@ target_link_libraries (trajectory_generation_node ${catkin_LIBRARIES} trajectory
 
 install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+  PATTERN "tilt_qd_servo_mdl" EXCLUDE
   PATTERN "*.so" EXCLUDE)
 
 install(TARGETS control_utils mpc_solver_plugins flight_control_pluginlib flight_navigation trajectory_generation

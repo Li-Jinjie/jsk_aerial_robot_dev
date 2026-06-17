@@ -7,10 +7,10 @@ unset MAKEFLAGS
 
 MODELS=(
 #    NMPCFixQdAngvelOut
-#    NMPCFixQdThrustOut
+    NMPCFixQdThrustOut
 #    NMPCTiltQdNoServo
 #    NMPCTiltQdServo
-#    NMPCTiltQdServoDist
+    NMPCTiltQdServoDist
 #    NMPCTiltQdServoImpedance
 #    NMPCTiltQdServoThrustDist
 #    NMPCTiltQdServoThrustImpedance
