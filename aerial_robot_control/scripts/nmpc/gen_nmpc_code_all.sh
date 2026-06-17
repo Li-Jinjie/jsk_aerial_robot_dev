@@ -25,3 +25,5 @@ do
     echo "Generating NMPC code for model: $model"
     python3 gen_nmpc_code.py -m "$model"
 done
+
+find ../../include/aerial_robot_control/nmpc -path "*/c_generated_code/*.so" -exec chmod 644 {} +
