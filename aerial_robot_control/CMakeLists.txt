@@ -19,6 +19,13 @@ find_package(Eigen3 REQUIRED)
 # TODO: auto install acados
 find_package(acados) # if we use REQUIRED, then will cause OpenBLAS and FortranLib Find_Package error
 
+set(ACADOS_GENERATED_LIBS
+  ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/fix_qd_thrust_out_mdl/c_generated_code/libacados_ocp_solver_fix_qd_thrust_out_mdl.so
+  ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_mdl.so
+  ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_dist_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_dist_mdl.so
+  ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_dist_mdl/c_generated_code/libacados_sim_solver_tilt_qd_servo_dist_mdl.so
+)
+
 generate_dynamic_reconfigure_options(
   cfg/PID.cfg
   cfg/LQI.cfg
@@ -43,7 +50,7 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG")
 
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES control_utils flight_control_pluginlib flight_navigation trajectory_generation
+  LIBRARIES control_utils flight_control_pluginlib flight_navigation trajectory_generation mpc_solver_plugins
   CATKIN_DEPENDS aerial_robot_estimation aerial_robot_model aerial_robot_msgs dynamic_reconfigure pluginlib roscpp spinal tf
 )
 
@@ -68,11 +75,7 @@ add_custom_target(gen_acados_code ALL
 
 ### mpc solver plugin
 add_library(mpc_solver_plugins src/nmpc/mpc_solver_plugins.cpp)
-target_link_libraries(mpc_solver_plugins ${catkin_LIBRARIES} acados
-  ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/fix_qd_thrust_out_mdl/c_generated_code/libacados_ocp_solver_fix_qd_thrust_out_mdl.so
-  ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_mdl.so
-  ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_dist_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_dist_mdl.so
-)
+target_link_libraries(mpc_solver_plugins ${catkin_LIBRARIES} acados ${ACADOS_GENERATED_LIBS})
 add_dependencies(mpc_solver_plugins gen_acados_code)
 
 ### flight control plugin
@@ -117,14 +120,19 @@ target_link_libraries (trajectory_generation_node ${catkin_LIBRARIES} trajectory
 
 
 install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+  PATTERN "*.so" EXCLUDE)
 
-install(TARGETS control_utils flight_control_pluginlib flight_navigation trajectory_generation
+install(TARGETS control_utils mpc_solver_plugins flight_control_pluginlib flight_navigation trajectory_generation
   DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 )
 
 install(TARGETS trajectory_generation_node
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(FILES ${ACADOS_GENERATED_LIBS}
+  DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 )
 
 install(DIRECTORY scripts plugins

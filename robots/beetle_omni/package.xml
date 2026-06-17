@@ -25,9 +25,11 @@
   <exec_depend>aerial_robot_estimation</exec_depend>
   <exec_depend>aerial_robot_simulation</exec_depend>
   <exec_depend>aerial_robot_base</exec_depend>
+  <exec_depend>cfs_sensor</exec_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>pluginlib</exec_depend>
   <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>rviz</exec_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
