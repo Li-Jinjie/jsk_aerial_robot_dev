@@ -259,11 +259,11 @@ def main(file_path, type, if_hand_teleop):
         color_real = "#FF2C00"
         color_cog = "#f29619"  # the orange in scienceplots
 
-        inside_valve_t_start = 9.3
-        inside_valve_t_stop = 54.7
+        inside_valve_t_start = 8.1
+        inside_valve_t_stop = 46.9
 
-        con_rot_t_start = 18.8
-        con_rot_t_stop = 48.4
+        con_rot_t_start = 16.9
+        con_rot_t_stop = 46.9
 
         # --------------------------------
         plt.subplot(4, 2, 1)
