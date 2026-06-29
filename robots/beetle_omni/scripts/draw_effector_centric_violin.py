@@ -48,6 +48,14 @@ def require_columns(data: pd.DataFrame, columns) -> None:
         raise KeyError("Missing required columns:\n" + "\n".join(missing))
 
 
+def optional_column_group_exists(data: pd.DataFrame, columns, group_name: str) -> bool:
+    present = [column in data.columns for column in columns]
+    if any(present) and not all(present):
+        missing = [column for column, exists in zip(columns, present) if not exists]
+        raise KeyError(f"Incomplete {group_name} columns:\n" + "\n".join(missing))
+    return all(present)
+
+
 def normalize_quat(q: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(q, axis=1, keepdims=True)
     norm[norm == 0.0] = 1.0
@@ -72,34 +80,38 @@ def load_error_data(file_path: str) -> ErrorData:
 
     real_q_cols = qcols(Q_REAL_PREFIX)
     ref_q_cols = qcols(Q_REF_PREFIX)
-    required = [TIME, X_REAL, X_REF, *real_q_cols, *ref_q_cols]
-    require_columns(data, required)
+    require_columns(data, [TIME, X_REAL, *real_q_cols])
+
+    has_x_ref = X_REF in data.columns
+    has_q_ref = optional_column_group_exists(data, ref_q_cols, "reference quaternion")
 
     data_x_real = data[[TIME, X_REAL]].dropna().sort_values(TIME)
-    data_x_ref = data[[TIME, X_REF]].dropna().sort_values(TIME)
-
     data_q_real = data[[TIME, *real_q_cols]].dropna().sort_values(TIME)
-    data_q_ref = data[[TIME, *ref_q_cols]].dropna().sort_values(TIME)
+
+    data_x_ref = data[[TIME, X_REF]].dropna().sort_values(TIME) if has_x_ref else None
+    data_q_ref = data[[TIME, *ref_q_cols]].dropna().sort_values(TIME) if has_q_ref else None
 
     # Use reference timestamps as the common grid, as in the original type==0 workflow.
-    t_start = max(
-        data_x_real[TIME].iloc[0],
-        data_x_ref[TIME].iloc[0],
-        data_q_real[TIME].iloc[0],
-        data_q_ref[TIME].iloc[0],
-    )
-    t_stop = min(
-        data_x_real[TIME].iloc[-1],
-        data_x_ref[TIME].iloc[-1],
-        data_q_real[TIME].iloc[-1],
-        data_q_ref[TIME].iloc[-1],
-    )
+    time_series = [data_x_real[TIME], data_q_real[TIME]]
+    if data_x_ref is not None:
+        time_series.append(data_x_ref[TIME])
+    if data_q_ref is not None:
+        time_series.append(data_q_ref[TIME])
+    t_start = max(series.iloc[0] for series in time_series)
+    t_stop = min(series.iloc[-1] for series in time_series)
 
-    t_ref = data_x_ref[TIME].to_numpy()
+    # Without X_REF, use X_REAL timestamps and a constant reference equal to
+    # the mean X_REAL value during its first 0.5 seconds.
+    t_ref = (data_x_ref if data_x_ref is not None else data_x_real)[TIME].to_numpy()
     valid = (t_ref >= t_start) & (t_ref <= t_stop)
     t_ref = t_ref[valid]
 
-    x_ref = data_x_ref[X_REF].to_numpy()[valid]
+    if data_x_ref is not None:
+        x_ref = data_x_ref[X_REF].to_numpy()[valid]
+    else:
+        x_start = data_x_real[TIME].iloc[0]
+        initial_x = data_x_real.loc[data_x_real[TIME] <= x_start + 0.5, X_REAL]
+        x_ref = np.full(t_ref.shape, initial_x.mean())
     x_real = np.interp(t_ref, data_x_real[TIME].to_numpy(), data_x_real[X_REAL].to_numpy())
     x_abs_error = np.abs(x_real - x_ref)
 
@@ -109,15 +121,17 @@ def load_error_data(file_path: str) -> ErrorData:
         data_q_real[real_q_cols[2]].to_numpy(),
         data_q_real[real_q_cols[3]].to_numpy(),
     )
-    pitch_ref_raw = continuous_pitch_from_quat(
-        data_q_ref[ref_q_cols[0]].to_numpy(),
-        data_q_ref[ref_q_cols[1]].to_numpy(),
-        data_q_ref[ref_q_cols[2]].to_numpy(),
-        data_q_ref[ref_q_cols[3]].to_numpy(),
-    )
-
     pitch_real_interp = np.interp(t_ref, data_q_real[TIME].to_numpy(), pitch_real)
-    pitch_ref = np.interp(t_ref, data_q_ref[TIME].to_numpy(), pitch_ref_raw)
+    if data_q_ref is not None:
+        pitch_ref_raw = continuous_pitch_from_quat(
+            data_q_ref[ref_q_cols[0]].to_numpy(),
+            data_q_ref[ref_q_cols[1]].to_numpy(),
+            data_q_ref[ref_q_cols[2]].to_numpy(),
+            data_q_ref[ref_q_cols[3]].to_numpy(),
+        )
+        pitch_ref = np.interp(t_ref, data_q_ref[TIME].to_numpy(), pitch_ref_raw)
+    else:
+        pitch_ref = np.zeros_like(t_ref)
     pitch_abs_error_deg = np.abs(pitch_real_interp - pitch_ref) * 180.0 / np.pi
 
     return ErrorData(
