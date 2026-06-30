@@ -11,8 +11,8 @@
  ``AdmittanceState``) and loop over a hard-coded list of ``PushTarget`` s.
 """
 
-from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
+from dataclasses import dataclass
+from typing import List, Tuple, Optional, Sequence
 
 import numpy as np
 import rospy
@@ -27,52 +27,65 @@ from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectory
 
 from ..util import topic_ready
 
+# ======================================================================================
+# Target / task definition (hard-coded list)
+# ======================================================================================
+DEFAULT_BODY_Z_ROTATION = -np.pi / 4
 
-# ======================================================================================
-# Target definition (hard-coded list)
-# ======================================================================================
+
 @dataclass
 class PushTarget:
     """A single contact point to push against.
 
     ``approach_dir`` (the surface inward normal followed during the push) is derived
     as the unit vector ``contact_pos - standoff_pos``; the over-shoot used to generate
-    the force is applied along this direction. ``orientation`` should make the
-    end-effector face the local surface normal.
+    the force is applied along this direction. The desired attitude is generated from
+    this same line, with Body-Z aligned to ``approach_dir`` and ``body_z_rotation``
+    applied around Body-Z.
     """
 
     standoff_pos: Tuple[float, float, float]  # (x, y, z) off-contact approach point [m]
     contact_pos: Tuple[float, float, float]  # (x, y, z) nominal contact point [m]
-    orientation: Tuple[float, float, float]  # (roll, pitch, yaw) [rad], axes="rxyz"
     desired_force: float  # [N]
+    body_z_rotation: float = DEFAULT_BODY_Z_ROTATION  # [rad], right-hand rotation about Body-Z
     k_p: float = 20.0  # must match the controller's effective stiffness (trajs.py:847 note)
 
 
-# The first entry reproduces the original PushWallTraj demo. Add more entries to push
-# repeatedly across a curved surface / large plane.
-DEFAULT_PUSH_TARGETS: List[PushTarget] = [
+@dataclass
+class PushTask:
+    """A selectable push task, chosen after entering Push Mode."""
+
+    name: str
+    targets: Sequence[PushTarget]
+
+
+# The first target reproduces the original PushWallTraj attitude because the default
+# Body-Z rotation is -pi/4 for a +X approach. Add more PushTask entries for new scenes.
+THREE_PUSH_TARGETS: Tuple[PushTarget, ...] = (
     PushTarget(
         standoff_pos=(0.0, 1.0, 1.2),
         contact_pos=(1.1, 1.0, 1.2),
-        orientation=(0.0, np.pi / 2, np.pi / 4),
         desired_force=30.0,
         k_p=20.0,
     ),
     PushTarget(
         standoff_pos=(0.0, 1.0, 1.5),
         contact_pos=(1.1, 1.0, 1.5),
-        orientation=(0.0, np.pi / 2, np.pi / 4),
         desired_force=20.0,
         k_p=20.0,
     ),
     PushTarget(
         standoff_pos=(0.0, 1.2, 1.5),
         contact_pos=(1.1, 1.2, 1.5),
-        orientation=(0.0, np.pi / 2, np.pi / 4),
         desired_force=25.0,
         k_p=20.0,
     ),
-]
+)
+
+DEFAULT_PUSH_TASKS: Tuple[PushTask, ...] = (
+    PushTask("single target", (THREE_PUSH_TARGETS[0],)),
+    PushTask("three targets", THREE_PUSH_TARGETS),
+)
 
 
 # ======================================================================================
@@ -170,15 +183,33 @@ class PushIO:
         return pos_err < pos_tol and ang_err < ang_tol and vel_err < vel_tol
 
 
-def _quat_of(orientation_rpy: Tuple[float, float, float]) -> np.ndarray:
-    roll, pitch, yaw = orientation_rpy
-    qx, qy, qz, qw = tf.transformations.quaternion_from_euler(roll, pitch, yaw, axes="rxyz")
-    return np.array([qx, qy, qz, qw])
-
-
 def _unit(v: np.ndarray) -> np.ndarray:
     n = np.linalg.norm(v)
     return v / n if n > 1e-9 else v
+
+
+def _approach_dir_for(target: PushTarget) -> np.ndarray:
+    approach_dir = np.array(target.contact_pos, dtype=float) - np.array(target.standoff_pos, dtype=float)
+    n = np.linalg.norm(approach_dir)
+    if n <= 1e-9:
+        raise ValueError("PushTarget contact_pos and standoff_pos are identical; cannot derive Body-Z direction.")
+    return approach_dir / n
+
+
+def _quat_for_target(target: PushTarget, body_z_rotation_override: Optional[float] = None) -> np.ndarray:
+    """Build world<-body quaternion with Body-Z along standoff->contact."""
+    body_z = _approach_dir_for(target)
+    ref_axis = np.array([0.0, 0.0, 1.0])
+    if abs(float(np.dot(ref_axis, body_z))) > 0.95:
+        ref_axis = np.array([1.0, 0.0, 0.0])
+
+    body_x = _unit(np.cross(ref_axis, body_z))
+    body_y = np.cross(body_z, body_x)
+    rot_w_b = np.column_stack((body_x, body_y, body_z))
+
+    body_z_rotation = target.body_z_rotation if body_z_rotation_override is None else body_z_rotation_override
+    rot_w_b = rot_w_b @ R.from_euler("z", body_z_rotation).as_matrix()
+    return R.from_matrix(rot_w_b).as_quat()
 
 
 # ======================================================================================
@@ -193,12 +224,23 @@ class PushContext:
     entry to the sub-state-machine.
     """
 
-    def __init__(self, push_targets: List[PushTarget]):
-        self.push_targets = push_targets
+    def __init__(
+        self,
+        push_tasks: Sequence[PushTask],
+        fixed_push_targets: Optional[Sequence[PushTarget]] = None,
+    ):
+        self.push_tasks = list(push_tasks)
+        self.fixed_push_targets = list(fixed_push_targets) if fixed_push_targets is not None else None
+        self.push_targets: List[PushTarget] = list(fixed_push_targets) if fixed_push_targets is not None else []
         self.robot_name: Optional[str] = None
         self.io: Optional[PushIO] = None
         self.target_idx = 0
         self.contact_p: Optional[np.ndarray] = None
+        self.body_z_rotation_override: Optional[float] = None
+
+    def select_task(self, task_idx: int) -> None:
+        task = self.push_tasks[task_idx]
+        self.push_targets = list(task.targets)
 
 
 # ======================================================================================
@@ -285,6 +327,42 @@ class InitPushState(PushBaseState):
         self.ctx.target_idx = 0
         self.ctx.contact_p = None
         self.ctx.robot_name = userdata.robot_name
+        self.ctx.body_z_rotation_override = rospy.get_param("~push_body_z_rotation", None)
+        self.ctx.body_z_rotation_override = rospy.get_param(
+            f"/{userdata.robot_name}/push/body_z_rotation", self.ctx.body_z_rotation_override
+        )
+        if self.ctx.body_z_rotation_override is not None:
+            try:
+                self.ctx.body_z_rotation_override = float(self.ctx.body_z_rotation_override)
+                rospy.loginfo(
+                    "PUSH/INIT: overriding all target body_z_rotation with %.3f rad.",
+                    self.ctx.body_z_rotation_override,
+                )
+            except (TypeError, ValueError):
+                rospy.logwarn("PUSH/INIT: invalid body_z_rotation parameter; using per-target values.")
+                self.ctx.body_z_rotation_override = None
+
+        if self.ctx.fixed_push_targets is None:
+            print("\n===== Push Tasks =====")
+            for i, task in enumerate(self.ctx.push_tasks, start=1):
+                print(f"{i}: {task.name} ({len(task.targets)} target(s))")
+            try:
+                task_str = input("\nEnter push task number: ")
+                task_idx = int(task_str) - 1
+            except (ValueError, EOFError):
+                rospy.logwarn("PUSH/INIT: invalid push task input.")
+                return "failed"
+
+            if task_idx < 0 or task_idx >= len(self.ctx.push_tasks):
+                rospy.logwarn("PUSH/INIT: push task index out of range.")
+                return "failed"
+            self.ctx.select_task(task_idx)
+            rospy.loginfo(
+                "PUSH/INIT: selected task %d (%s), %d target(s).",
+                task_idx + 1,
+                self.ctx.push_tasks[task_idx].name,
+                len(self.ctx.push_targets),
+            )
 
         if self.ctx.io is None:
             rospy.loginfo("PUSH/INIT: initializing IO ...")
@@ -324,7 +402,7 @@ class AlignState(PushBaseState):
         io = self.ctx.io
         target = self.ctx.push_targets[self.ctx.target_idx]
         p = np.array(target.standoff_pos, dtype=float)
-        q = _quat_of(target.orientation)
+        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
 
         rospy.loginfo("PUSH/ALIGN: moving to standoff %s ...", np.round(p, 3).tolist())
         t_start = rospy.Time.now().to_sec()
@@ -351,7 +429,7 @@ class CalibrateState(PushBaseState):
         io = self.ctx.io
         target = self.ctx.push_targets[self.ctx.target_idx]
         p = np.array(target.standoff_pos, dtype=float)
-        q = _quat_of(target.orientation)
+        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
 
         service_name = f"/{self.ctx.robot_name}/controller/wrench_est/calibrate"
         try:
@@ -384,8 +462,8 @@ class ApproachState(PushBaseState):
         target = self.ctx.push_targets[self.ctx.target_idx]
         p0 = np.array(target.standoff_pos, dtype=float)
         p1 = np.array(target.contact_pos, dtype=float)
-        approach_dir = _unit(p1 - p0)
-        q = _quat_of(target.orientation)
+        approach_dir = _approach_dir_for(target)
+        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
 
         rospy.loginfo(
             "PUSH/APPROACH: moving toward contact %s at %.2f m/s ...", np.round(p1, 3).tolist(), self.APPROACH_SPEED
@@ -407,8 +485,8 @@ class ApplyForceState(PushBaseState):
     def execute(self, userdata):
         io = self.ctx.io
         target = self.ctx.push_targets[self.ctx.target_idx]
-        approach_dir = _unit(np.array(target.contact_pos, dtype=float) - np.array(target.standoff_pos, dtype=float))
-        q = _quat_of(target.orientation)
+        approach_dir = _approach_dir_for(target)
+        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
         p_contact = np.array(self.ctx.contact_p, dtype=float)
 
         # 1) accumulate the initial contact force while holding p_contact
@@ -465,7 +543,7 @@ class RetreatState(PushBaseState):
         io = self.ctx.io
         target = self.ctx.push_targets[self.ctx.target_idx]
         p_standoff = np.array(target.standoff_pos, dtype=float)
-        q = _quat_of(target.orientation)
+        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
         p_start = np.array(self.ctx.contact_p, dtype=float) if self.ctx.contact_p is not None else p_standoff
 
         rospy.loginfo(
@@ -483,12 +561,15 @@ class RetreatState(PushBaseState):
 # ======================================================================================
 # Factory
 # ======================================================================================
-def create_push_state_machine(push_targets: Optional[List[PushTarget]] = None):
+def create_push_state_machine(
+    push_targets: Optional[Sequence[PushTarget]] = None,
+    push_tasks: Optional[Sequence[PushTask]] = None,
+):
     # Only robot_name (picklable) is kept in userdata so the smach_ros introspection
     # server can pickle it; all shared/non-picklable/loop state lives in PushContext.
     sm_sub = smach.StateMachine(outcomes=["DONE_PUSH"], input_keys=["robot_name"])
 
-    ctx = PushContext(push_targets if push_targets is not None else DEFAULT_PUSH_TARGETS)
+    ctx = PushContext(push_tasks if push_tasks is not None else DEFAULT_PUSH_TASKS, fixed_push_targets=push_targets)
 
     with sm_sub:
         smach.StateMachine.add("INIT_PUSH", InitPushState(ctx), transitions={"start": "SELECT", "failed": "DONE_PUSH"})
