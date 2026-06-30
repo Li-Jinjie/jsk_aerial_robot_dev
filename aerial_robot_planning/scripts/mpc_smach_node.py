@@ -75,6 +75,9 @@ from aerial_robot_planning.voice.voice_smach import create_voice_state_machine
 # === admittance ===
 from aerial_robot_planning.admittance.admittance_smach import create_admittance_state_machine
 
+# === push ===
+from aerial_robot_planning.push.push_smach import create_push_state_machine
+
 
 ###############################################
 # SMACH States
@@ -89,7 +92,7 @@ class IdleState(smach.State):
     def __init__(self):
         smach.State.__init__(
             self,
-            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop", "go_voice", "go_admittance"],
+            outcomes=["go_init", "stay_idle", "shutdown", "go_teleop", "go_voice", "go_admittance", "go_push"],
             input_keys=["robot_name"],
             output_keys=["robot_name", "traj_type", "loop_num"],
         )
@@ -107,6 +110,7 @@ class IdleState(smach.State):
                 print("t: Teleoperation Mode")
                 print("v: Voice Mode")
                 print("a: Admittance Mode")
+                print("p: Push Mode")
 
             traj_type_str = input(f"\nEnter trajectory number/letter above to select or 'q' to quit: ")
             if traj_type_str.lower() == "q":
@@ -120,6 +124,9 @@ class IdleState(smach.State):
 
             if traj_type_str.lower() == "a":
                 return "go_admittance"
+
+            if traj_type_str.lower() == "p":
+                return "go_push"
 
             traj_index = int(traj_type_str)
             if not traj_register.is_traj_index_valid(traj_index):
@@ -297,6 +304,7 @@ def main(args):
                 "go_teleop": "TELEOP",
                 "go_voice": "VOICE",
                 "go_admittance": "ADMITTANCE",
+                "go_push": "PUSH",
             },
         )
 
@@ -326,6 +334,14 @@ def main(args):
             "ADMITTANCE",
             create_admittance_state_machine(),
             transitions={"DONE_ADMITTANCE": "IDLE"},
+            remapping={"robot_name": "robot_name"},
+        )
+
+        # PUSH
+        smach.StateMachine.add(
+            "PUSH",
+            create_push_state_machine(),
+            transitions={"DONE_PUSH": "IDLE"},
             remapping={"robot_name": "robot_name"},
         )
 
