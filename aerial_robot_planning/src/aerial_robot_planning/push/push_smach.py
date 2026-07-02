@@ -82,9 +82,51 @@ THREE_PUSH_TARGETS: Tuple[PushTarget, ...] = (
     ),
 )
 
+BONNET_PUSH_TARGETS: Tuple[PushTarget, ...] = (
+    PushTarget(
+        standoff_pos=(-1.2, 1.5, 1.3),
+        contact_pos=(0.0, 1.5, 0.5),
+        desired_force=5.0,
+        body_z_rotation=0.0,
+        k_p=20.0,
+    ),
+    PushTarget(
+        standoff_pos=(-0.6, 1.5, 1.5),
+        contact_pos=(0.0, 1.5, 0.5),
+        desired_force=5.0,
+        body_z_rotation=0.0,
+        k_p=20.0,
+    ),
+    PushTarget(
+        standoff_pos=(0.0, 1.5, 1.5),
+        contact_pos=(0.0, 1.5, 0.5),
+        desired_force=5.0,
+        body_z_rotation=0.0,
+        k_p=20.0,
+    ),
+    PushTarget(
+        standoff_pos=(0.6, 1.5, 1.5),
+        contact_pos=(0.0, 1.5, 0.5),
+        desired_force=5.0,
+        body_z_rotation=0.0,
+        k_p=20.0,
+    ),
+    PushTarget(
+        standoff_pos=(1.2, 1.5, 1.3),
+        contact_pos=(0.0, 1.5, 0.5),
+        desired_force=5.0,
+        body_z_rotation=0.0,
+        k_p=20.0,
+    ),
+)
+
 DEFAULT_PUSH_TASKS: Tuple[PushTask, ...] = (
     PushTask("single target", (THREE_PUSH_TARGETS[0],)),
     PushTask("three targets", THREE_PUSH_TARGETS),
+    PushTask(
+        "bonnet targets",
+        BONNET_PUSH_TARGETS,
+    ),
 )
 
 
