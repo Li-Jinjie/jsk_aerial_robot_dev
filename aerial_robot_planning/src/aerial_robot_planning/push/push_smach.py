@@ -18,7 +18,7 @@ import numpy as np
 import rospy
 import smach
 import tf_conversions as tf
-from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Rotation as R, Slerp
 
 from std_srvs.srv import Trigger
 from nav_msgs.msg import Odometry
@@ -253,6 +253,10 @@ class PushBaseState(smach.State):
     T_ALIGN_TIMEOUT = 20.0
     T_CALIBRATE_SETTLE = 3.0
 
+    # align: fly-to-standoff ramp from the current pose (position lerp + attitude slerp)
+    ALIGN_SPEED = 0.5  # [m/s]
+    ALIGN_ANG_SPEED = 0.5  # [rad/s]
+
     # approach / retreat: the reference advances at a constant speed (not a fixed time)
     APPROACH_SPEED = 0.2  # [m/s]
     APPROACH_TIMEOUT = 15.0  # [s]
@@ -275,12 +279,19 @@ class PushBaseState(smach.State):
         self.ctx = ctx
         self.rate = rospy.Rate(1.0 / self.dt)
 
-    def _move_at_speed(self, io, p_from, p_to, q, speed, timeout, detect_contact=False, approach_dir=None):
-        """Advance the position reference from p_from to p_to at a constant speed.
+    def _move_at_speed(
+        self, io, p_from, p_to, q, speed, timeout, detect_contact=False, approach_dir=None, q_from=None, ang_speed=None
+    ):
+        """Advance the pose reference from p_from to p_to at a constant speed.
 
         Returns the position where the move stopped. Breaks when the segment end is
         reached, on timeout, or -- if ``detect_contact`` -- when the contact force along
         ``approach_dir`` exceeds ``FORCE_THRESH`` (returns the early-contact position).
+
+        By default the orientation is held constant at ``q``. If ``q_from`` is given, the
+        orientation is slerped from ``q_from`` to ``q`` over the ramp, and progress is
+        driven so the ramp also honors ``ang_speed`` -- robust when the position move is
+        tiny but the attitude change is large (or vice-versa).
         """
         p_from = np.array(p_from, dtype=float)
         p_to = np.array(p_to, dtype=float)
@@ -288,19 +299,30 @@ class PushBaseState(smach.State):
         total = float(np.linalg.norm(seg))
         direction = seg / total if total > 1e-9 else np.zeros(3)
 
+        slerp = None
+        T = total / speed if speed > 1e-9 else 0.0
+        if q_from is not None:
+            slerp = Slerp([0.0, 1.0], R.from_quat([np.asarray(q_from, dtype=float), np.asarray(q, dtype=float)]))
+            rel = R.from_quat(q_from).inv() * R.from_quat(q)
+            ang_total = float(np.linalg.norm(rel.as_rotvec()))
+            T_ang = ang_total / ang_speed if (ang_speed is not None and ang_speed > 1e-9) else 0.0
+            T = max(T, T_ang)
+
         p = p_from.copy()
         t_start = rospy.Time.now().to_sec()
         while not rospy.is_shutdown():
             t = rospy.Time.now().to_sec() - t_start
-            dist = min(speed * t, total)
+            s = min(t / T, 1.0) if T > 1e-9 else 1.0
+            dist = s * total
             p = p_from + direction * dist
-            io.publish_pose_ref(p, q)
+            q_cur = slerp(s).as_quat() if slerp is not None else q
+            io.publish_pose_ref(p, q_cur)
 
             if detect_contact and io.contact_force_along(approach_dir) > self.FORCE_THRESH:
                 rospy.loginfo("PUSH: contact detected at %s.", np.round(p, 3).tolist())
                 return p
 
-            if dist >= total:
+            if s >= 1.0:
                 return p
             if t > timeout:
                 rospy.logwarn("PUSH: move timeout (%.1fs) before reaching target, stopping here.", timeout)
@@ -404,8 +426,17 @@ class AlignState(PushBaseState):
         p = np.array(target.standoff_pos, dtype=float)
         q = _quat_for_target(target, self.ctx.body_z_rotation_override)
 
-        rospy.loginfo("PUSH/ALIGN: moving to standoff %s ...", np.round(p, 3).tolist())
+        # Ramp from the current pose to the standoff so the first reference has ~zero
+        # tracking error (a far constant setpoint can otherwise diverge the NMPC solver).
+        p0 = io.get_position()
+        q0 = io.get_orientation_xyzw()
+        rospy.loginfo("PUSH/ALIGN: ramping to standoff %s ...", np.round(p, 3).tolist())
         t_start = rospy.Time.now().to_sec()
+        self._move_at_speed(
+            io, p0, p, q, self.ALIGN_SPEED, self.T_ALIGN_TIMEOUT, q_from=q0, ang_speed=self.ALIGN_ANG_SPEED
+        )
+
+        # Settle at the standoff pose so Calibrate/Approach start from a converged state.
         while not rospy.is_shutdown():
             io.publish_pose_ref(p, q)
             if io.reached_pose(p, q, self.ALIGN_POS_TOL, self.ALIGN_ANG_TOL, self.ALIGN_VEL_TOL):
