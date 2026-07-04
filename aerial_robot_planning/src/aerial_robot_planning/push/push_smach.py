@@ -66,7 +66,7 @@ THREE_PUSH_TARGETS: Tuple[PushTarget, ...] = (
     PushTarget(
         standoff_pos=(0.0, 1.0, 1.2),
         contact_pos=(1.1, 1.0, 1.2),
-        desired_force=20.0,
+        desired_force=5.0,
         k_p=20.0,
     ),
     PushTarget(
@@ -345,7 +345,7 @@ class PushBaseState(smach.State):
     # force application [s]
     T_ACCUM_FORCE = 2.5  # measure the initial contact force
     T_FORCE_RAMP = 3.0  # same duration for ramp-up and ramp-down
-    T_FORCE_HOLD = 10.0  # hold at desired force between ramp-up and ramp-down
+    T_FORCE_HOLD = 5.0  # hold at desired force between ramp-up and ramp-down
 
     # wipe/clean: Body-Z offset keyframes swept over the hold phase (0 -> +45 -> -45 -> 0 deg)
     WIPE_ANGLES = (0.0, np.pi / 4, 0.0)
@@ -353,8 +353,8 @@ class PushBaseState(smach.State):
 
     # thresholds
     FORCE_THRESH = 0.5  # [N] minimum force counted as contact
-    ALIGN_POS_TOL = 0.1  # [m]
-    ALIGN_ANG_TOL = 0.2  # [rad]
+    ALIGN_POS_TOL = 0.05  # [m]
+    ALIGN_ANG_TOL = 0.1  # [rad]
     ALIGN_VEL_TOL = 0.1  # [m/s]
 
     def __init__(self, ctx: PushContext, outcomes, input_keys=None, output_keys=None):
