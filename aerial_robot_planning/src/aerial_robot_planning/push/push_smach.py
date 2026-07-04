@@ -49,6 +49,7 @@ class PushTarget:
     desired_force: float  # [N]
     body_z_rotation: float = DEFAULT_BODY_Z_ROTATION  # [rad], right-hand rotation about Body-Z
     k_p: float = 20.0  # must match the controller's effective stiffness (trajs.py:847 note)
+    wipe: bool = False  # if True, run a back-and-forth Body-Z rotation while holding the force
 
 
 @dataclass
@@ -79,6 +80,17 @@ THREE_PUSH_TARGETS: Tuple[PushTarget, ...] = (
         contact_pos=(1.1, 1.2, 1.5),
         desired_force=25.0,
         k_p=20.0,
+    ),
+)
+
+# A single target with the rotational wipe/clean action enabled, for testing.
+SINGLE_CLEAN_TARGETS: Tuple[PushTarget, ...] = (
+    PushTarget(
+        standoff_pos=(0.0, 1.0, 1.2),
+        contact_pos=(1.1, 1.0, 1.2),
+        desired_force=10.0,
+        k_p=20.0,
+        wipe=True,
     ),
 )
 
@@ -122,6 +134,7 @@ BONNET_PUSH_TARGETS: Tuple[PushTarget, ...] = (
 
 DEFAULT_PUSH_TASKS: Tuple[PushTask, ...] = (
     PushTask("single target", (THREE_PUSH_TARGETS[0],)),
+    PushTask("single clean", SINGLE_CLEAN_TARGETS),
     PushTask("three targets", THREE_PUSH_TARGETS),
     PushTask(
         "bonnet targets",
@@ -254,6 +267,30 @@ def _quat_for_target(target: PushTarget, body_z_rotation_override: Optional[floa
     return R.from_matrix(rot_w_b).as_quat()
 
 
+def _wipe_body_z_offset(frac: float, angles: Sequence[float]) -> float:
+    """Piecewise-linear Body-Z angle offset [rad] over the normalized wipe time ``frac``.
+
+    ``angles`` is the sequence of keyframe offsets to sweep through (e.g.
+    ``0 -> +45 -> -45 -> 0`` deg). Segment durations are proportional to each leg's
+    angular travel so the wipe runs at a constant angular speed. ``frac`` is clamped to
+    ``[0, 1]``; the schedule starts and ends at ``angles[0]`` / ``angles[-1]``.
+    """
+    frac = min(max(frac, 0.0), 1.0)
+    legs = [abs(angles[i + 1] - angles[i]) for i in range(len(angles) - 1)]
+    total = sum(legs)
+    if total <= 1e-9:
+        return float(angles[0])
+
+    target_dist = frac * total
+    acc = 0.0
+    for i, leg in enumerate(legs):
+        if target_dist <= acc + leg or i == len(legs) - 1:
+            seg_frac = (target_dist - acc) / leg if leg > 1e-9 else 1.0
+            return float(angles[i] + (angles[i + 1] - angles[i]) * seg_frac)
+        acc += leg
+    return float(angles[-1])
+
+
 # ======================================================================================
 # Shared context (NOT stored in userdata, so the introspection server can pickle userdata)
 # ======================================================================================
@@ -308,7 +345,11 @@ class PushBaseState(smach.State):
     # force application [s]
     T_ACCUM_FORCE = 2.5  # measure the initial contact force
     T_FORCE_RAMP = 3.0  # same duration for ramp-up and ramp-down
-    T_FORCE_HOLD = 5.0  # hold at desired force between ramp-up and ramp-down
+    T_FORCE_HOLD = 10.0  # hold at desired force between ramp-up and ramp-down
+
+    # wipe/clean: Body-Z offset keyframes swept over the hold phase (0 -> +45 -> -45 -> 0 deg)
+    WIPE_ANGLES = (0.0, np.pi / 4, 0.0)
+    # WIPE_ANGLES = (0.0, np.pi / 4, 0.0, -np.pi / 4, 0.0)
 
     # thresholds
     FORCE_THRESH = 0.5  # [N] minimum force counted as contact
@@ -561,6 +602,8 @@ class ApplyForceState(PushBaseState):
         approach_dir = _approach_dir_for(target)
         q = _quat_for_target(target, self.ctx.body_z_rotation_override)
         p_contact = np.array(self.ctx.contact_p, dtype=float)
+        wipe = target.wipe
+        q_base = R.from_quat(q)
 
         # 1) accumulate the initial contact force while holding p_contact
         rospy.loginfo("PUSH/APPLY: accumulating initial contact force ...")
@@ -586,6 +629,10 @@ class ApplyForceState(PushBaseState):
 
         # 2) ramp-up p_contact -> p_final, 3) hold, 4) ramp-down p_final -> p_contact.
         # ramp-up and ramp-down use the same duration (T_FORCE_RAMP). Ends back at p_contact.
+        # If wipe is enabled, sweep a Body-Z offset over the hold phase (0->+45->-45->0),
+        # keeping p_final (and thus the force along Body-Z) fixed while rotating.
+        if wipe:
+            rospy.loginfo("PUSH/APPLY: wipe enabled, rotating about Body-Z during hold.")
         t_ramp_down_start = self.T_FORCE_RAMP + self.T_FORCE_HOLD
         t_total = t_ramp_down_start + self.T_FORCE_RAMP
         t_start = rospy.Time.now().to_sec()
@@ -593,14 +640,19 @@ class ApplyForceState(PushBaseState):
             t = rospy.Time.now().to_sec() - t_start
             if t >= t_total:
                 break
+            q_cur = q
             if t < self.T_FORCE_RAMP:  # ramp-up
                 p = p_contact + (p_final - p_contact) * (t / self.T_FORCE_RAMP)
             elif t < t_ramp_down_start:  # hold
                 p = p_final
+                if wipe:
+                    frac = (t - self.T_FORCE_RAMP) / self.T_FORCE_HOLD
+                    offset = _wipe_body_z_offset(frac, self.WIPE_ANGLES)
+                    q_cur = (q_base * R.from_euler("z", offset)).as_quat()
             else:  # ramp-down
                 tau = t - t_ramp_down_start
                 p = p_final + (p_contact - p_final) * (tau / self.T_FORCE_RAMP)
-            io.publish_pose_ref(p, q)
+            io.publish_pose_ref(p, q_cur)
             self.rate.sleep()
 
         return "applied"
