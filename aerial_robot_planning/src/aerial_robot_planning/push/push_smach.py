@@ -65,13 +65,13 @@ THREE_PUSH_TARGETS: Tuple[PushTarget, ...] = (
     PushTarget(
         standoff_pos=(0.0, 1.0, 1.2),
         contact_pos=(1.1, 1.0, 1.2),
-        desired_force=30.0,
+        desired_force=20.0,
         k_p=20.0,
     ),
     PushTarget(
         standoff_pos=(0.0, 1.0, 1.5),
         contact_pos=(1.1, 1.0, 1.5),
-        desired_force=20.0,
+        desired_force=30.0,
         k_p=20.0,
     ),
     PushTarget(
