@@ -300,9 +300,9 @@ class PushBaseState(smach.State):
     ALIGN_ANG_SPEED = 0.5  # [rad/s]
 
     # approach / retreat: the reference advances at a constant speed (not a fixed time)
-    APPROACH_SPEED = 0.2  # [m/s]
+    APPROACH_SPEED = 0.3  # [m/s]
     APPROACH_TIMEOUT = 15.0  # [s]
-    RETREAT_SPEED = 0.2  # [m/s]
+    RETREAT_SPEED = 0.3  # [m/s]
     RETREAT_TIMEOUT = 15.0  # [s]
 
     # force application [s]

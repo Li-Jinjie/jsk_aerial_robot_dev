@@ -214,13 +214,13 @@
 
   <!-- ============ End‑Effector (EE) =============== -->
 
-  <!-- Select EE type:  fork | ball | sensor_ball | brush -->
+  <!-- Select EE type:  fork | ball | sensor_ball | brush | sensor_brush -->
   <xacro:arg name="end_effector" default="fork"/>
   <xacro:property name="end_effector" value="$(arg end_effector)"/>
 
   <xacro:if value="${end_effector != 'fork' and end_effector != 'ball' and end_effector != 'sensor_ball'
-  and end_effector != 'brush' and end_effector != 'osmo' and end_effector != 'none'}">
-    <xacro:error>Invalid end_effector type: ${end_effector}. Must be one of: fork, ball, sensor_ball, brush, osmo.</xacro:error>
+  and end_effector != 'brush' and end_effector != 'sensor_brush' and end_effector != 'osmo' and end_effector != 'none'}">
+    <xacro:error>Invalid end_effector type: ${end_effector}. Must be one of: fork, ball, sensor_ball, brush, sensor_brush, osmo.</xacro:error>
   </xacro:if>
 
   <!-- Fixed the flange that all tools attach to -->
@@ -271,6 +271,13 @@
 
   <xacro:if value="${end_effector == 'brush'}">
     <xacro:brush_end_effector ee_mount_link="ee_mount" ee_contact_link="ee_contact" robot_ns="${robot_name}"/>
+  </xacro:if>
+
+  <!-- ############# Sensor‑brush tool ############# -->
+  <xacro:include filename="$(find beetle_omni)/urdf/effectors/force_sensor_brush_ee.xacro"/>
+
+  <xacro:if value="${end_effector == 'sensor_brush'}">
+    <xacro:force_sensor_brush_end_effector ee_mount_link="ee_mount" ee_contact_link="ee_contact" robot_ns="${robot_name}"/>
   </xacro:if>
 
   <!-- ############# DJI OSMO Action 4 ############# -->
