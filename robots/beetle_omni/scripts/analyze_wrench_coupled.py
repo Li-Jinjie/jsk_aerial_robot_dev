@@ -135,7 +135,7 @@ if __name__ == "__main__":
                 linestyle=line_style_list[idx % len(line_style_list)],
             )
         ax.set_xlabel(f"Required Horizontal Torque $^W\\tau_z$ [N·m]", fontsize=label_size)
-        ax.set_ylabel(f"Max. Horizontal Force $^Wf_x$ [N]", fontsize=label_size)
+        ax.set_ylabel(f"Avail. Horizontal Force $^Wf_x$ [N]", fontsize=label_size)
         # ax.grid(True, alpha=0.3)
         ax.set_xlim(left=0, right=torque_list[-1])
         ax.set_ylim(bottom=0)
@@ -232,7 +232,7 @@ if __name__ == "__main__":
         # )
 
         ax.set_xlabel(f"Required Horizontal Force $^Wf_x$ [N]", fontsize=label_size)
-        ax.set_ylabel(f"Max. Horizontal Torque $^W\\tau_x$ [N·m]", fontsize=label_size)
+        ax.set_ylabel(f"Avail. Horizontal Torque $^W\\tau_x$ [N·m]", fontsize=label_size)
         # ax.grid(True, alpha=0.3)
         ax.set_xlim(left=0, right=force_list[-1])
         ax.set_ylim(bottom=0)
