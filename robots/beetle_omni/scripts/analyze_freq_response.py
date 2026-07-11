@@ -82,18 +82,18 @@ fig, axes = plt.subplots(2, 1, figsize=(8, 3.5), sharex=True)
 ax_mag, ax_phase = axes
 
 # Magnitude
-ax_mag.semilogx(f, mag_He, label=r"${^W\hat{f}_{de}}/{^Wf_{de}}$", linestyle="--", linewidth=linewidth)
-ax_mag.semilogx(f, mag_fdm_fde, label=r"${^Wf_{dm}}/{^Wf_{de}}$", linewidth=linewidth)
-ax_mag.semilogx(f, mag_fdm_fother, label=r"${^Wf_{dm}}/{^Wf_{\mathrm{other}}}$", linewidth=linewidth)
+ax_mag.semilogx(f, mag_He, label=r"${^W\hat{F}_{de,i}(s)}/{^WF_{de,i}(s)}$", linestyle="--", linewidth=linewidth)
+ax_mag.semilogx(f, mag_fdm_fde, label=r"${^W{F}_{dm,i}(s)}/{^W{F}_{de,i}(s)}$", linewidth=linewidth)
+ax_mag.semilogx(f, mag_fdm_fother, label=r"${^W{F}_{dm,i}(s)}/{^W{F}_{\mathrm{other},i}(s)}$", linewidth=linewidth)
 
 ax_mag.set_ylabel(r"Magnitude [dB]")
 ax_mag.legend(
-    # loc='lower left',
+    loc="upper left",
     frameon=True,
     handlelength=1.6,
     borderpad=0.3,
     labelspacing=0.25,
-    framealpha=0.6,
+    framealpha=0.5,
 )
 
 # Phase
