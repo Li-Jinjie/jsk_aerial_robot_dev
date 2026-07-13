@@ -65,7 +65,13 @@ except ImportError:
 
 def configure_plot_style() -> None:
     plt.style.use(["science", "grid"])
-    plt.rcParams.update({"font.size": 11})
+    plt.rcParams.update(
+        {
+            "font.size": 14,
+            "axes.titlesize": 14,
+            "legend.fontsize": 14,
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -100,7 +106,7 @@ def generic_params() -> VehicleParams:
             ],
             dtype=float,
         ),
-        drag_signs=np.array([-1.0, 1.0, -1.0, 1.0], dtype=float),
+        drag_signs=np.array([1.0, -1.0, 1.0, -1.0], dtype=float),
         yaw_moment_per_thrust_m=0.0165,
         mass_kg=3.039,
         gravity_m_s2=9.81,
@@ -647,7 +653,7 @@ def plot_rank_figure(
         pad=0.02,
         shrink=0.8,
     )
-    colorbar.set_label(r"$\operatorname{rank}(\bar{\mathbf{J}}_{\mathrm{diff}})$")
+    colorbar.set_label(r"$\operatorname{rank}(\bar{\boldsymbol{J}}_{\mathrm{diff}})$")
 
     # figure.suptitle("Differential-Jacobian rank")
     figure.subplots_adjust(
@@ -721,7 +727,7 @@ def plot_sigma_min_figure(
         ]
     )
     colorbar = figure.colorbar(images[0], cax=colorbar_axis)
-    colorbar.set_label(r"$\sigma_{\min}(\bar{\mathbf{J}}_{\mathrm{diff}})$")
+    colorbar.set_label(r"$\sigma_{\min}(\bar{\boldsymbol{J}}_{\mathrm{diff}})$")
 
     finish_figure(figure, output_path, show_plots)
 
@@ -766,7 +772,7 @@ def plot_difference_and_horizontal_figure(
     )
     axes[1].set_title(r"Horizontal-plane section: $\beta=0^\circ$")
     axes[1].set_xlabel(r"Force azimuth $\phi$ [deg]")
-    axes[1].set_ylabel(r"$\sigma_{\min}(\bar{\mathbf{J}}_{\mathrm{diff}})$")
+    axes[1].set_ylabel(r"$\sigma_{\min}(\bar{\boldsymbol{J}}_{\mathrm{diff}})$")
     axes[1].set_xlim(-180.0, 180.0)
     axes[1].grid(True)
     axes[1].legend(loc="upper right", framealpha=0.8)
@@ -776,7 +782,7 @@ def plot_difference_and_horizontal_figure(
         right=0.95,
         bottom=0.16,
         top=0.94,
-        wspace=0.4,
+        wspace=0.6,
     )
 
     # Get the final position of the left subplot.
