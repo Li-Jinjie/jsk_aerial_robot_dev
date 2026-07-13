@@ -699,28 +699,30 @@ def plot_sigma_min_figure(
             vmax=common_maximum,
         )
         images.append(image)
-        # axis.set_title(title)
+        axis.set_title(title)
         axis.set_xlabel(r"Force azimuth $\phi$ [deg]")
 
     axes[0].set_ylabel(r"Force elevation $\beta$ [deg]")
 
-    colorbar = figure.colorbar(
-        images[0],
-        ax=axes,
-        fraction=0.026,
-        pad=0.02,
-        shrink=0.8,
-    )
-    colorbar.set_label(r"$\sigma_{\min}(\bar{\mathbf{J}}_{\mathrm{diff}})$")
-
     # figure.suptitle("Minimum singular value")
     figure.subplots_adjust(
         left=0.08,
-        right=0.88,
+        right=0.86,
         bottom=0.16,
         top=0.94,
         wspace=0.07,
     )
+    colorbar_axis = figure.add_axes(
+        [
+            0.88,  # left location
+            0.16,  # bottom location
+            0.020,  # width
+            0.78,  # height
+        ]
+    )
+    colorbar = figure.colorbar(images[0], cax=colorbar_axis)
+    colorbar.set_label(r"$\sigma_{\min}(\bar{\mathbf{J}}_{\mathrm{diff}})$")
+
     finish_figure(figure, output_path, show_plots)
 
 
@@ -754,41 +756,20 @@ def plot_difference_and_horizontal_figure(
         extent=(-180.0, 180.0, -90.0, 90.0),
         norm=difference_norm,
     )
-    # axes[0].set_title(
-    #     r"$\Delta\sigma_{\min}"
-    #     r"=\sigma_{\min,\mathrm{heuristic}}"
-    #     r"-\sigma_{\min,\mathrm{PInv}}$"
-    # )
+    axes[0].set_title(r"$\Delta\sigma_{\min}" r"=\sigma_{\min,\mathrm{heuristic}}" r"-\sigma_{\min,\mathrm{PInv}}$")
     axes[0].set_xlabel(r"Force azimuth $\phi$ [deg]")
     axes[0].set_ylabel(r"Force elevation $\beta$ [deg]")
 
-    difference_colorbar = figure.colorbar(
-        image,
-        ax=axes[0],
-        fraction=0.036,
-        pad=0.018,
-        shrink=0.82,
-    )
-    difference_colorbar.set_label(r"$\Delta\sigma_{\min}$", labelpad=3)
-
+    axes[1].plot(horizontal["azimuth_deg"], horizontal["pinv_sigma_min"], label="PInv(SVD)", color="C0")
     axes[1].plot(
-        horizontal["azimuth_deg"],
-        horizontal["pinv_sigma_min"],
-        label="PInv(SVD)",
+        horizontal["azimuth_deg"], horizontal["heuristic_sigma_min"], label="PInv(SVD) + heuristic", color="C2"
     )
-    axes[1].plot(
-        horizontal["azimuth_deg"],
-        horizontal["heuristic_sigma_min"],
-        label="PInv(SVD) + heuristic",
-    )
-    # axes[1].set_title(
-    #     r"Horizontal-plane section: $\beta=0^\circ$"
-    # )
+    axes[1].set_title(r"Horizontal-plane section: $\beta=0^\circ$")
     axes[1].set_xlabel(r"Force azimuth $\phi$ [deg]")
     axes[1].set_ylabel(r"$\sigma_{\min}(\bar{\mathbf{J}}_{\mathrm{diff}})$")
     axes[1].set_xlim(-180.0, 180.0)
     axes[1].grid(True)
-    axes[1].legend()
+    axes[1].legend(loc="upper right", framealpha=0.8)
 
     figure.subplots_adjust(
         left=0.08,
@@ -797,6 +778,35 @@ def plot_difference_and_horizontal_figure(
         top=0.94,
         wspace=0.4,
     )
+
+    # Get the final position of the left subplot.
+    left_axis_position = axes[0].get_position()
+
+    # Adjust this value to change the colorbar height.
+    colorbar_height_ratio = 1.0
+    colorbar_height = left_axis_position.height * colorbar_height_ratio
+
+    # Vertically center the colorbar relative to the left subplot.
+    colorbar_bottom = left_axis_position.y0 + (left_axis_position.height - colorbar_height) / 2.0
+
+    colorbar_axis = figure.add_axes(
+        [
+            left_axis_position.x1 + 0.012,  # distance from the left plot
+            colorbar_bottom,
+            0.012,  # colorbar width
+            colorbar_height,
+        ]
+    )
+
+    difference_colorbar = figure.colorbar(
+        image,
+        cax=colorbar_axis,
+    )
+    difference_colorbar.set_label(
+        r"$\Delta\sigma_{\min}$",
+        labelpad=3,
+    )
+
     finish_figure(figure, output_path, show_plots)
 
 
@@ -886,11 +896,11 @@ def main() -> None:
         azimuth_step_deg=args.horizontal_step_deg,
     )
 
-    plot_rank_figure(
-        maps,
-        args.output_dir / "figure_1_rank_maps.png",
-        args.show_plots,
-    )
+    # plot_rank_figure(
+    #     maps,
+    #     args.output_dir / "figure_1_rank_maps.png",
+    #     args.show_plots,
+    # )
     plot_sigma_min_figure(
         maps,
         args.output_dir / "figure_2_sigma_min_maps.png",
