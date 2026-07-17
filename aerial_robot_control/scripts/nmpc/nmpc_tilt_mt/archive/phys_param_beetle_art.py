@@ -17,7 +17,7 @@ dr4 = -1
 p4_b = [0.137712, -0.138284, 0.0297217]
 kq_d_kt = 0.0153
 
-t_servo = 0.085883  # Time constant of servo
+t_servo = 0.008  # Time constant of servo
 t_rotor = 0.0942  # Time constant of rotor
 
 c0 = -0.00278

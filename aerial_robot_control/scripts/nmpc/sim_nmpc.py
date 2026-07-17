@@ -153,7 +153,7 @@ def main(args):
     else:
         t_rotor_sim = 0.0
 
-    ts_sim = 0.005  # or 0.001
+    ts_sim = 0.001  # or 0.001
 
     t_total_sim = 15.0
     if args.plot_type == 1:
