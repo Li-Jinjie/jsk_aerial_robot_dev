@@ -34,6 +34,9 @@ from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_thrust import NMPCTiltQdServoThrust
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
 from nmpc_tilt_mt.archive.tilt_qd_servo_thrust_drag import NMPCTiltQdServoThrustDrag
 
+# - Classic baseline: geometric controller + pseudo-inverse allocation
+from nmpc_tilt_mt.tilt_qd.tilt_qd_geom_baseline import GeomControllerTiltQd
+
 # Birotor
 from nmpc_tilt_mt.tilt_bi.tilt_bi_servo import NMPCTiltBiServo
 from nmpc_tilt_mt.tilt_bi.tilt_bi_2ord_servo import NMPCTiltBi2OrdServo
@@ -55,11 +58,15 @@ def main(args):
             nmpc = NMPCTiltQdThrust(phys=phys_art)
         elif args.model == 3:
             nmpc = NMPCTiltQdServoThrust(phys=phys_art)
+        elif args.model == 4:
+            nmpc = GeomControllerTiltQd(phys=phys_art)
 
         elif args.model == 21:
             nmpc = NMPCTiltQdServoDist(phys=phys_omni)
         elif args.model == 22:
             nmpc = NMPCTiltQdServoThrustDist(phys=phys_omni)
+        elif args.model == 29:
+            nmpc = GeomControllerTiltQd(phys=phys_omni)
 
         # Archived methods
         elif args.model == 91:
@@ -97,6 +104,8 @@ def main(args):
     else:
         raise ValueError(f"Invalid robot architecture {args.arch}.")
 
+    is_baseline = isinstance(nmpc, GeomControllerTiltQd)
+
     # Get time constants
     if nmpc.include_servo_model:
         t_servo_ctrl = nmpc.phys.t_servo
@@ -105,19 +114,26 @@ def main(args):
     ts_ctrl = nmpc.params["T_samp"]
 
     # OCP solver
-    ocp_solver = nmpc.get_ocp_solver()
-    nx = ocp_solver.acados_ocp.dims.nx
-    nu = ocp_solver.acados_ocp.dims.nu
-    n_param = ocp_solver.acados_ocp.dims.np
+    if is_baseline:
+        ocp_solver = None
+        nx = nmpc.nx
+        nu = nmpc.nu
 
-    x_init = np.zeros(nx)
-    x_init[6] = 1.0  # qw
-    u_init = np.zeros(nu)
+        u_init = np.zeros(nu)
+    else:
+        ocp_solver = nmpc.get_ocp_solver()
+        nx = ocp_solver.acados_ocp.dims.nx
+        nu = ocp_solver.acados_ocp.dims.nu
+        n_param = ocp_solver.acados_ocp.dims.np
 
-    for stage in range(ocp_solver.N + 1):
-        ocp_solver.set(stage, "x", x_init)
-    for stage in range(ocp_solver.N):
-        ocp_solver.set(stage, "u", u_init)
+        x_init = np.zeros(nx)
+        x_init[6] = 1.0  # qw
+        u_init = np.zeros(nu)
+
+        for stage in range(ocp_solver.N + 1):
+            ocp_solver.set(stage, "x", x_init)
+        for stage in range(ocp_solver.N):
+            ocp_solver.set(stage, "u", u_init)
 
     # ---------- Simulator ----------
     if args.arch == "qd":
@@ -172,7 +188,7 @@ def main(args):
     x_init_sim[6] = 1.0  # qw
 
     # ---------- Reference ----------
-    reference_generator = nmpc.get_reference_generator()
+    reference_generator = nmpc.get_reference_generator() if not is_baseline else None
 
     # ---------- Visualization ----------
     viz = Visualizer(
@@ -257,26 +273,27 @@ def main(args):
                 target_xyz = np.array([[1.0, 1.0, 1.0]]).T
                 target_rpy = np.array([[0.0, 0.0, 0.0]]).T
 
-        # Compute reference trajectory from target pose
-        xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy)
+        if not is_baseline:
+            # Compute reference trajectory from target pose
+            xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy)
 
-        if args.plot_type == 2:
-            if nx > 13:
-                xr[:, 13:] = 0.0
-            if args.arch == "bi":
-                ur[:, 2:] = 0.0
-            elif args.arch == "tri":
-                ur[:, 3:] = 0.0
-            elif args.arch == "qd":
-                ur[:, 4:] = 0.0
+            if args.plot_type == 2:
+                if nx > 13:
+                    xr[:, 13:] = 0.0
+                if args.arch == "bi":
+                    ur[:, 2:] = 0.0
+                elif args.arch == "tri":
+                    ur[:, 3:] = 0.0
+                elif args.arch == "qd":
+                    ur[:, 4:] = 0.0
 
-        # -------- Set SQP mode --------
-        if is_sqp_change and t_sqp_start > t_sqp_end:
-            if t_now >= t_sqp_start:
-                ocp_solver.solver_options["nlp_solver_type"] = "SQP"
+            # -------- Set SQP mode --------
+            if is_sqp_change and t_sqp_start > t_sqp_end:
+                if t_now >= t_sqp_start:
+                    ocp_solver.solver_options["nlp_solver_type"] = "SQP"
 
-            if t_now >= t_sqp_end:
-                ocp_solver.solver_options["nlp_solver_type"] = "SQP_RTI"
+                if t_now >= t_sqp_end:
+                    ocp_solver.solver_options["nlp_solver_type"] = "SQP_RTI"
 
         # -------- Update solver --------
         comp_time_start = time.time()
@@ -284,27 +301,30 @@ def main(args):
         if t_ctl >= ts_ctrl:
             t_ctl = 0.0
 
-            # 0 ~ N-1
-            for j in range(ocp_solver.N):
-                yr = np.concatenate((xr[j, :], ur[j, :]))
-                ocp_solver.set(j, "yref", yr)
-                quaternion_r = xr[j, 6:10]
+            if is_baseline:
+                u_cmd = nmpc.compute_control(x_now, target_xyz, target_rpy)
+            else:
+                # 0 ~ N-1
+                for j in range(ocp_solver.N):
+                    yr = np.concatenate((xr[j, :], ur[j, :]))
+                    ocp_solver.set(j, "yref", yr)
+                    quaternion_r = xr[j, 6:10]
+                    nmpc.acados_init_p[0:4] = quaternion_r
+                    ocp_solver.set(j, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
+
+                # N
+                yr = xr[ocp_solver.N, :]
+                ocp_solver.set(ocp_solver.N, "yref", yr)  # Final state of x, no u
+                quaternion_r = xr[ocp_solver.N, 6:10]
                 nmpc.acados_init_p[0:4] = quaternion_r
-                ocp_solver.set(j, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
+                ocp_solver.set(ocp_solver.N, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
 
-            # N
-            yr = xr[ocp_solver.N, :]
-            ocp_solver.set(ocp_solver.N, "yref", yr)  # Final state of x, no u
-            quaternion_r = xr[ocp_solver.N, 6:10]
-            nmpc.acados_init_p[0:4] = quaternion_r
-            ocp_solver.set(ocp_solver.N, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
-
-            # Compute control feedback and take the first action
-            try:
-                u_cmd = ocp_solver.solve_for_x0(x_now)
-            except Exception as e:
-                print(f"Round {i}: acados ocp_solver returned status {ocp_solver.status}. Exiting.")
-                break
+                # Compute control feedback and take the first action
+                try:
+                    u_cmd = ocp_solver.solve_for_x0(x_now)
+                except Exception as e:
+                    print(f"Round {i}: acados ocp_solver returned status {ocp_solver.status}. Exiting.")
+                    break
 
         comp_time_end = time.time()
         viz.comp_time[i] = comp_time_end - comp_time_start
@@ -337,10 +357,11 @@ def main(args):
         viz.update(i, x_now_sim, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
 
     # ========== Visualize ==========
+    ctrl_name = "geom_pinv_baseline" if is_baseline else ocp_solver.acados_ocp.model.name
     if not args.no_viz:
         if args.plot_type == 0:
             viz.visualize(
-                ocp_solver.acados_ocp.model.name,
+                ctrl_name,
                 sim_solver.model_name,
                 ts_ctrl,
                 ts_sim,
@@ -351,7 +372,7 @@ def main(args):
         elif args.plot_type == 1:
             viz.visualize_less(ts_sim, t_total_sim)
         elif args.plot_type == 2:
-            viz.visualize_rpy(ocp_solver.acados_ocp.model.name, ts_sim, t_total_sim)
+            viz.visualize_rpy(ctrl_name, ts_sim, t_total_sim)
 
     if args.save_data:
         file_path = args.file_path
@@ -374,7 +395,9 @@ if __name__ == "__main__":
         help="The NMPC model to be simulated. "
         "Options: 0 (basic model), 1 (servo), "
         "2 (thrust), 3(servo+thrust), "
+        "4 (baseline: geometric ctrl + pinv allocation), "
         "21 (servo+dist), 22 (servo+thrust+dist), "
+        "29 (baseline with omni phys params), "
         "91(no_servo_new_cost), 92(servo_old_cost), "
         "93(servo_diff), 94(servo+drag+dist), "
         "95 (servo+thrust+drag), 96 (servo+drag_param+dist).",
