@@ -163,7 +163,7 @@ def allocation_matrix(params: QuadrotorArmParams) -> np.ndarray:
             [1.0, 1.0, 1.0, 1.0],
             [a, a, -a, -a],
             [-a, a, a, -a],
-            [gamma, -gamma, gamma, -gamma],
+            [-gamma, gamma, -gamma, gamma],
         ],
         dtype=float,
     )

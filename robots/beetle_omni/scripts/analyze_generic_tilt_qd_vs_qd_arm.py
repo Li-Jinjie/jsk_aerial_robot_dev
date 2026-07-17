@@ -254,7 +254,13 @@ def compute_force_sweep(
 
 def plot_force_response(data: dict[str, np.ndarray], output_path: Path, fmax: float = 23.0) -> None:
     plt.style.use(["science", "grid"])
-    plt.rcParams.update({"font.size": 14})
+    plt.rcParams.update(
+        {
+            "font.size": 14,
+            "axes.titlesize": 14,
+            "legend.fontsize": 14,
+        }
+    )
 
     force = data["force"]
 
@@ -289,13 +295,13 @@ def plot_force_response(data: dict[str, np.ndarray], output_path: Path, fmax: fl
     qd_patch = Patch(color=_MC[0], alpha=0.1, label=f"qd+arm avail. range ($\\leq${qd_force_max:.0f} N)")
     tilt_patch = Patch(color=_MC[1], alpha=0.1, label=f"tilt-qd avail. range ($\\leq${tilt_force_max:.0f} N)")
     axes[0].set_ylabel("Attitude change [deg]")
-    axes[0].legend(handles=[qd_line, tilt_line, qd_patch, tilt_patch], fontsize=11, framealpha=0.9)
+    axes[0].legend(handles=[qd_line, tilt_line, qd_patch, tilt_patch], fontsize=13, framealpha=0.9)
 
     # --- Plot 2: servo torque ---
-    axes[1].plot(force, data["qd_tau_y_abs"], color=_MC[0], label=r"qd+arm $|\tau_y|$", linewidth=2.0)
+    axes[1].plot(force, data["qd_tau_y_abs"], color=_MC[0], label=r"qd+arm $q_1$ joint $|\tau_{q_1}|$", linewidth=2.0)
     axes[1].plot(force, data["tilt_servo_tau"], color=_MC[1], label="tilt-qd servo torque", linewidth=2.0)
     axes[1].set_ylabel("Max servo torque [N m]")
-    axes[1].legend(framealpha=0.9, fontsize=12)
+    axes[1].legend(framealpha=0.9, fontsize=13)
 
     # --- Plot 3: rotor thrusts ---
     # Rotors 1 & 2 drawn thicker so they are visible beneath rotors 3 & 4
@@ -319,9 +325,9 @@ def plot_force_response(data: dict[str, np.ndarray], output_path: Path, fmax: fl
             label=f"tilt-qd rotor {i + 1}",
         )
     axes[2].axhline(fmax, color="0.3", linewidth=1.5, linestyle=":", label=f"Rotor limit ({fmax:.0f} N)")
-    axes[2].set_xlabel("Applied force $F_x$ [N]")
+    axes[2].set_xlabel("Applied force $f_n$ [N]")
     axes[2].set_ylabel("Rotor thrust [N]")
-    axes[2].legend(ncol=2, fontsize=12, framealpha=0.9)
+    axes[2].legend(ncol=2, fontsize=13, framealpha=0.6)
 
     for ax in axes:
         ax.set_xlim(force[0], force[-1])
@@ -368,15 +374,15 @@ def plot_coupled_wrench_envelope(
     )
 
     fig, ax = plt.subplots(figsize=(8.0, 4.6))
-    ax.plot(force_values, qd_tau_pos, color=_MC[0], linewidth=2.0, label=r"qd+arm $+\tau_x$")
-    ax.plot(force_values, qd_tau_neg, color=_MC[0], linewidth=2.0, linestyle="--", label=r"qd+arm $-\tau_x$")
-    ax.plot(force_values, tilt_tau_pos, color=_MC[1], linewidth=2.0, label=r"tilt-qd $+\tau_x$")
-    ax.plot(force_values, tilt_tau_neg, color=_MC[1], linewidth=2.0, linestyle="--", label=r"tilt-qd $-\tau_x$")
+    ax.plot(force_values, qd_tau_pos, color=_MC[0], linewidth=2.0, label=r"qd+arm $+\tau_n$")
+    ax.plot(force_values, qd_tau_neg, color=_MC[0], linewidth=2.0, linestyle="--", label=r"qd+arm $-\tau_n$")
+    ax.plot(force_values, tilt_tau_pos, color=_MC[1], linewidth=2.0, label=r"tilt-qd $+\tau_n$")
+    ax.plot(force_values, tilt_tau_neg, color=_MC[1], linewidth=2.0, linestyle="--", label=r"tilt-qd $-\tau_n$")
     ax.fill_between(force_values, qd_tau_neg, qd_tau_pos, color=_MC[0], alpha=0.10)
     ax.fill_between(force_values, tilt_tau_neg, tilt_tau_pos, color=_MC[1], alpha=0.10)
     ax.axhline(0.0, color="0.3", linewidth=0.8)
-    ax.set_xlabel("Required horizontal force $F_x$ [N]")
-    ax.set_ylabel(r"Feasible torque envelope $\tau_x$ [N m]")
+    ax.set_xlabel("Required horizontal force $f_n$ [N]")
+    ax.set_ylabel(r"Feasible torque envelope $\tau_n$ [N m]")
     ax.set_xlim(force_values[0], force_values[-1])
     ax.legend(ncol=2, framealpha=0.9)
     fig.tight_layout()
