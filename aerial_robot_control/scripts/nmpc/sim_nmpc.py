@@ -620,6 +620,13 @@ def main(args):
             viz.visualize_less(ts_sim, t_total_sim)
         elif args.plot_type == 2:
             viz.visualize_rpy(ctrl_name, ts_sim, t_total_sim)
+        elif args.plot_type == 3:
+            viz.visualize_tracking_actuators(
+                ts_sim,
+                t_total_sim,
+                np.asarray(target_xyz_history),
+                np.asarray(target_q_history),
+            )
 
     if args.save_data:
         file_path = args.file_path
@@ -663,7 +670,9 @@ if __name__ == "__main__":
         "--plot_type",
         type=int,
         default=0,
-        help="The type of plot. " "Options: 0 (default: full), 1 (less), 2 (only rpy).",
+        help="The type of plot. "
+        "Options: 0 (default: full), 1 (less), 2 (only rpy), "
+        "3 (position/attitude/servo/thrust cmd-state tracking).",
     )
 
     parser.add_argument(
