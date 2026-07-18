@@ -48,6 +48,15 @@ from nmpc_tilt_mt.tilt_tri.tilt_tri_servo import NMPCTiltTriServo
 from nmpc_tilt_mt.tilt_tri.tilt_tri_servo_dist import NMPCTiltTriServoDist
 
 
+def set_servo_time_constant(phys, time_constant):
+    """Override the servo time constant in both named and flattened physical parameters."""
+    # physical_param_list order is base parameters(6), four times [dr, p_b(3)],
+    # then t_rotor and t_servo.
+    servo_param_idx = 6 + 4 * 4 + 1
+    phys.t_servo = time_constant
+    phys.physical_param_list[servo_param_idx] = time_constant
+
+
 def get_constraint_sweep_target(args, t_now):
     """Return the pose target and active sweep segment for the constraint test."""
     target_xyz = np.zeros((3, 1))
@@ -201,6 +210,7 @@ def compute_constraint_sweep_metrics(
     print(
         f"attitude_deg={args.test_attitude_deg}, thrust_bounds_N=[0, {args.test_thrust_max:.3f}], "
         f"servo_bounds_deg=[-{args.servo_angle_max_deg:.3f}, {args.servo_angle_max_deg:.3f}], "
+        f"servo_time_constant_s={args.effective_servo_time_constant:.6f}, "
         f"NMPC_velocity_bounds_m_s=+-{args.test_velocity_max:.3f}"
     )
     print("\n========== Per-segment metrics ==========")
@@ -229,6 +239,7 @@ def compute_constraint_sweep_metrics(
             "attitude_deg": args.test_attitude_deg,
             "thrust_bounds_n": [0.0, args.test_thrust_max],
             "servo_bounds_deg": [-args.servo_angle_max_deg, args.servo_angle_max_deg],
+            "servo_time_constant_s": args.effective_servo_time_constant,
             "velocity_bounds_m_s": [-args.test_velocity_max, args.test_velocity_max],
         },
         "overall": overall,
@@ -242,17 +253,25 @@ def main(args):
     # Preserve compatibility with callers that construct the pre-scenario
     # argparse Namespace themselves instead of using this file's CLI parser.
     args.scenario = getattr(args, "scenario", "legacy")
+    args.servo_time_constant = getattr(args, "servo_time_constant", None)
     if args.scenario == "constraint_sweep":
         if args.arch != "qd" or args.model not in (1, 4):
             raise ValueError("constraint_sweep supports only qd model 1 (servo NMPC) and model 4 (geometric baseline).")
         if args.test_thrust_max <= 0.0:
             raise ValueError("test_thrust_max must be positive.")
-        if not 0.0 < args.servo_angle_max_deg < 180.0:
-            raise ValueError("servo_angle_max_deg must be between 0 and 180 degrees.")
+        if not 0.0 < args.servo_angle_max_deg <= 180.0:
+            raise ValueError("servo_angle_max_deg must be greater than 0 and no greater than 180 degrees.")
         if args.test_velocity_max <= 0.0 or args.segment_duration <= 0.0 or args.warmup_duration < 0.0:
             raise ValueError("Velocity/duration parameters must be positive (warmup may be zero).")
         if not args.step_levels or any(level <= 0.0 for level in args.step_levels):
             raise ValueError("step_levels must contain positive amplitudes.")
+    if args.servo_time_constant is not None:
+        if args.arch != "qd":
+            raise ValueError("servo_time_constant override is currently supported only for the qd architecture.")
+        if args.servo_time_constant <= 0.0:
+            raise ValueError("servo_time_constant must be positive.")
+        set_servo_time_constant(phys_art, args.servo_time_constant)
+        set_servo_time_constant(phys_omni, args.servo_time_constant)
 
     # ---------- Controller ----------
     if args.arch == "qd":
@@ -377,6 +396,7 @@ def main(args):
         t_rotor_sim = sim_nmpc.phys.t_rotor
     else:
         t_rotor_sim = 0.0
+    args.effective_servo_time_constant = t_servo_sim
 
     ts_sim = 0.001  # or 0.001
 
@@ -707,6 +727,12 @@ if __name__ == "__main__":
         type=float,
         default=60.0,
         help="Common symmetric servo command/state bound [deg] for constraint_sweep.",
+    )
+    parser.add_argument(
+        "--servo-time-constant",
+        type=float,
+        default=None,
+        help="Override the qd controller and simulator servo time constant [s].",
     )
     parser.add_argument(
         "--test-velocity-max",
