@@ -3,6 +3,7 @@ from copy import deepcopy
 import time
 import numpy as np
 import argparse
+import csv
 import json
 import transformations as tf
 
@@ -73,8 +74,27 @@ def get_constraint_sweep_target(args, t_now):
     return target_xyz, target_rpy, segment
 
 
-def apply_constraint_sweep_bounds(nmpc, ocp_solver, args, is_baseline):
-    """Apply identical test actuator limits to NMPC and geometric baseline."""
+def get_servo_delay_sweep_target(args, t_now):
+    """Return the legacy target, optionally shifted after a hover warm-up."""
+    onset_time = 0.0 if args.startup_mode == "cold" else args.startup_warmup_duration
+    local_time = t_now - onset_time
+    if local_time < 0.0:
+        return np.zeros((3, 1)), np.zeros((3, 1)), -1
+
+    target_xyz = np.array([[0.3, 0.6, 1.0]]).T
+    target_rpy = np.zeros((3, 1))
+    phase = 0
+    if 2.0 <= local_time < 6.0:
+        target_rpy = np.radians(np.array([[30.0, 60.0, 90.0]]).T)
+        phase = 1
+    elif local_time >= 6.0:
+        target_xyz = np.array([[1.0, 1.0, 1.0]]).T
+        phase = 2
+    return target_xyz, target_rpy, phase
+
+
+def apply_common_actuator_bounds(nmpc, ocp_solver, args, is_baseline):
+    """Apply identical actuator limits to every controller in a comparison."""
     angle_max = np.radians(args.servo_angle_max_deg)
 
     if is_baseline:
@@ -91,26 +111,35 @@ def apply_constraint_sweep_bounds(nmpc, ocp_solver, args, is_baseline):
         ocp_solver.constraints_set(stage, "lbu", lbu)
         ocp_solver.constraints_set(stage, "ubu", ubu)
 
-    # Model 1 has constrained states [v(3), w(3), servo angle(4)]. Widen the
-    # velocity bounds so that this test is governed by actuator constraints.
+    # Constrained states start with v(3), w(3). Servo-aware models append the
+    # four actual servo angles. Widen velocity bounds for the constraint task.
     lbx = np.asarray(ocp_solver.acados_ocp.constraints.lbx, dtype=float).copy()
     ubx = np.asarray(ocp_solver.acados_ocp.constraints.ubx, dtype=float).copy()
-    lbx[:3] = -args.test_velocity_max
-    ubx[:3] = args.test_velocity_max
-    lbx[-4:] = -angle_max
-    ubx[-4:] = angle_max
+    if args.scenario == "constraint_sweep":
+        lbx[:3] = -args.test_velocity_max
+        ubx[:3] = args.test_velocity_max
+    if nmpc.include_servo_model:
+        lbx[-4:] = -angle_max
+        ubx[-4:] = angle_max
     for stage in range(1, ocp_solver.N):
         ocp_solver.constraints_set(stage, "lbx", lbx)
         ocp_solver.constraints_set(stage, "ubx", ubx)
 
     lbx_e = np.asarray(ocp_solver.acados_ocp.constraints.lbx_e, dtype=float).copy()
     ubx_e = np.asarray(ocp_solver.acados_ocp.constraints.ubx_e, dtype=float).copy()
-    lbx_e[:3] = -args.test_velocity_max
-    ubx_e[:3] = args.test_velocity_max
-    lbx_e[-4:] = -angle_max
-    ubx_e[-4:] = angle_max
+    if args.scenario == "constraint_sweep":
+        lbx_e[:3] = -args.test_velocity_max
+        ubx_e[:3] = args.test_velocity_max
+    if nmpc.include_servo_model:
+        lbx_e[-4:] = -angle_max
+        ubx_e[-4:] = angle_max
     ocp_solver.constraints_set(ocp_solver.N, "lbx", lbx_e)
     ocp_solver.constraints_set(ocp_solver.N, "ubx", ubx_e)
+
+
+def apply_constraint_sweep_bounds(nmpc, ocp_solver, args, is_baseline):
+    """Backward-compatible wrapper for the constraint-active experiment."""
+    apply_common_actuator_bounds(nmpc, ocp_solver, args, is_baseline)
 
 
 def quaternion_geodesic_error(q, q_ref):
@@ -248,12 +277,182 @@ def compute_constraint_sweep_metrics(
     print("METRICS_JSON=" + json.dumps(summary, separators=(",", ":")))
 
 
+def _excess_travel(values):
+    """Return mean per-channel travel beyond the direct start-to-end change."""
+    if len(values) < 2:
+        return 0.0
+    travel = np.sum(np.abs(np.diff(values, axis=0)), axis=0)
+    direct = np.abs(values[-1] - values[0])
+    return float(np.mean(np.maximum(travel - direct, 0.0)))
+
+
+def compute_servo_delay_sweep_metrics(
+    args,
+    ts_sim,
+    x_history,
+    u_history,
+    target_xyz_history,
+    target_q_history,
+    control_update_history,
+    solve_time_history,
+    solver_failure_count,
+):
+    """Measure tracking and actuator oscillation for the servo-model ablation."""
+    x = np.asarray(x_history)
+    u = np.asarray(u_history)
+    xyz_ref = np.asarray(target_xyz_history)
+    q_ref = np.asarray(target_q_history)
+    control_updates = np.asarray(control_update_history, dtype=bool)
+    time_axis = np.arange(len(x)) * ts_sim
+    onset_time = 0.0 if args.startup_mode == "cold" else args.startup_warmup_duration
+
+    position_error = np.linalg.norm(x[:, :3] - xyz_ref, axis=1)
+    attitude_error_deg = np.degrees(quaternion_geodesic_error(x[:, 6:10], q_ref))
+    servo_actual = x[:, 13:17]
+    thrust_actual = x[:, 17:21]
+    servo_rate = np.diff(servo_actual, axis=0) / ts_sim
+    angle_max = np.radians(args.servo_angle_max_deg)
+
+    def summarize(mask):
+        if not np.any(mask):
+            raise ValueError("Servo-delay metric window contains no simulation samples.")
+        command_mask = mask & control_updates
+        u_control = u[command_mask]
+        if len(u_control) == 0:
+            raise ValueError("Servo-delay metric window contains no controller updates.")
+        servo_cmd = u_control[:, 4:8]
+        thrust_cmd = u_control[:, :4]
+        servo_increment = np.abs(np.diff(servo_cmd, axis=0))
+        thrust_increment = np.abs(np.diff(thrust_cmd, axis=0))
+        rate_selected = np.abs(servo_rate[mask[1:]])
+        servo_selected = servo_actual[mask]
+        thrust_selected = thrust_actual[mask]
+        thrust_any, thrust_samples = bound_activity(thrust_cmd, 0.0, args.test_thrust_max)
+        servo_any, servo_samples = bound_activity(servo_cmd, -angle_max, angle_max)
+
+        def increment_stat(values, fn):
+            return 0.0 if values.size == 0 else float(fn(values))
+
+        return {
+            "position_rmse_m": float(np.sqrt(np.mean(position_error[mask] ** 2))),
+            "position_max_m": float(np.max(position_error[mask])),
+            "attitude_rmse_deg": float(np.sqrt(np.mean(attitude_error_deg[mask] ** 2))),
+            "attitude_max_deg": float(np.max(attitude_error_deg[mask])),
+            "servo_cmd_rms_deg": float(np.degrees(np.sqrt(np.mean(servo_cmd**2)))),
+            "servo_cmd_peak_to_peak_deg": float(np.degrees(np.max(np.ptp(servo_cmd, axis=0)))),
+            "servo_cmd_increment_rms_deg": float(
+                np.degrees(increment_stat(servo_increment, lambda v: np.sqrt(np.mean(v**2))))
+            ),
+            "servo_cmd_increment_p95_deg": float(
+                np.degrees(increment_stat(servo_increment, lambda v: np.percentile(v, 95)))
+            ),
+            "servo_cmd_increment_max_deg": float(np.degrees(increment_stat(servo_increment, np.max))),
+            "servo_cmd_excess_travel_deg": float(np.degrees(_excess_travel(servo_cmd))),
+            "servo_actual_peak_to_peak_deg": float(np.degrees(np.max(np.ptp(servo_selected, axis=0)))),
+            "servo_actual_excess_travel_deg": float(np.degrees(_excess_travel(servo_selected))),
+            "servo_rate_rms_deg_s": float(np.degrees(np.sqrt(np.mean(rate_selected**2)))),
+            "servo_rate_p95_deg_s": float(np.degrees(np.percentile(rate_selected, 95))),
+            "servo_rate_max_deg_s": float(np.degrees(np.max(rate_selected))),
+            "thrust_cmd_rms_n": float(np.sqrt(np.mean(thrust_cmd**2))),
+            "thrust_cmd_increment_rms_n": increment_stat(thrust_increment, lambda v: np.sqrt(np.mean(v**2))),
+            "thrust_cmd_excess_travel_n": _excess_travel(thrust_cmd),
+            "thrust_actual_max_n": float(np.max(thrust_selected)),
+            "thrust_active_time_pct": 100.0 * thrust_any,
+            "thrust_active_samples_pct": 100.0 * thrust_samples,
+            "servo_active_time_pct": 100.0 * servo_any,
+            "servo_active_samples_pct": 100.0 * servo_samples,
+        }
+
+    startup_mask = (time_axis >= onset_time) & (time_axis < onset_time + args.analysis_window_duration)
+    overall_mask = time_axis >= onset_time
+    startup = summarize(startup_mask)
+    overall = summarize(overall_mask)
+    solve_times = np.asarray(solve_time_history)
+    timing = {
+        "solve_time_mean_ms": float(1e3 * np.mean(solve_times)) if solve_times.size else None,
+        "solve_time_p95_ms": float(1e3 * np.percentile(solve_times, 95)) if solve_times.size else None,
+        "solve_time_max_ms": float(1e3 * np.max(solve_times)) if solve_times.size else None,
+        "solver_failures": int(solver_failure_count),
+    }
+
+    controller_names = {0: "no_servo", 1: "servo_current_cost", 92: "servo_old_cost"}
+    summary = {
+        "scenario": "servo_delay_sweep",
+        "model": args.model,
+        "controller": controller_names[args.model],
+        "parameters": {
+            "servo_time_constant_s": args.effective_servo_time_constant,
+            "controller_servo_time_constant_s": args.effective_controller_servo_time_constant,
+            "ocp_sim_method_num_steps": args.ocp_sim_num_steps,
+            "ocp_shooting_interval_s": float(args.effective_ocp_shooting_interval),
+            "startup_mode": args.startup_mode,
+            "startup_warmup_duration_s": args.startup_warmup_duration,
+            "analysis_window_duration_s": args.analysis_window_duration,
+            "thrust_bounds_n": [0.0, args.test_thrust_max],
+            "servo_bounds_deg": [-args.servo_angle_max_deg, args.servo_angle_max_deg],
+        },
+        "startup": startup,
+        "overall": overall,
+        "timing": timing,
+    }
+
+    print("\n========== Servo-delay sweep configuration ==========")
+    print(
+        f"model={args.model} ({controller_names[args.model]}), startup={args.startup_mode}, "
+        f"servo_time_constant_s={args.effective_servo_time_constant:.6f}, "
+        f"ERK_steps={args.ocp_sim_num_steps}, bounds=[0,{args.test_thrust_max:.3f}]N/"
+        f"+-{args.servo_angle_max_deg:.3f}deg"
+    )
+    print("\n========== Startup-window metrics ==========")
+    for key, value in startup.items():
+        print(f"{key}: {value:.6g}")
+    print("\n========== Overall metrics ==========")
+    for key, value in overall.items():
+        print(f"{key}: {value:.6g}")
+    for key, value in timing.items():
+        print(f"{key}: {value:.6g}" if isinstance(value, float) else f"{key}: {value}")
+    print("METRICS_JSON=" + json.dumps(summary, separators=(",", ":")))
+
+
+def write_solve_time_csv(file_path, rows):
+    """Write one row per controller update with wall-clock and acados timings."""
+    output_path = os.path.abspath(file_path)
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    fieldnames = [
+        "control_round",
+        "sim_step",
+        "sim_time_s",
+        "reference_phase",
+        "wall_time_ms",
+        "acados_time_tot_ms",
+        "acados_time_lin_ms",
+        "acados_time_qp_ms",
+        "solver_status",
+    ]
+    with open(output_path, "w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"SOLVE_TIME_CSV={output_path}")
+
+
 def main(args):
     # ========== Init ==========
     # Preserve compatibility with callers that construct the pre-scenario
     # argparse Namespace themselves instead of using this file's CLI parser.
     args.scenario = getattr(args, "scenario", "legacy")
     args.servo_time_constant = getattr(args, "servo_time_constant", None)
+    args.ocp_sim_num_steps = getattr(args, "ocp_sim_num_steps", 1)
+    args.startup_mode = getattr(args, "startup_mode", "cold")
+    args.startup_warmup_duration = getattr(args, "startup_warmup_duration", 2.0)
+    args.analysis_window_duration = getattr(args, "analysis_window_duration", 2.0)
+    args.solve_time_csv = getattr(args, "solve_time_csv", None)
+    if args.solve_time_csv is not None:
+        args.solve_time_csv = os.path.abspath(args.solve_time_csv)
+    if args.ocp_sim_num_steps < 1:
+        raise ValueError("ocp_sim_num_steps must be a positive integer.")
     if args.scenario == "constraint_sweep":
         if args.arch != "qd" or args.model not in (1, 4):
             raise ValueError("constraint_sweep supports only qd model 1 (servo NMPC) and model 4 (geometric baseline).")
@@ -265,6 +464,17 @@ def main(args):
             raise ValueError("Velocity/duration parameters must be positive (warmup may be zero).")
         if not args.step_levels or any(level <= 0.0 for level in args.step_levels):
             raise ValueError("step_levels must contain positive amplitudes.")
+    elif args.scenario == "servo_delay_sweep":
+        if args.arch != "qd" or args.model not in (0, 1, 92):
+            raise ValueError("servo_delay_sweep supports only qd models 0, 1, and 92.")
+        if args.servo_time_constant is None:
+            raise ValueError("servo_delay_sweep requires --servo-time-constant.")
+        if args.test_thrust_max <= 0.0:
+            raise ValueError("test_thrust_max must be positive.")
+        if not 0.0 < args.servo_angle_max_deg <= 180.0:
+            raise ValueError("servo_angle_max_deg must be greater than 0 and no greater than 180 degrees.")
+        if args.startup_warmup_duration < 0.0 or args.analysis_window_duration <= 0.0:
+            raise ValueError("startup warm-up must be nonnegative and the analysis window must be positive.")
     if args.servo_time_constant is not None:
         if args.arch != "qd":
             raise ValueError("servo_time_constant override is currently supported only for the qd architecture.")
@@ -276,9 +486,9 @@ def main(args):
     # ---------- Controller ----------
     if args.arch == "qd":
         if args.model == 0:
-            nmpc = NMPCTiltQdNoServo(phys=phys_art)
+            nmpc = NMPCTiltQdNoServo(phys=phys_art, ocp_sim_method_num_steps=args.ocp_sim_num_steps)
         elif args.model == 1:
-            nmpc = NMPCTiltQdServo(phys=phys_art)
+            nmpc = NMPCTiltQdServo(phys=phys_art, ocp_sim_method_num_steps=args.ocp_sim_num_steps)
         elif args.model == 2:
             nmpc = NMPCTiltQdThrust(phys=phys_art)
         elif args.model == 3:
@@ -297,7 +507,7 @@ def main(args):
         elif args.model == 91:
             nmpc = NMPCTiltQdNoServoAcCost()
         elif args.model == 92:
-            nmpc = NMPCTiltQdServoOldCost()
+            nmpc = NMPCTiltQdServoOldCost(phys=phys_art, ocp_sim_method_num_steps=args.ocp_sim_num_steps)
         elif args.model == 93:
             nmpc = NMPCTiltQdServoDiff()
             alpha_integ = np.zeros(4)
@@ -337,6 +547,7 @@ def main(args):
     else:
         t_servo_ctrl = 0.0
     ts_ctrl = nmpc.params["T_samp"]
+    args.effective_ocp_shooting_interval = nmpc.params.get("T_step", 0.0)
 
     # OCP solver
     if is_baseline:
@@ -362,6 +573,8 @@ def main(args):
 
     if args.scenario == "constraint_sweep":
         apply_constraint_sweep_bounds(nmpc, ocp_solver, args, is_baseline)
+    elif args.scenario == "servo_delay_sweep":
+        apply_common_actuator_bounds(nmpc, ocp_solver, args, is_baseline)
 
     # ---------- Simulator ----------
     if args.arch == "qd":
@@ -397,11 +610,15 @@ def main(args):
     else:
         t_rotor_sim = 0.0
     args.effective_servo_time_constant = t_servo_sim
+    args.effective_controller_servo_time_constant = t_servo_ctrl
 
     ts_sim = 0.001  # or 0.001
 
     if args.scenario == "constraint_sweep":
         t_total_sim = args.warmup_duration + args.segment_duration * len(args.step_levels)
+    elif args.scenario == "servo_delay_sweep":
+        startup_shift = 0.0 if args.startup_mode == "cold" else args.startup_warmup_duration
+        t_total_sim = 15.0 + startup_shift
     else:
         t_total_sim = 15.0
         if args.plot_type == 1:
@@ -441,7 +658,10 @@ def main(args):
     target_xyz_history = []
     target_q_history = []
     segment_history = []
+    control_update_history = []
     solve_time_history = []
+    solve_time_rows = []
+    control_round = 0
     solver_failure_count = 0
 
     is_sqp_change = False
@@ -479,6 +699,8 @@ def main(args):
         # -------- Update control target --------
         if args.scenario == "constraint_sweep":
             target_xyz, target_rpy, active_segment = get_constraint_sweep_target(args, t_now)
+        elif args.scenario == "servo_delay_sweep":
+            target_xyz, target_rpy, active_segment = get_servo_delay_sweep_target(args, t_now)
         else:
             active_segment = -1
             target_xyz = np.array([[0.3, 0.6, 1.0]]).T
@@ -539,9 +761,15 @@ def main(args):
                     ocp_solver.solver_options["nlp_solver_type"] = "SQP_RTI"
 
         # -------- Update solver --------
-        comp_time_start = time.time()
+        comp_time_start = time.perf_counter()
         control_was_updated = False
         solver_failed = False
+        acados_timing = {
+            "time_tot": None,
+            "time_lin": None,
+            "time_qp": None,
+        }
+        solver_status = 0
 
         if t_ctl >= ts_ctrl:
             t_ctl = 0.0
@@ -573,10 +801,37 @@ def main(args):
                     solver_failure_count += 1
                     solver_failed = True
 
-        comp_time_end = time.time()
+                solver_status = int(ocp_solver.status)
+
+        comp_time_end = time.perf_counter()
         viz.comp_time[i] = comp_time_end - comp_time_start
         if control_was_updated:
-            solve_time_history.append(comp_time_end - comp_time_start)
+            wall_time = comp_time_end - comp_time_start
+            solve_time_history.append(wall_time)
+            if not is_baseline:
+                for field in acados_timing:
+                    try:
+                        acados_timing[field] = float(ocp_solver.get_stats(field))
+                    except (TypeError, ValueError):
+                        acados_timing[field] = None
+            solve_time_rows.append(
+                {
+                    "control_round": control_round,
+                    "sim_step": i,
+                    "sim_time_s": t_now,
+                    "reference_phase": active_segment,
+                    "wall_time_ms": 1e3 * wall_time,
+                    "acados_time_tot_ms": (
+                        None if acados_timing["time_tot"] is None else 1e3 * acados_timing["time_tot"]
+                    ),
+                    "acados_time_lin_ms": (
+                        None if acados_timing["time_lin"] is None else 1e3 * acados_timing["time_lin"]
+                    ),
+                    "acados_time_qp_ms": (None if acados_timing["time_qp"] is None else 1e3 * acados_timing["time_qp"]),
+                    "solver_status": solver_status,
+                }
+            )
+            control_round += 1
         if solver_failed:
             break
 
@@ -606,6 +861,7 @@ def main(args):
         target_xyz_history.append(target_xyz.flatten().copy())
         target_q_history.append(target_q.copy())
         segment_history.append(active_segment)
+        control_update_history.append(control_was_updated)
 
         # --------- Update visualizer ----------
         viz.update(i, x_now_sim, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
@@ -622,6 +878,21 @@ def main(args):
             solve_time_history,
             solver_failure_count,
         )
+    elif args.scenario == "servo_delay_sweep":
+        compute_servo_delay_sweep_metrics(
+            args,
+            ts_sim,
+            x_history,
+            u_history,
+            target_xyz_history,
+            target_q_history,
+            control_update_history,
+            solve_time_history,
+            solver_failure_count,
+        )
+
+    if args.solve_time_csv is not None:
+        write_solve_time_csv(args.solve_time_csv, solve_time_rows)
 
     # ========== Visualize ==========
     ctrl_name = "geom_pinv_baseline" if is_baseline else ocp_solver.acados_ocp.model.name
@@ -712,7 +983,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--scenario",
-        choices=("legacy", "constraint_sweep"),
+        choices=("legacy", "constraint_sweep", "servo_delay_sweep"),
         default="legacy",
         help="Simulation task. The default preserves the original setpoint task.",
     )
@@ -720,19 +991,49 @@ if __name__ == "__main__":
         "--test-thrust-max",
         type=float,
         default=12.0,
-        help="Common per-rotor thrust-command upper bound [N] for constraint_sweep.",
+        help="Common per-rotor thrust-command upper bound [N] for comparison scenarios.",
     )
     parser.add_argument(
         "--servo-angle-max-deg",
         type=float,
         default=60.0,
-        help="Common symmetric servo command/state bound [deg] for constraint_sweep.",
+        help="Common symmetric servo command/state bound [deg] for comparison scenarios.",
     )
     parser.add_argument(
         "--servo-time-constant",
         type=float,
         default=None,
         help="Override the qd controller and simulator servo time constant [s].",
+    )
+    parser.add_argument(
+        "--ocp-sim-num-steps",
+        type=int,
+        default=1,
+        help="Number of ERK integration substeps in every NMPC shooting interval.",
+    )
+    parser.add_argument(
+        "--startup-mode",
+        choices=("cold", "hover_warm"),
+        default="cold",
+        help="Start the servo-delay task immediately or after a hover stabilization period.",
+    )
+    parser.add_argument(
+        "--startup-warmup-duration",
+        type=float,
+        default=2.0,
+        help="Hover duration [s] before the shifted legacy task in hover_warm mode.",
+    )
+    parser.add_argument(
+        "--analysis-window-duration",
+        type=float,
+        default=2.0,
+        help="Duration [s] after task onset used for startup oscillation metrics.",
+    )
+    parser.add_argument(
+        "--solve-time-csv",
+        type=str,
+        default=None,
+        help="Optional CSV path for per-controller-update wall and acados solve timings.",
     )
     parser.add_argument(
         "--test-velocity-max",

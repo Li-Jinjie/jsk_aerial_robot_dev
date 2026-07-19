@@ -13,7 +13,7 @@ class QDNMPCBase(RecedingHorizonBase):
     Inherits from RecedingHorizonBase which also lays foundations for MHE classes.
     """
 
-    def __init__(self, build: bool = True):
+    def __init__(self, build: bool = True, ocp_sim_method_num_steps: int = 1):
         #     The child classes only have specifications which define the controller specifications and need to set the following flags:
         # check if the model name is set
         # - model_name: Name of the model defined in controller file.
@@ -58,6 +58,9 @@ class QDNMPCBase(RecedingHorizonBase):
         if not hasattr(self, "include_impedance"):
             self.include_impedance = False
 
+        if ocp_sim_method_num_steps < 1:
+            raise ValueError("ocp_sim_method_num_steps must be a positive integer.")
+        self.ocp_sim_method_num_steps = int(ocp_sim_method_num_steps)
         self.acados_init_p = None  # initial value for parameters in acados. Mainly for physical parameters.
 
         # Call RecedingHorizon constructor coming as NMPC method
@@ -668,7 +671,7 @@ class QDNMPCBase(RecedingHorizonBase):
         # ocp.solver_options.qp_solver_warm_start = 1
         ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
         ocp.solver_options.integrator_type = "ERK"  # explicit Runge-Kutta integrator
-        ocp.solver_options.sim_method_num_steps = 5  # steps for simulation accuracy
+        ocp.solver_options.sim_method_num_steps = self.ocp_sim_method_num_steps
         ocp.solver_options.print_level = 0
         ocp.solver_options.nlp_solver_type = "SQP_RTI"
         ocp.solver_options.qp_solver_cond_N = self.params["N_steps"]
