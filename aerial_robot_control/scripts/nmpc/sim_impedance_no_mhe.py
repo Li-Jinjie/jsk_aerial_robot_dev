@@ -7,6 +7,7 @@ from nmpc_tilt_mt.utils.nmpc_viz import Visualizer
 
 from nmpc_tilt_mt.utils.fir_differentiator import FIRDifferentiator
 
+from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist import NMPCTiltQdServoDist
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist_imp import NMPCTiltQdServoImpedance
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist_force_imp import NMPCTiltQdServoForceImpedance
@@ -46,15 +47,15 @@ def lever_arm_torque_from_force(force_w, q_wb, ee_p):
 
 
 def main(args):
-    if args.torque_compensation != "none" and args.model != 2:
-        raise ValueError("Torque compensation modes are only supported by model 2.")
+    if args.torque_compensation is None:
+        args.torque_compensation = "lever-arm" if args.model == 2 else "estimator"
     if args.torque_compensation == "lever-arm" and args.interaction_frame != "ee":
         raise ValueError("Lever-arm torque compensation requires --interaction-frame ee.")
 
     # ========== Init ==========
     # ---------- Controller ----------
     if args.model == 0:
-        nmpc = NMPCTiltQdServoThrustDist()
+        nmpc = NMPCTiltQdServoDist()
     elif args.model == 1:
         nmpc = NMPCTiltQdServoImpedance()
     elif args.model == 2:
@@ -165,10 +166,8 @@ def main(args):
     t_ctl = 0.0
     t_sensor = 0.0
     x_now_sim = x_init_sim
-    # A 5 N m step is only sustainable with disturbance feed-forward. Use a
-    # realistic feedback-rejection test amplitude when torque estimation is
-    # deliberately disabled by the force-impedance controller.
-    torque_disturbance = 0.5 if args.model == 2 else 5.0
+    # lever-arm has no direct estimation of the torque on end-effector, so too large value destroy the control
+    torque_disturbance = 0.5 if args.torque_compensation == "lever-arm" else 2.0
     for i in range(N_sim):
         # --------- Update time ---------
         t_now = i * ts_sim
@@ -309,20 +308,17 @@ def main(args):
         u_cmd = copy.deepcopy(u_mpc)
 
         if args.est_dist_type == 0:
-            if args.model == 2:
-                disturb_estimated[0:3] = disturb[0:3]
-                if args.torque_compensation == "lever-arm":
-                    disturb_estimated[3:6] = lever_arm_torque_from_force(
-                        disturb_estimated[0:3], x_now_sim[6:10], sim_nmpc.phys.ball_effector_p
-                    )
-                elif args.torque_compensation == "estimator":
-                    # With perfect disturbance information, use the complete
-                    # equivalent CoG torque as the ideal estimator result.
-                    disturb_estimated[3:6] = disturb[3:6]
-                else:
-                    disturb_estimated[3:6] = 0.0
+            disturb_estimated[0:3] = disturb[0:3]
+            if args.torque_compensation == "lever-arm":
+                disturb_estimated[3:6] = lever_arm_torque_from_force(
+                    disturb_estimated[0:3], x_now_sim[6:10], sim_nmpc.phys.ball_effector_p
+                )
+            elif args.torque_compensation == "estimator":
+                # With perfect disturbance information, use the complete
+                # equivalent CoG torque as the ideal estimator result.
+                disturb_estimated[3:6] = disturb[3:6]
             else:
-                disturb_estimated = copy.deepcopy(disturb)
+                disturb_estimated[3:6] = 0.0
 
         # Disturbance estimation is related to the sensor update frequency
         if t_sensor >= ts_sensor and args.est_dist_type != 0:
@@ -340,7 +336,7 @@ def main(args):
 
             # Only form angular acceleration and IMU-side torque when the
             # selected compensation mode actually uses the torque estimator.
-            if args.model != 2 or args.torque_compensation == "estimator":
+            if args.torque_compensation == "estimator":
                 w = x_now_sim[10:13]  # Angular velocity
                 I = sim_nmpc.fake_sensor.I
                 w_imu = w + np.random.normal(0.0, 0.01, 3)  # add noise. real: scale = 0.0008 rad/s
@@ -378,7 +374,7 @@ def main(args):
                 disturb_estimated[0:3] = (1 - alpha_force) * disturb_estimated[0:3] + alpha_force * np.dot(
                     rot_wb, (wrench_u_imu_b[0:3] - wrench_u_sensor_b[0:3])
                 )  # World frame
-                if args.model != 2 or args.torque_compensation == "estimator":
+                if args.torque_compensation == "estimator":
                     alpha_torque = 0.05
                     disturb_estimated[3:6] = (1 - alpha_torque) * disturb_estimated[3:6] + alpha_torque * (
                         wrench_u_imu_b[3:6] - wrench_u_sensor_b[3:6]
@@ -388,9 +384,8 @@ def main(args):
                         disturb_estimated[0:3], x_now_sim[6:10], sim_nmpc.phys.ball_effector_p
                     )
 
-        if args.model == 2:
-            if args.torque_compensation == "none":
-                disturb_estimated[3:6] = 0.0
+        if args.torque_compensation == "none":
+            disturb_estimated[3:6] = 0.0
 
         # --------- Update simulation ----------
         x_now_sim[-6:] = disturb
@@ -436,7 +431,7 @@ if __name__ == "__main__":
         "model",
         type=int,
         help="The NMPC model to be simulated. "
-        "Options: 0 (disturbance), 1 (full impedance), 2 (force impedance + attitude tracking).",
+        "Options: 0 (servo disturbance), 1 (full impedance), 2 (force impedance + attitude tracking).",
     )
 
     parser.add_argument(
@@ -480,15 +475,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--interaction-frame",
         choices=("cog", "ee"),
-        default="cog",
-        help="Point/frame used for the applied disturbance wrench and plotted kinematic states. Default: cog.",
+        default="ee",
+        help="Point/frame used for the applied disturbance wrench and plotted kinematic states. Default: ee.",
     )
 
     parser.add_argument(
         "--torque-compensation",
         choices=("none", "lever-arm", "estimator"),
-        default="none",
-        help="Torque disturbance injected into model 2: none, force-derived lever-arm torque, or torque estimator.",
+        default=None,
+        help="Torque disturbance source for all models: none, force-derived lever-arm torque, or torque estimator. "
+        "Default: estimator for model 0/1, lever-arm for model 2.",
     )
 
     args = parser.parse_args()
