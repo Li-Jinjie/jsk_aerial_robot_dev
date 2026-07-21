@@ -44,6 +44,10 @@ class NMPCTiltQdServoForceImpedance(QDNMPCBase):
 
         rot_wb = self._get_rot_wb_ca(self.qw, self.qx, self.qy, self.qz)
         skew_w = self._get_skew_symmetric_matrix(self.w)
+        skew_ang_acc = self._get_skew_symmetric_matrix(ang_acc_b)
+        lin_acc_ee_w = lin_acc_w + rot_wb @ (
+            skew_ang_acc @ self.ee_p + skew_w @ skew_w @ self.ee_p
+        )
 
         rot_bt = self._get_rot_wb_ca(self.ee_q[0], self.ee_q[1], self.ee_q[2], self.ee_q[3])
         rot_tb = rot_bt.T
@@ -60,11 +64,25 @@ class NMPCTiltQdServoForceImpedance(QDNMPCBase):
             qe_z + self.qzr,
             rot_tb @ self.w,
             self.a_s,
-            -self.fds_w,
+            ca.times(lin_acc_ee_w, self.mp) - self.fds_w,
             self.tau_ds_b,
         )
 
-        state_y_e = state_y
+        # Terminal cost must not depend on the control-dependent acceleration.
+        # Keep the same residual dimension and enforce the state-only part of
+        # the impedance relation at the final shooting node.
+        state_y_e = ca.vertcat(
+            self.p + rot_wb @ self.ee_p,
+            self.v + rot_wb @ skew_w @ self.ee_p,
+            self.qwr,
+            qe_x + self.qxr,
+            qe_y + self.qyr,
+            qe_z + self.qzr,
+            rot_tb @ self.w,
+            self.a_s,
+            -self.fds_w,
+            self.tau_ds_b,
+        )
 
         control_y = ca.vertcat(
             self.ft_c,

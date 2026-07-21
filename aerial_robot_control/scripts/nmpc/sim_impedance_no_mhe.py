@@ -1,4 +1,5 @@
 import copy
+import os
 import time
 import numpy as np
 import argparse
@@ -6,6 +7,13 @@ import argparse
 from nmpc_tilt_mt.utils.nmpc_viz import Visualizer
 
 from nmpc_tilt_mt.utils.fir_differentiator import FIRDifferentiator
+from nmpc_tilt_mt.utils.force_impedance_experiment import (
+    SCENARIO_DURATION,
+    SCENARIO_NAME,
+    get_force_comparison_wrench,
+    impedance_parameters,
+    save_run_bundle,
+)
 
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist import NMPCTiltQdServoDist
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
@@ -47,10 +55,23 @@ def lever_arm_torque_from_force(force_w, q_wb, ee_p):
 
 
 def main(args):
+    if args.save_run is not None:
+        args.save_run = os.path.abspath(args.save_run)
+
     if args.torque_compensation is None:
         args.torque_compensation = "lever-arm" if args.model == 2 else "estimator"
     if args.torque_compensation == "lever-arm" and args.interaction_frame != "ee":
         raise ValueError("Lever-arm torque compensation requires --interaction-frame ee.")
+    if args.scenario == SCENARIO_NAME and (
+        args.model != 2
+        or args.est_dist_type != 0
+        or args.interaction_frame != "ee"
+        or args.torque_compensation != "lever-arm"
+    ):
+        raise ValueError(
+            "The force comparison scenario requires model=2, -e 0, "
+            "--interaction-frame ee, and --torque-compensation lever-arm."
+        )
 
     # ========== Init ==========
     # ---------- Controller ----------
@@ -77,7 +98,13 @@ def main(args):
 
     x_init = np.zeros(nx)
     x_init[6] = 1.0  # qw
+    if args.scenario == SCENARIO_NAME:
+        # With identity initial attitude, this places the EE (not the CoG) at
+        # the origin so that it matches the ideal impedance initial condition.
+        x_init[0:3] = -np.asarray(nmpc.phys.ball_effector_p)
     u_init = np.zeros(nu)
+    if args.scenario == SCENARIO_NAME:
+        u_init[0:4] = nmpc.phys.mass * nmpc.phys.gravity / 4.0
 
     for stage in range(ocp_solver.N + 1):
         ocp_solver.set(stage, "x", x_init)
@@ -106,11 +133,14 @@ def main(args):
 
     ts_sim = 0.005  # or 0.001
 
-    t_total_sim = 40.0
-    if args.plot_type == 1:
-        t_total_sim = 4.0
-    if args.plot_type == 2:
-        t_total_sim = 3.0
+    if args.scenario == SCENARIO_NAME:
+        t_total_sim = SCENARIO_DURATION
+    else:
+        t_total_sim = 40.0
+        if args.plot_type == 1:
+            t_total_sim = 4.0
+        if args.plot_type == 2:
+            t_total_sim = 3.0
 
     N_sim = int(t_total_sim / ts_sim)
 
@@ -124,6 +154,11 @@ def main(args):
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
+    if args.scenario == SCENARIO_NAME:
+        x_init_sim[0:3] = -np.asarray(sim_nmpc.phys.ball_effector_p)
+        # The plant includes rotor lag, so initialize its rotor states at the
+        # same hover operating point instead of introducing a takeoff transient.
+        x_init_sim[17:21] = sim_nmpc.phys.mass * sim_nmpc.phys.gravity / 4.0
     x_init_sim[-6:] = disturb_init
 
     # ---------- Reference ----------
@@ -166,6 +201,7 @@ def main(args):
     t_ctl = 0.0
     t_sensor = 0.0
     x_now_sim = x_init_sim
+    applied_wrench_ee_all = np.zeros((N_sim, 6))
     # lever-arm has no direct estimation of the torque on end-effector, so too large value destroy the control
     torque_disturbance = 0.5 if args.torque_compensation == "lever-arm" else 2.0
     for i in range(N_sim):
@@ -175,34 +211,39 @@ def main(args):
         t_sensor += ts_sim
 
         # --------- Update disturbance ---------
-        disturb_interaction = copy.deepcopy(disturb_init)
-        # Simulate random disturbance
-        # disturb_interaction[2] = np.random.normal(1.0, 3.0)  # fz in N
+        if args.scenario == SCENARIO_NAME:
+            disturb_interaction = get_force_comparison_wrench(t_now)
+        else:
+            disturb_interaction = copy.deepcopy(disturb_init)
+            # Simulate random disturbance
+            # disturb_interaction[2] = np.random.normal(1.0, 3.0)  # fz in N
 
-        # Simulate fixed disturbance at singular points
-        if 2.0 <= t_now < 7.0:
-            disturb_interaction[0] = 5.0
+            # Simulate fixed disturbance at singular points
+            if 2.0 <= t_now < 7.0:
+                disturb_interaction[0] = 5.0
 
-        if 7.0 <= t_now < 12.0:
-            disturb_interaction[0] = 5.0
-            disturb_interaction[1] = -5.0
+            if 7.0 <= t_now < 12.0:
+                disturb_interaction[0] = 5.0
+                disturb_interaction[1] = -5.0
 
-        if 12.0 <= t_now < 17.0:
-            disturb_interaction[0] = 5.0
-            disturb_interaction[1] = -5.0
-            disturb_interaction[2] = -5.0
+            if 12.0 <= t_now < 17.0:
+                disturb_interaction[0] = 5.0
+                disturb_interaction[1] = -5.0
+                disturb_interaction[2] = -5.0
 
-        if 20.0 <= t_now < 25.0:
-            disturb_interaction[3] = torque_disturbance
+            if 20.0 <= t_now < 25.0:
+                disturb_interaction[3] = torque_disturbance
 
-        if 25.0 <= t_now < 30.0:
-            disturb_interaction[3] = torque_disturbance
-            disturb_interaction[4] = -torque_disturbance
+            if 25.0 <= t_now < 30.0:
+                disturb_interaction[3] = torque_disturbance
+                disturb_interaction[4] = -torque_disturbance
 
-        if 30.0 <= t_now < 35.0:
-            disturb_interaction[3] = torque_disturbance
-            disturb_interaction[4] = -torque_disturbance
-            disturb_interaction[5] = torque_disturbance
+            if 30.0 <= t_now < 35.0:
+                disturb_interaction[3] = torque_disturbance
+                disturb_interaction[4] = -torque_disturbance
+                disturb_interaction[5] = torque_disturbance
+
+        applied_wrench_ee_all[i, :] = disturb_interaction
 
         if args.interaction_frame == "ee":
             disturb = wrench_at_ee_to_cog(
@@ -403,6 +444,32 @@ def main(args):
         viz.update(i, x_now_sim, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
         viz.update_est_disturb(i, disturb_estimated[0:3], disturb_estimated[3:6])
 
+    if args.save_run is not None:
+        state_ee_all = viz._get_plot_states()[: viz.data_idx + 1, :13]
+        metadata = {
+            "kind": "nmpc",
+            "scenario": args.scenario,
+            "model": ocp_solver.acados_ocp.model.name,
+            "sim_model": sim_solver.model_name,
+            "ts_sim": ts_sim,
+            "interaction_frame": args.interaction_frame,
+            "est_dist_type": args.est_dist_type,
+            "torque_compensation": args.torque_compensation,
+            "impedance": impedance_parameters(nmpc.params),
+        }
+        save_run_bundle(
+            args.save_run,
+            metadata,
+            time_state=np.arange(viz.data_idx + 1) * ts_sim,
+            time_input=np.arange(viz.data_idx) * ts_sim,
+            state_raw=viz.x_sim_all[: viz.data_idx + 1, :],
+            state_ee=state_ee_all,
+            applied_wrench_ee=applied_wrench_ee_all[: viz.data_idx, :],
+            estimated_force_w=viz.est_disturb_f_w_all[: viz.data_idx, :],
+            torque_compensation_b=viz.est_disturb_tau_g_all[: viz.data_idx, :],
+            control=viz.u_sim_all[: viz.data_idx, :],
+        )
+
     # ========== Visualize ==========
     if args.plot_type == 0:
         viz.visualize(
@@ -486,6 +553,15 @@ if __name__ == "__main__":
         help="Torque disturbance source for all models: none, force-derived lever-arm torque, or torque estimator. "
         "Default: estimator for model 0/1, lever-arm for model 2.",
     )
+
+    parser.add_argument(
+        "--scenario",
+        choices=("default", SCENARIO_NAME),
+        default="default",
+        help="Disturbance scenario. The force comparison scenario is an 18 s force-only experiment.",
+    )
+
+    parser.add_argument("--save-run", type=str, default=None, help="Optional path for a structured NPZ run bundle.")
 
     args = parser.parse_args()
     main(args)

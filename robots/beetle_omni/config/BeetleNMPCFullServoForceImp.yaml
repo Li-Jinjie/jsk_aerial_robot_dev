@@ -20,8 +20,8 @@ controller:
 
     # Translational force impedance (from BeetleNMPCFullServoImp.yaml)
     enlarge_factor: 2
-    pMxy: 0.0
-    pMz: 0.0
+    pMxy: 1.5
+    pMz: 1.5
     Qv_xy: 10
     Qv_z: 10
     Qp_xy: 20

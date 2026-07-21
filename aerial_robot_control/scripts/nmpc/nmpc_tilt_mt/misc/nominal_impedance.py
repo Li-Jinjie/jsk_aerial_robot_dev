@@ -10,7 +10,7 @@ from ..tilt_qd import phys_param_beetle_omni as phys
 
 
 class NominalImpedance(RecedingHorizonBase):
-    def __init__(self):
+    def __init__(self, config_file="BeetleNMPCFullServoImp.yaml", force_only=False):
         # Model name
         self.model_name = "nominal_impedance_mdl"
 
@@ -21,12 +21,13 @@ class NominalImpedance(RecedingHorizonBase):
         self.include_cog_dist_model = False
         self.include_cog_dist_parameter = False
         self.include_impedance = True
+        self.force_only = force_only
 
         # Load robot specific parameters
         self.phys = phys
 
         # Read parameters from configuration file in the robot's package
-        self.read_params("controller", "nmpc", "beetle_omni", "BeetleNMPCFullServoImp.yaml")
+        self.read_params("controller", "nmpc", "beetle_omni", config_file)
 
         self.acados_init_p = None
 
@@ -69,9 +70,10 @@ class NominalImpedance(RecedingHorizonBase):
         pD_imp = ca.diag([self.params["Qv_xy"], self.params["Qv_xy"], self.params["Qv_z"]])
         pK_imp = ca.diag([self.params["Qp_xy"], self.params["Qp_xy"], self.params["Qp_z"]])
 
-        oM_imp_inv = ca.diag([1 / self.params["oMxy"], 1 / self.params["oMxy"], 1 / self.params["oMz"]])
-        oD_imp = ca.diag([self.params["Qw_xy"], self.params["Qw_xy"], self.params["Qw_z"]])
-        oK_imp = ca.diag([self.params["Qq_xy"], self.params["Qq_xy"], self.params["Qq_z"]])
+        if not self.force_only:
+            oM_imp_inv = ca.diag([1 / self.params["oMxy"], 1 / self.params["oMxy"], 1 / self.params["oMz"]])
+            oD_imp = ca.diag([self.params["Qw_xy"], self.params["Qw_xy"], self.params["Qw_z"]])
+            oK_imp = ca.diag([self.params["Qq_xy"], self.params["Qq_xy"], self.params["Qq_z"]])
 
         qe_x = qwr * qx - qw * qxr - qyr * qz + qy * qzr
         qe_y = qwr * qy - qw * qyr + qxr * qz - qx * qzr
@@ -80,6 +82,11 @@ class NominalImpedance(RecedingHorizonBase):
         qe_3d = ca.vertcat(qe_x, qe_y, qe_z)
 
         # Explicit dynamics (Time-derivative of states)
+        if self.force_only:
+            angular_acceleration = ca.SX.zeros(3)
+        else:
+            angular_acceleration = ca.mtimes(oM_imp_inv, (tau_ds_b - ca.mtimes(oD_imp, w) - ca.mtimes(oK_imp, qe_3d)))
+
         ds = ca.vertcat(
             v,
             ca.mtimes(pM_imp_inv, (fds_w - ca.mtimes(pD_imp, v) - ca.mtimes(pK_imp, p))),
@@ -87,7 +94,7 @@ class NominalImpedance(RecedingHorizonBase):
             (wx * qw + wz * qy - wy * qz) / 2,
             (wy * qw - wz * qx + wx * qz) / 2,
             (wz * qw + wy * qx - wx * qy) / 2,
-            ca.mtimes(oM_imp_inv, (tau_ds_b - ca.mtimes(oD_imp, w) - ca.mtimes(oK_imp, qe_3d))),
+            angular_acceleration,
         )
 
         # Assemble acados function
@@ -120,7 +127,7 @@ class NominalImpedance(RecedingHorizonBase):
 
         return model
 
-    def create_acados_ocp_solver(self) -> AcadosOcpSolver:
+    def create_acados_ocp_solver(self, build: bool = True) -> AcadosOcpSolver:
         # Get OCP object
         ocp = super().get_ocp()
 
@@ -195,7 +202,7 @@ class NominalImpedance(RecedingHorizonBase):
 
         # Compile acados OCP
         json_file_path = os.path.join("./" + ocp.model.name + "_acados_ocp.json")
-        solver = AcadosOcpSolver(ocp, json_file=json_file_path, build=True)
+        solver = AcadosOcpSolver(ocp, json_file=json_file_path, build=build)
         print("Generated C code for acados solver successfully to " + os.getcwd())
 
         return solver
