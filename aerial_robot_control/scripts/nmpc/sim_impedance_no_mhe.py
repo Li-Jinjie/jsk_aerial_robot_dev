@@ -15,7 +15,42 @@ from nmpc_tilt_mt.misc.nominal_impedance import NominalImpedance
 np.random.seed(42)
 
 
+def rotation_matrix_from_quaternion(qwxyz):
+    qw, qx, qy, qz = qwxyz
+    return np.array(
+        [
+            [1 - 2 * qy**2 - 2 * qz**2, 2 * qx * qy - 2 * qw * qz, 2 * qx * qz + 2 * qw * qy],
+            [2 * qx * qy + 2 * qw * qz, 1 - 2 * qx**2 - 2 * qz**2, 2 * qy * qz - 2 * qw * qx],
+            [2 * qx * qz - 2 * qw * qy, 2 * qy * qz + 2 * qw * qx, 1 - 2 * qx**2 - 2 * qy**2],
+        ]
+    )
+
+
+def wrench_at_ee_to_cog(wrench_ee, q_wb, ee_p, ee_q):
+    """Convert [force_world, torque_ee] into the model's CoG wrench state."""
+    force_w = wrench_ee[0:3]
+    torque_ee = wrench_ee[3:6]
+    rot_wb = rotation_matrix_from_quaternion(q_wb)
+    rot_be = rotation_matrix_from_quaternion(ee_q)
+
+    force_b = rot_wb.T @ force_w
+    torque_cog_b = rot_be @ torque_ee + np.cross(ee_p, force_b)
+    return np.concatenate((force_w, torque_cog_b))
+
+
+def lever_arm_torque_from_force(force_w, q_wb, ee_p):
+    """Return the CoG/body-frame torque induced by a force applied at the EE."""
+    rot_wb = rotation_matrix_from_quaternion(q_wb)
+    force_b = rot_wb.T @ force_w
+    return np.cross(ee_p, force_b)
+
+
 def main(args):
+    if args.torque_compensation != "none" and args.model != 2:
+        raise ValueError("Torque compensation modes are only supported by model 2.")
+    if args.torque_compensation == "lever-arm" and args.interaction_frame != "ee":
+        raise ValueError("Lever-arm torque compensation requires --interaction-frame ee.")
+
     # ========== Init ==========
     # ---------- Controller ----------
     if args.model == 0:
@@ -105,9 +140,9 @@ def main(args):
         include_thrust_model=sim_nmpc.include_thrust_model,
         include_cog_dist_model=sim_nmpc.include_cog_dist_model,
         include_cog_dist_est=True,
-        state_frame=args.plot_state_frame,
-        ee_p=nmpc.phys.ball_effector_p,
-        ee_q=nmpc.phys.ball_effector_q,
+        state_frame=args.interaction_frame,
+        ee_p=sim_nmpc.phys.ball_effector_p,
+        ee_q=sim_nmpc.phys.ball_effector_q,
     )
 
     # ---------- Sensors ----------
@@ -141,34 +176,44 @@ def main(args):
         t_sensor += ts_sim
 
         # --------- Update disturbance ---------
-        disturb = copy.deepcopy(disturb_init)
+        disturb_interaction = copy.deepcopy(disturb_init)
         # Simulate random disturbance
-        # disturb[2] = np.random.normal(1.0, 3.0)  # fz in N
+        # disturb_interaction[2] = np.random.normal(1.0, 3.0)  # fz in N
 
         # Simulate fixed disturbance at singular points
         if 2.0 <= t_now < 7.0:
-            disturb[0] = 5.0
+            disturb_interaction[0] = 5.0
 
         if 7.0 <= t_now < 12.0:
-            disturb[0] = 5.0
-            disturb[1] = -5.0
+            disturb_interaction[0] = 5.0
+            disturb_interaction[1] = -5.0
 
         if 12.0 <= t_now < 17.0:
-            disturb[0] = 5.0
-            disturb[1] = -5.0
-            disturb[2] = -5.0
+            disturb_interaction[0] = 5.0
+            disturb_interaction[1] = -5.0
+            disturb_interaction[2] = -5.0
 
         if 20.0 <= t_now < 25.0:
-            disturb[3] = torque_disturbance
+            disturb_interaction[3] = torque_disturbance
 
         if 25.0 <= t_now < 30.0:
-            disturb[3] = torque_disturbance
-            disturb[4] = -torque_disturbance
+            disturb_interaction[3] = torque_disturbance
+            disturb_interaction[4] = -torque_disturbance
 
         if 30.0 <= t_now < 35.0:
-            disturb[3] = torque_disturbance
-            disturb[4] = -torque_disturbance
-            disturb[5] = torque_disturbance
+            disturb_interaction[3] = torque_disturbance
+            disturb_interaction[4] = -torque_disturbance
+            disturb_interaction[5] = torque_disturbance
+
+        if args.interaction_frame == "ee":
+            disturb = wrench_at_ee_to_cog(
+                disturb_interaction,
+                x_now_sim[6:10],
+                sim_nmpc.phys.ball_effector_p,
+                sim_nmpc.phys.ball_effector_q,
+            )
+        else:
+            disturb = disturb_interaction
 
         # --------- Update state estimation ---------
         assert nmpc.include_impedance or nmpc.include_cog_dist_model
@@ -266,7 +311,16 @@ def main(args):
         if args.est_dist_type == 0:
             if args.model == 2:
                 disturb_estimated[0:3] = disturb[0:3]
-                disturb_estimated[3:6] = 0.0
+                if args.torque_compensation == "lever-arm":
+                    disturb_estimated[3:6] = lever_arm_torque_from_force(
+                        disturb_estimated[0:3], x_now_sim[6:10], sim_nmpc.phys.ball_effector_p
+                    )
+                elif args.torque_compensation == "estimator":
+                    # With perfect disturbance information, use the complete
+                    # equivalent CoG torque as the ideal estimator result.
+                    disturb_estimated[3:6] = disturb[3:6]
+                else:
+                    disturb_estimated[3:6] = 0.0
             else:
                 disturb_estimated = copy.deepcopy(disturb)
 
@@ -284,9 +338,9 @@ def main(args):
             wrench_u_imu_b = np.zeros(6)
             wrench_u_imu_b[0:3] = mass * sf_b_imu
 
-            # The hybrid controller has no torque estimator, so avoid forming
-            # angular acceleration and the IMU-side torque estimate altogether.
-            if args.model != 2:
+            # Only form angular acceleration and IMU-side torque when the
+            # selected compensation mode actually uses the torque estimator.
+            if args.model != 2 or args.torque_compensation == "estimator":
                 w = x_now_sim[10:13]  # Angular velocity
                 I = sim_nmpc.fake_sensor.I
                 w_imu = w + np.random.normal(0.0, 0.01, 3)  # add noise. real: scale = 0.0008 rad/s
@@ -324,16 +378,19 @@ def main(args):
                 disturb_estimated[0:3] = (1 - alpha_force) * disturb_estimated[0:3] + alpha_force * np.dot(
                     rot_wb, (wrench_u_imu_b[0:3] - wrench_u_sensor_b[0:3])
                 )  # World frame
-                if args.model != 2:
+                if args.model != 2 or args.torque_compensation == "estimator":
                     alpha_torque = 0.05
                     disturb_estimated[3:6] = (1 - alpha_torque) * disturb_estimated[3:6] + alpha_torque * (
                         wrench_u_imu_b[3:6] - wrench_u_sensor_b[3:6]
                     )  # Body frame
+                elif args.torque_compensation == "lever-arm":
+                    disturb_estimated[3:6] = lever_arm_torque_from_force(
+                        disturb_estimated[0:3], x_now_sim[6:10], sim_nmpc.phys.ball_effector_p
+                    )
 
-        # The force-impedance controller deliberately does not use a torque
-        # disturbance estimate, regardless of the selected estimator mode.
         if args.model == 2:
-            disturb_estimated[3:6] = 0.0
+            if args.torque_compensation == "none":
+                disturb_estimated[3:6] = 0.0
 
         # --------- Update simulation ----------
         x_now_sim[-6:] = disturb
@@ -418,6 +475,20 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-a", "--arch", type=str, default="qd", help="The robot's architecture. Options: bi, tri, qd (default)."
+    )
+
+    parser.add_argument(
+        "--interaction-frame",
+        choices=("cog", "ee"),
+        default="cog",
+        help="Point/frame used for the applied disturbance wrench and plotted kinematic states. Default: cog.",
+    )
+
+    parser.add_argument(
+        "--torque-compensation",
+        choices=("none", "lever-arm", "estimator"),
+        default="none",
+        help="Torque disturbance injected into model 2: none, force-derived lever-arm torque, or torque estimator.",
     )
 
     args = parser.parse_args()

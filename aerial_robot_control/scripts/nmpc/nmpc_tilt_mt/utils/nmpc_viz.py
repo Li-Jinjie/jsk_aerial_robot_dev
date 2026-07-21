@@ -23,6 +23,9 @@ class Visualizer:
         include_cog_dist_model=False,
         include_cog_dist_est=False,
         is_record_diff_u=False,
+        state_frame="cog",
+        ee_p=None,
+        ee_q=None,
     ):
         # Store robot architecture
         self.is_bi, self.is_tri, self.is_qd = False, False, False
@@ -44,6 +47,14 @@ class Visualizer:
         self.include_cog_dist_model = include_cog_dist_model
         self.include_cog_dist_est = include_cog_dist_est
         self.is_record_diff_u = is_record_diff_u
+
+        if state_frame not in ("cog", "ee"):
+            raise ValueError("State frame must be either 'cog' or 'ee'.")
+        if state_frame == "ee" and (ee_p is None or ee_q is None):
+            raise ValueError("ee_p and ee_q are required when plotting EE-centric states.")
+        self.state_frame = state_frame
+        self.ee_p = None if ee_p is None else np.asarray(ee_p, dtype=float)
+        self.ee_q = None if ee_q is None else np.asarray(ee_q, dtype=float)
 
         self.x_sim_all = np.ndarray((N_sim + 1, nx))
         self.u_sim_all = np.ndarray((N_sim, nu))
@@ -72,6 +83,57 @@ class Visualizer:
         self.est_disturb_f_w_all[i, :] = est_disturb_f_w
         self.est_disturb_tau_g_all[i, :] = est_disturb_tau_g
 
+    @staticmethod
+    def _rotation_matrix_from_quaternion(qwxyz):
+        qw, qx, qy, qz = qwxyz
+        return np.array(
+            [
+                [1 - 2 * qy**2 - 2 * qz**2, 2 * qx * qy - 2 * qw * qz, 2 * qx * qz + 2 * qw * qy],
+                [2 * qx * qy + 2 * qw * qz, 1 - 2 * qx**2 - 2 * qz**2, 2 * qy * qz - 2 * qw * qx],
+                [2 * qx * qz - 2 * qw * qy, 2 * qy * qz + 2 * qw * qx, 1 - 2 * qx**2 - 2 * qy**2],
+            ]
+        )
+
+    @staticmethod
+    def _quaternion_multiply(q1, q2):
+        w1, x1, y1, z1 = q1
+        w2, x2, y2, z2 = q2
+        return np.array(
+            [
+                w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+                w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+                w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+                w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+            ]
+        )
+
+    def _get_plot_states(self):
+        """Return states expressed at the selected plotting frame."""
+        if self.state_frame == "cog":
+            return self.x_sim_all
+
+        x_plot = self.x_sim_all.copy()
+        rot_be = self._rotation_matrix_from_quaternion(self.ee_q)
+        rot_eb = rot_be.T
+
+        for i in range(self.data_idx + 1):
+            q_wb = self.x_sim_all[i, 6:10]
+            rot_wb = self._rotation_matrix_from_quaternion(q_wb)
+            omega_b = self.x_sim_all[i, 10:13]
+
+            x_plot[i, 0:3] = self.x_sim_all[i, 0:3] + rot_wb @ self.ee_p
+            x_plot[i, 3:6] = self.x_sim_all[i, 3:6] + rot_wb @ np.cross(omega_b, self.ee_p)
+            x_plot[i, 6:10] = self._quaternion_multiply(q_wb, self.ee_q)
+            x_plot[i, 10:13] = rot_eb @ omega_b
+
+            if self.include_cog_dist_model:
+                force_w = self.x_sim_all[i, -6:-3]
+                torque_cog_b = self.x_sim_all[i, -3:]
+                force_b = rot_wb.T @ force_w
+                x_plot[i, -3:] = rot_eb @ (torque_cog_b - np.cross(self.ee_p, force_b))
+
+        return x_plot
+
     def visualize(
         self,
         ocp_model_name: str,
@@ -84,7 +146,7 @@ class Visualizer:
         t_sqp_start: float = 0.0,
         t_sqp_end: float = 0.0,
     ):
-        x_sim_all = self.x_sim_all
+        x_sim_all = self._get_plot_states()
         u_sim_all = self.u_sim_all
 
         is_plot_sqp = False
@@ -376,7 +438,7 @@ class Visualizer:
         # matplotlib.rcParams['pdf.fonttype'] = 42
         # matplotlib.rcParams['ps.fonttype'] = 42
 
-        x_sim_all = self.x_sim_all
+        x_sim_all = self._get_plot_states()
         u_sim_all = self.u_sim_all
 
         # Timeseries
@@ -468,7 +530,7 @@ class Visualizer:
         plt.rcParams.update({"font.size": 11})  # Default is 10
         label_size = 14
 
-        x_sim_all = self.x_sim_all
+        x_sim_all = self._get_plot_states()
 
         # Timeseries
         time_data_x = np.arange(self.data_idx) * ts_sim
@@ -514,6 +576,8 @@ class Visualizer:
         t_total_sim : float
             X-axis span for all sub-plots [s].
         """
+        x_sim_all = self._get_plot_states()
+
         # ── appearance ────────────────────────────────────────────────
         plt.style.use(["science", "grid"])
         plt.rcParams.update({"font.size": 10})
@@ -523,9 +587,9 @@ class Visualizer:
         t = np.arange(self.data_idx) * ts_sim
 
         # ── quaternion → Euler (deg) ─────────────────────────────────
-        euler_rad = np.zeros((self.x_sim_all.shape[0], 3))
-        for i in range(self.x_sim_all.shape[0]):
-            qwxyz = self.x_sim_all[i, 6:10]
+        euler_rad = np.zeros((x_sim_all.shape[0], 3))
+        for i in range(x_sim_all.shape[0]):
+            qwxyz = x_sim_all[i, 6:10]
             qxyzw = np.concatenate((qwxyz[1:], qwxyz[:1]))  # (x,y,z,w) → (w,x,y,z)
             euler_rad[i, :] = tf.euler_from_quaternion(qxyzw, axes="sxyz")
         euler_deg = np.rad2deg(euler_rad)  # convert to degrees
@@ -543,19 +607,19 @@ class Visualizer:
 
         # 2) p_x
         ax2 = plt.subplot(8, 1, 2, sharex=ax1)
-        ax2.plot(t, self.x_sim_all[: self.data_idx, 0], label=r"$p_x$")
+        ax2.plot(t, x_sim_all[: self.data_idx, 0], label=r"$p_x$")
         ax2.set_ylabel(r"$p_x$ [m]")
         ax2.legend(framealpha=legend_alpha, loc="upper left")
 
         # 3) p_y
         ax3 = plt.subplot(8, 1, 3, sharex=ax1)
-        ax3.plot(t, self.x_sim_all[: self.data_idx, 1], label=r"$p_y$")
+        ax3.plot(t, x_sim_all[: self.data_idx, 1], label=r"$p_y$")
         ax3.set_ylabel(r"$p_y$ [m]")
         ax3.legend(framealpha=legend_alpha, loc="upper left")
 
         # 4) p_z
         ax4 = plt.subplot(8, 1, 4, sharex=ax1)
-        ax4.plot(t, self.x_sim_all[: self.data_idx, 2], label=r"$p_z$")
+        ax4.plot(t, x_sim_all[: self.data_idx, 2], label=r"$p_z$")
         ax4.set_ylabel(r"$p_z$ [m]")
         ax4.legend(framealpha=legend_alpha, loc="upper left")
 
