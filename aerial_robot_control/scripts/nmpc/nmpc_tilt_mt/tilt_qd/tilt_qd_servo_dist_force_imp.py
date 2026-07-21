@@ -10,7 +10,7 @@ from . import phys_param_beetle_omni as phys_omni
 class NMPCTiltQdServoForceImpedance(QDNMPCBase):
     """Tiltable quadrotor NMPC with force impedance and attitude tracking."""
 
-    def __init__(self, build: bool = True, phys=phys_omni):
+    def __init__(self, build: bool = True, phys=phys_omni, use_ee_acceleration: bool = True):
         self.model_name = "tilt_qd_servo_dist_force_imp_mdl"
         self.phys = phys
 
@@ -23,6 +23,7 @@ class NMPCTiltQdServoForceImpedance(QDNMPCBase):
         # Keep the impedance parameter layout expected by QDNMPCBase. Only the
         # translational part is used in the cost below.
         self.include_impedance = True
+        self.use_ee_acceleration = use_ee_acceleration
 
         self.read_params("controller", "nmpc", "beetle_omni", "BeetleNMPCFullServoForceImp.yaml")
 
@@ -45,9 +46,12 @@ class NMPCTiltQdServoForceImpedance(QDNMPCBase):
         rot_wb = self._get_rot_wb_ca(self.qw, self.qx, self.qy, self.qz)
         skew_w = self._get_skew_symmetric_matrix(self.w)
         skew_ang_acc = self._get_skew_symmetric_matrix(ang_acc_b)
-        lin_acc_ee_w = lin_acc_w + rot_wb @ (
-            skew_ang_acc @ self.ee_p + skew_w @ skew_w @ self.ee_p
-        )
+        if self.use_ee_acceleration:
+            lin_acc_ee_w = lin_acc_w + rot_wb @ (
+                skew_ang_acc @ self.ee_p + skew_w @ skew_w @ self.ee_p
+            )
+        else:
+            lin_acc_ee_w = lin_acc_w
 
         rot_bt = self._get_rot_wb_ca(self.ee_q[0], self.ee_q[1], self.ee_q[2], self.ee_q[3])
         rot_tb = rot_bt.T

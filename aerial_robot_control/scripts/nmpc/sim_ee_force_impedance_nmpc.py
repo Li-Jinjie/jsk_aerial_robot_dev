@@ -80,7 +80,7 @@ def main(args):
     elif args.model == 1:
         nmpc = NMPCTiltQdServoImpedance()
     elif args.model == 2:
-        nmpc = NMPCTiltQdServoForceImpedance()
+        nmpc = NMPCTiltQdServoForceImpedance(use_ee_acceleration=args.ee_acceleration == "full")
     else:
         raise ValueError("Invalid NMPC type.")
 
@@ -163,6 +163,10 @@ def main(args):
 
     # ---------- Reference ----------
     reference_generator = nmpc.get_reference_generator()
+
+    impedance_param_start = 4 + len(nmpc.phys.physical_param_list)
+    if nmpc.include_cog_dist_parameter:
+        impedance_param_start += 6
 
     # ---------- Visualization ----------
     viz = Visualizer(
@@ -301,7 +305,7 @@ def main(args):
                 nmpc.acados_init_p[0:4] = quaternion_r
 
                 if nmpc.include_impedance:
-                    nmpc.acados_init_p[34:40] = np.array(
+                    nmpc.acados_init_p[impedance_param_start : impedance_param_start + 6] = np.array(
                         [
                             nmpc.params["pMxy"],
                             nmpc.params["pMxy"],
@@ -322,7 +326,7 @@ def main(args):
             nmpc.acados_init_p[0:4] = quaternion_r
 
             if nmpc.include_impedance:
-                nmpc.acados_init_p[34:40] = np.array(
+                nmpc.acados_init_p[impedance_param_start : impedance_param_start + 6] = np.array(
                     [
                         nmpc.params["pMxy"],
                         nmpc.params["pMxy"],
@@ -455,6 +459,7 @@ def main(args):
             "interaction_frame": args.interaction_frame,
             "est_dist_type": args.est_dist_type,
             "torque_compensation": args.torque_compensation,
+            "ee_acceleration": args.ee_acceleration,
             "impedance": impedance_parameters(nmpc.params),
         }
         save_run_bundle(
@@ -493,7 +498,7 @@ def main(args):
 
 if __name__ == "__main__":
     # Read command line arguments
-    parser = argparse.ArgumentParser(description="Run the simulation of different NMPC models with impedance control.")
+    parser = argparse.ArgumentParser(description="Run the EE force-impedance NMPC closed-loop simulation.")
     parser.add_argument(
         "model",
         type=int,
@@ -559,6 +564,13 @@ if __name__ == "__main__":
         choices=("default", SCENARIO_NAME),
         default="default",
         help="Disturbance scenario. The force comparison scenario is an 18 s force-only experiment.",
+    )
+
+    parser.add_argument(
+        "--ee-acceleration",
+        choices=("full", "cog"),
+        default="full",
+        help="Acceleration used by force impedance: full rigid-body EE acceleration or CoG linear acceleration.",
     )
 
     parser.add_argument("--save-run", type=str, default=None, help="Optional path for a structured NPZ run bundle.")
