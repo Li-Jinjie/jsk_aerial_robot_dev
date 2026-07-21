@@ -9,6 +9,7 @@ from nmpc_tilt_mt.utils.fir_differentiator import FIRDifferentiator
 
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist_imp import NMPCTiltQdServoImpedance
+from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist_force_imp import NMPCTiltQdServoForceImpedance
 from nmpc_tilt_mt.misc.nominal_impedance import NominalImpedance
 
 np.random.seed(42)
@@ -21,6 +22,8 @@ def main(args):
         nmpc = NMPCTiltQdServoThrustDist()
     elif args.model == 1:
         nmpc = NMPCTiltQdServoImpedance()
+    elif args.model == 2:
+        nmpc = NMPCTiltQdServoForceImpedance()
     else:
         raise ValueError("Invalid NMPC type.")
 
@@ -102,6 +105,9 @@ def main(args):
         include_thrust_model=sim_nmpc.include_thrust_model,
         include_cog_dist_model=sim_nmpc.include_cog_dist_model,
         include_cog_dist_est=True,
+        state_frame=args.plot_state_frame,
+        ee_p=nmpc.phys.ball_effector_p,
+        ee_q=nmpc.phys.ball_effector_q,
     )
 
     # ---------- Sensors ----------
@@ -124,6 +130,10 @@ def main(args):
     t_ctl = 0.0
     t_sensor = 0.0
     x_now_sim = x_init_sim
+    # A 5 N m step is only sustainable with disturbance feed-forward. Use a
+    # realistic feedback-rejection test amplitude when torque estimation is
+    # deliberately disabled by the force-impedance controller.
+    torque_disturbance = 0.5 if args.model == 2 else 5.0
     for i in range(N_sim):
         # --------- Update time ---------
         t_now = i * ts_sim
@@ -149,16 +159,16 @@ def main(args):
             disturb[2] = -5.0
 
         if 20.0 <= t_now < 25.0:
-            disturb[3] = 5.0
+            disturb[3] = torque_disturbance
 
         if 25.0 <= t_now < 30.0:
-            disturb[3] = 5.0
-            disturb[4] = -5.0
+            disturb[3] = torque_disturbance
+            disturb[4] = -torque_disturbance
 
         if 30.0 <= t_now < 35.0:
-            disturb[3] = 5.0
-            disturb[4] = -5.0
-            disturb[5] = 5.0
+            disturb[3] = torque_disturbance
+            disturb[4] = -torque_disturbance
+            disturb[5] = torque_disturbance
 
         # --------- Update state estimation ---------
         assert nmpc.include_impedance or nmpc.include_cog_dist_model
@@ -254,7 +264,11 @@ def main(args):
         u_cmd = copy.deepcopy(u_mpc)
 
         if args.est_dist_type == 0:
-            disturb_estimated = copy.deepcopy(disturb)
+            if args.model == 2:
+                disturb_estimated[0:3] = disturb[0:3]
+                disturb_estimated[3:6] = 0.0
+            else:
+                disturb_estimated = copy.deepcopy(disturb)
 
         # Disturbance estimation is related to the sensor update frequency
         if t_sensor >= ts_sensor and args.est_dist_type != 0:
@@ -263,25 +277,29 @@ def main(args):
             # Calculate the internal wrench from IMU measurements in Body frame
             sf_b, ang_acc_b, rot_wb = sim_nmpc.fake_sensor.update_acc(x_now_sim)
 
-            w = x_now_sim[10:13]  # Angular velocity
             mass = sim_nmpc.fake_sensor.mass
-            gravity = sim_nmpc.fake_sensor.gravity
-            I = sim_nmpc.fake_sensor.I
 
             sf_b_imu = sf_b + np.random.normal(0.0, 0.1, 3)  # add noise. real: scale = 0.00727 * gravity
-            w_imu = w + np.random.normal(0.0, 0.01, 3)  # add noise. real: scale = 0.0008 rad/s
-
-            ang_acc_b_imu = np.zeros(3)
-            if args.if_use_ang_acc == 0:
-                ang_acc_b_imu[0] = gyro_differentiator[0].apply_single(w_imu[0])
-                ang_acc_b_imu[1] = gyro_differentiator[1].apply_single(w_imu[1])
-                ang_acc_b_imu[2] = gyro_differentiator[2].apply_single(w_imu[2])
-            else:
-                ang_acc_b_imu = ang_acc_b
 
             wrench_u_imu_b = np.zeros(6)
             wrench_u_imu_b[0:3] = mass * sf_b_imu
-            wrench_u_imu_b[3:6] = np.dot(I, ang_acc_b_imu) + np.cross(w, np.dot(I, w))
+
+            # The hybrid controller has no torque estimator, so avoid forming
+            # angular acceleration and the IMU-side torque estimate altogether.
+            if args.model != 2:
+                w = x_now_sim[10:13]  # Angular velocity
+                I = sim_nmpc.fake_sensor.I
+                w_imu = w + np.random.normal(0.0, 0.01, 3)  # add noise. real: scale = 0.0008 rad/s
+
+                ang_acc_b_imu = np.zeros(3)
+                if args.if_use_ang_acc == 0:
+                    ang_acc_b_imu[0] = gyro_differentiator[0].apply_single(w_imu[0])
+                    ang_acc_b_imu[1] = gyro_differentiator[1].apply_single(w_imu[1])
+                    ang_acc_b_imu[2] = gyro_differentiator[2].apply_single(w_imu[2])
+                else:
+                    ang_acc_b_imu = ang_acc_b
+
+                wrench_u_imu_b[3:6] = np.dot(I, ang_acc_b_imu) + np.cross(w, np.dot(I, w))
 
             # Calculate the internal wrench from actuator sensor measurements in Body frame
             ft_sensor = x_now_sim[17:21] + np.random.normal(0.0, 0.1, 4)
@@ -306,10 +324,16 @@ def main(args):
                 disturb_estimated[0:3] = (1 - alpha_force) * disturb_estimated[0:3] + alpha_force * np.dot(
                     rot_wb, (wrench_u_imu_b[0:3] - wrench_u_sensor_b[0:3])
                 )  # World frame
-                alpha_torque = 0.05
-                disturb_estimated[3:6] = (1 - alpha_torque) * disturb_estimated[3:6] + alpha_torque * (
-                    wrench_u_imu_b[3:6] - wrench_u_sensor_b[3:6]
-                )  # Body frame
+                if args.model != 2:
+                    alpha_torque = 0.05
+                    disturb_estimated[3:6] = (1 - alpha_torque) * disturb_estimated[3:6] + alpha_torque * (
+                        wrench_u_imu_b[3:6] - wrench_u_sensor_b[3:6]
+                    )  # Body frame
+
+        # The force-impedance controller deliberately does not use a torque
+        # disturbance estimate, regardless of the selected estimator mode.
+        if args.model == 2:
+            disturb_estimated[3:6] = 0.0
 
         # --------- Update simulation ----------
         x_now_sim[-6:] = disturb
@@ -354,7 +378,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "model",
         type=int,
-        help="The NMPC model to be simulated. " "Options: 0 (disturbance), 1 (impedance).",
+        help="The NMPC model to be simulated. "
+        "Options: 0 (disturbance), 1 (full impedance), 2 (force impedance + attitude tracking).",
     )
 
     parser.add_argument(

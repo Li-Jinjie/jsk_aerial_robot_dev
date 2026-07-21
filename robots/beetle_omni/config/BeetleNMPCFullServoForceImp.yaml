@@ -1,0 +1,49 @@
+controller:
+  alloc:
+    type: 1
+    ft_thresh: 1.5
+
+  nmpc:
+    T_samp: 0.01
+    T_horizon: 2.0
+    T_step: 0.1
+
+    # Constraints
+    w_max: 6
+    w_min: -6
+    v_max: 1
+    v_min: -1
+    thrust_max: 23
+    thrust_min: 0
+    a_max: 3.15
+    a_min: -3.15
+
+    # Translational force impedance (from BeetleNMPCFullServoImp.yaml)
+    enlarge_factor: 2
+    pMxy: 0.0
+    pMz: 0.0
+    Qv_xy: 10
+    Qv_z: 10
+    Qp_xy: 20
+    Qp_z: 20
+
+    # Unused orientation impedance parameters retained for the common
+    # six-dimensional impedance parameter layout.
+    oMxy: 0.0
+    oMz: 0.0
+
+    # Ordinary attitude tracking (from BeetleNMPCFullDist.yaml)
+    Qw_xy: 5
+    Qw_z: 5
+    Qq_xy: 300
+    Qq_z: 600
+
+    # Actuators
+    Qa: 2
+    Rt: 2
+    Rac_d: 250
+
+    is_attitude_ctrl: false
+    is_body_rate_ctrl: false
+    is_print_phys_params: false
+    is_debug: false
