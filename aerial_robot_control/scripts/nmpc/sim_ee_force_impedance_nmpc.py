@@ -54,23 +54,69 @@ def lever_arm_torque_from_force(force_w, q_wb, ee_p):
     return np.cross(ee_p, force_b)
 
 
+def quaternion_multiply(q1_wxyz, q2_wxyz):
+    w1, x1, y1, z1 = q1_wxyz
+    w2, x2, y2, z2 = q2_wxyz
+    return np.array(
+        [
+            w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+            w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+            w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        ]
+    )
+
+
+def states_cog_to_ee(states_cog, ee_p, ee_q):
+    """Return the first 13 kinematic states expressed at the physical EE."""
+    states_ee = states_cog[:, :13].copy()
+    rot_be = rotation_matrix_from_quaternion(ee_q)
+    rot_eb = rot_be.T
+    for i, state in enumerate(states_cog):
+        rot_wb = rotation_matrix_from_quaternion(state[6:10])
+        omega_b = state[10:13]
+        states_ee[i, 0:3] = state[0:3] + rot_wb @ ee_p
+        states_ee[i, 3:6] = state[3:6] + rot_wb @ np.cross(omega_b, ee_p)
+        states_ee[i, 6:10] = quaternion_multiply(state[6:10], ee_q)
+        states_ee[i, 10:13] = rot_eb @ omega_b
+    return states_ee
+
+
+def resolve_frame_options(args):
+    """Resolve new independent frame options and the deprecated shorthand."""
+    if args.interaction_frame is not None:
+        if args.wrench_application_point is not None and args.wrench_application_point != args.interaction_frame:
+            raise ValueError("--interaction-frame conflicts with --wrench-application-point.")
+        if args.plot_state_frame is not None and args.plot_state_frame != args.interaction_frame:
+            raise ValueError("--interaction-frame conflicts with --plot-state-frame.")
+        args.wrench_application_point = args.interaction_frame
+        args.plot_state_frame = args.interaction_frame
+
+    if args.wrench_application_point is None:
+        args.wrench_application_point = "ee"
+    if args.plot_state_frame is None:
+        args.plot_state_frame = "ee"
+
+
 def main(args):
     if args.save_run is not None:
         args.save_run = os.path.abspath(args.save_run)
 
+    resolve_frame_options(args)
+
     if args.torque_compensation is None:
         args.torque_compensation = "lever-arm" if args.model == 2 else "estimator"
-    if args.torque_compensation == "lever-arm" and args.interaction_frame != "ee":
-        raise ValueError("Lever-arm torque compensation requires --interaction-frame ee.")
+    if args.torque_compensation == "lever-arm" and args.wrench_application_point != "ee":
+        raise ValueError("Lever-arm torque compensation requires --wrench-application-point ee.")
     if args.scenario == SCENARIO_NAME and (
         args.model != 2
         or args.est_dist_type != 0
-        or args.interaction_frame != "ee"
+        or args.wrench_application_point != "ee"
         or args.torque_compensation != "lever-arm"
     ):
         raise ValueError(
             "The force comparison scenario requires model=2, -e 0, "
-            "--interaction-frame ee, and --torque-compensation lever-arm."
+            "--wrench-application-point ee, and --torque-compensation lever-arm."
         )
 
     # ========== Init ==========
@@ -96,9 +142,15 @@ def main(args):
     nx = ocp_solver.acados_ocp.dims.nx
     nu = ocp_solver.acados_ocp.dims.nu
 
+    controller_ee_p_start = 4 + len(nmpc.phys.physical_param_list) - 7
+    if args.controller_state_frame == "cog":
+        # Do not mutate the shared physical module: only the controller sees a
+        # zero lever arm. The simulator keeps the real physical EE geometry.
+        nmpc.acados_init_p[controller_ee_p_start : controller_ee_p_start + 3] = 0.0
+
     x_init = np.zeros(nx)
     x_init[6] = 1.0  # qw
-    if args.scenario == SCENARIO_NAME:
+    if args.scenario == SCENARIO_NAME and args.controller_state_frame == "ee":
         # With identity initial attitude, this places the EE (not the CoG) at
         # the origin so that it matches the ideal impedance initial condition.
         x_init[0:3] = -np.asarray(nmpc.phys.ball_effector_p)
@@ -155,7 +207,8 @@ def main(args):
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
     if args.scenario == SCENARIO_NAME:
-        x_init_sim[0:3] = -np.asarray(sim_nmpc.phys.ball_effector_p)
+        if args.controller_state_frame == "ee":
+            x_init_sim[0:3] = -np.asarray(sim_nmpc.phys.ball_effector_p)
         # The plant includes rotor lag, so initialize its rotor states at the
         # same hover operating point instead of introducing a takeoff transient.
         x_init_sim[17:21] = sim_nmpc.phys.mass * sim_nmpc.phys.gravity / 4.0
@@ -180,7 +233,7 @@ def main(args):
         include_thrust_model=sim_nmpc.include_thrust_model,
         include_cog_dist_model=sim_nmpc.include_cog_dist_model,
         include_cog_dist_est=True,
-        state_frame=args.interaction_frame,
+        state_frame=args.plot_state_frame,
         ee_p=sim_nmpc.phys.ball_effector_p,
         ee_q=sim_nmpc.phys.ball_effector_q,
     )
@@ -205,7 +258,8 @@ def main(args):
     t_ctl = 0.0
     t_sensor = 0.0
     x_now_sim = x_init_sim
-    applied_wrench_ee_all = np.zeros((N_sim, 6))
+    applied_wrench_at_point_all = np.zeros((N_sim, 6))
+    applied_wrench_cog_all = np.zeros((N_sim, 6))
     # lever-arm has no direct estimation of the torque on end-effector, so too large value destroy the control
     torque_disturbance = 0.5 if args.torque_compensation == "lever-arm" else 2.0
     for i in range(N_sim):
@@ -247,9 +301,9 @@ def main(args):
                 disturb_interaction[4] = -torque_disturbance
                 disturb_interaction[5] = torque_disturbance
 
-        applied_wrench_ee_all[i, :] = disturb_interaction
+        applied_wrench_at_point_all[i, :] = disturb_interaction
 
-        if args.interaction_frame == "ee":
+        if args.wrench_application_point == "ee":
             disturb = wrench_at_ee_to_cog(
                 disturb_interaction,
                 x_now_sim[6:10],
@@ -258,6 +312,7 @@ def main(args):
             )
         else:
             disturb = disturb_interaction
+        applied_wrench_cog_all[i, :] = disturb
 
         # --------- Update state estimation ---------
         assert nmpc.include_impedance or nmpc.include_cog_dist_model
@@ -449,14 +504,25 @@ def main(args):
         viz.update_est_disturb(i, disturb_estimated[0:3], disturb_estimated[3:6])
 
     if args.save_run is not None:
-        state_ee_all = viz._get_plot_states()[: viz.data_idx + 1, :13]
+        state_plot_all = viz._get_plot_states()[: viz.data_idx + 1, :13]
+        state_cog_all = viz.x_sim_all[: viz.data_idx + 1, :13]
+        state_ee_all = states_cog_to_ee(
+            viz.x_sim_all[: viz.data_idx + 1, :],
+            np.asarray(sim_nmpc.phys.ball_effector_p),
+            np.asarray(sim_nmpc.phys.ball_effector_q),
+        )
         metadata = {
             "kind": "nmpc",
             "scenario": args.scenario,
             "model": ocp_solver.acados_ocp.model.name,
             "sim_model": sim_solver.model_name,
             "ts_sim": ts_sim,
-            "interaction_frame": args.interaction_frame,
+            "interaction_frame": args.wrench_application_point,
+            "controller_state_frame": args.controller_state_frame,
+            "wrench_application_point": args.wrench_application_point,
+            "plot_state_frame": args.plot_state_frame,
+            "controller_ee_p": nmpc.acados_init_p[controller_ee_p_start : controller_ee_p_start + 3].tolist(),
+            "plant_ee_p": list(sim_nmpc.phys.ball_effector_p),
             "est_dist_type": args.est_dist_type,
             "torque_compensation": args.torque_compensation,
             "ee_acceleration": args.ee_acceleration,
@@ -469,7 +535,11 @@ def main(args):
             time_input=np.arange(viz.data_idx) * ts_sim,
             state_raw=viz.x_sim_all[: viz.data_idx + 1, :],
             state_ee=state_ee_all,
-            applied_wrench_ee=applied_wrench_ee_all[: viz.data_idx, :],
+            state_cog=state_cog_all,
+            state_plot=state_plot_all,
+            applied_wrench_ee=applied_wrench_at_point_all[: viz.data_idx, :],
+            applied_wrench_at_point=applied_wrench_at_point_all[: viz.data_idx, :],
+            applied_wrench_cog=applied_wrench_cog_all[: viz.data_idx, :],
             estimated_force_w=viz.est_disturb_f_w_all[: viz.data_idx, :],
             torque_compensation_b=viz.est_disturb_tau_g_all[: viz.data_idx, :],
             control=viz.u_sim_all[: viz.data_idx, :],
@@ -547,8 +617,29 @@ if __name__ == "__main__":
     parser.add_argument(
         "--interaction-frame",
         choices=("cog", "ee"),
+        default=None,
+        help="Deprecated shorthand setting both --wrench-application-point and --plot-state-frame.",
+    )
+
+    parser.add_argument(
+        "--controller-state-frame",
+        choices=("cog", "ee"),
         default="ee",
-        help="Point/frame used for the applied disturbance wrench and plotted kinematic states. Default: ee.",
+        help="Kinematic point used by the NMPC force-impedance cost. Default: ee.",
+    )
+
+    parser.add_argument(
+        "--wrench-application-point",
+        choices=("cog", "ee"),
+        default=None,
+        help="Physical point where the simulated interaction wrench is applied. Default: ee.",
+    )
+
+    parser.add_argument(
+        "--plot-state-frame",
+        choices=("cog", "ee"),
+        default=None,
+        help="Kinematic point used for saved/plotted position and velocity. Default: ee.",
     )
 
     parser.add_argument(
