@@ -8,6 +8,15 @@ import json
 import transformations as tf
 
 from nmpc_tilt_mt.utils.nmpc_viz import Visualizer
+from nmpc_tilt_mt.utils.step_response_experiment import (
+    ALL_AXES as STEP_RESPONSE_AXES,
+    ATTITUDE_AXES as STEP_ATTITUDE_AXES,
+    POSITION_AXES as STEP_POSITION_AXES,
+    SCENARIO_NAME as STEP_RESPONSE_SCENARIO,
+    StepCase,
+    compute_run_metrics,
+    save_run_bundle,
+)
 
 # Quadrotor
 import nmpc_tilt_mt.tilt_qd.phys_param_beetle_omni as phys_omni
@@ -91,6 +100,18 @@ def get_servo_delay_sweep_target(args, t_now):
         target_xyz = np.array([[1.0, 1.0, 1.0]]).T
         phase = 2
     return target_xyz, target_rpy, phase
+
+
+def get_step_response_target(args, t_now):
+    """Return the workpoint pose with one commanded axis stepped at step_time."""
+    target_xyz = np.zeros((3, 1))
+    target_rpy = np.radians(np.asarray(args.workpoint_rpy_deg, dtype=float)).reshape(3, 1)
+    if t_now >= args.step_time:
+        if args.step_axis in STEP_POSITION_AXES:
+            target_xyz[STEP_POSITION_AXES.index(args.step_axis), 0] = args.step_amplitude
+        else:
+            target_rpy[STEP_ATTITUDE_AXES.index(args.step_axis), 0] += np.radians(args.step_amplitude)
+    return target_xyz, target_rpy, int(t_now >= args.step_time)
 
 
 def apply_common_actuator_bounds(nmpc, ocp_solver, args, is_baseline):
@@ -449,8 +470,23 @@ def main(args):
     args.startup_warmup_duration = getattr(args, "startup_warmup_duration", 2.0)
     args.analysis_window_duration = getattr(args, "analysis_window_duration", 2.0)
     args.solve_time_csv = getattr(args, "solve_time_csv", None)
+    args.step_axis = getattr(args, "step_axis", "x")
+    args.step_amplitude = getattr(args, "step_amplitude", 0.2)
+    args.workpoint_rpy_deg = getattr(args, "workpoint_rpy_deg", [0.0, 0.0, 0.0])
+    args.step_time = getattr(args, "step_time", 2.0)
+    args.total_duration = getattr(args, "total_duration", 10.0)
+    args.steady_window = getattr(args, "steady_window", [9.0, 10.0])
+    args.save_run = getattr(args, "save_run", None)
+    args.no_build = getattr(args, "no_build", False)
+    args.plot_output = getattr(args, "plot_output", None)
     if args.solve_time_csv is not None:
         args.solve_time_csv = os.path.abspath(args.solve_time_csv)
+    if args.save_run is not None:
+        args.save_run = os.path.abspath(args.save_run)
+        if os.path.exists(args.save_run):
+            raise FileExistsError(f"Refusing to overwrite existing run bundle: {args.save_run}")
+    if args.plot_output is not None:
+        args.plot_output = os.path.abspath(args.plot_output)
     if args.ocp_sim_num_steps < 1:
         raise ValueError("ocp_sim_num_steps must be a positive integer.")
     if args.scenario == "constraint_sweep":
@@ -475,6 +511,23 @@ def main(args):
             raise ValueError("servo_angle_max_deg must be greater than 0 and no greater than 180 degrees.")
         if args.startup_warmup_duration < 0.0 or args.analysis_window_duration <= 0.0:
             raise ValueError("startup warm-up must be nonnegative and the analysis window must be positive.")
+    elif args.scenario == STEP_RESPONSE_SCENARIO:
+        if args.arch != "qd" or args.model != 1 or args.sim_model != 0:
+            raise ValueError("step_response requires qd model=1 and sim_model=0.")
+        if args.step_axis not in STEP_RESPONSE_AXES:
+            raise ValueError(f"Invalid step axis {args.step_axis}.")
+        if args.step_amplitude == 0.0:
+            raise ValueError("step_amplitude must be nonzero.")
+        if len(args.workpoint_rpy_deg) != 3:
+            raise ValueError("workpoint_rpy_deg must contain roll, pitch, and yaw.")
+        if not 0.0 < args.step_time < args.total_duration:
+            raise ValueError("step_time must lie strictly inside the simulation duration.")
+        if len(args.steady_window) != 2 or not (
+            args.step_time < args.steady_window[0] < args.steady_window[1] <= args.total_duration
+        ):
+            raise ValueError("steady_window must lie after the step and inside the simulation duration.")
+        if args.save_run is None:
+            raise ValueError("step_response requires --save-run for reproducibility.")
     if args.servo_time_constant is not None:
         if args.arch != "qd":
             raise ValueError("servo_time_constant override is currently supported only for the qd architecture.")
@@ -488,7 +541,11 @@ def main(args):
         if args.model == 0:
             nmpc = NMPCTiltQdNoServo(phys=phys_art, ocp_sim_method_num_steps=args.ocp_sim_num_steps)
         elif args.model == 1:
-            nmpc = NMPCTiltQdServo(phys=phys_art, ocp_sim_method_num_steps=args.ocp_sim_num_steps)
+            nmpc = NMPCTiltQdServo(
+                build=not args.no_build,
+                phys=phys_art,
+                ocp_sim_method_num_steps=args.ocp_sim_num_steps,
+            )
         elif args.model == 2:
             nmpc = NMPCTiltQdThrust(phys=phys_art)
         elif args.model == 3:
@@ -580,9 +637,13 @@ def main(args):
     if args.arch == "qd":
         sim_phy = phys_omni if 20 < args.model < 30 else phys_art
         if args.sim_model == 0:
-            sim_nmpc = NMPCTiltQdServoThrust(phys=sim_phy)  # Consider both the servo delay and the thrust delay
+            sim_nmpc = NMPCTiltQdServoThrust(
+                build=not args.no_build, phys=sim_phy
+            )  # Consider both the servo delay and the thrust delay
         elif args.sim_model == 1:
-            sim_nmpc = NMPCTiltQdServoThrustDrag(phys=sim_phy)  # Also consider drag in wrench formulation
+            sim_nmpc = NMPCTiltQdServoThrustDrag(
+                build=not args.no_build, phys=sim_phy
+            )  # Also consider drag in wrench formulation
         else:
             raise ValueError(f"Invalid sim model {args.sim_model}.")
 
@@ -612,13 +673,15 @@ def main(args):
     args.effective_servo_time_constant = t_servo_sim
     args.effective_controller_servo_time_constant = t_servo_ctrl
 
-    ts_sim = 0.001  # or 0.001
+    ts_sim = 0.001
 
     if args.scenario == "constraint_sweep":
         t_total_sim = args.warmup_duration + args.segment_duration * len(args.step_levels)
     elif args.scenario == "servo_delay_sweep":
         startup_shift = 0.0 if args.startup_mode == "cold" else args.startup_warmup_duration
         t_total_sim = 15.0 + startup_shift
+    elif args.scenario == STEP_RESPONSE_SCENARIO:
+        t_total_sim = args.total_duration
     else:
         t_total_sim = 15.0
         if args.plot_type == 1:
@@ -629,7 +692,7 @@ def main(args):
     N_sim = int(t_total_sim / ts_sim)
 
     # Sim solver
-    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, build=True)
+    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, build=not args.no_build)
     nx_sim = sim_solver.acados_sim.dims.nx
 
     # State Initialization
@@ -638,6 +701,30 @@ def main(args):
 
     # ---------- Reference ----------
     reference_generator = nmpc.get_reference_generator() if not is_baseline else None
+
+    equilibrium_control = u_init.copy()
+    if args.scenario == STEP_RESPONSE_SCENARIO:
+        workpoint_xyz, workpoint_rpy, _ = get_step_response_target(args, 0.0)
+        xr_eq, ur_eq = reference_generator.compute_trajectory(workpoint_xyz, workpoint_rpy)
+        equilibrium_control = np.concatenate((ur_eq[0, :4], xr_eq[0, 13:17]))
+
+        x_init = xr_eq[0].copy()
+        x_init_sim = np.zeros(nx_sim)
+        x_init_sim[:13] = x_init[:13]
+        x_init_sim[13:17] = xr_eq[0, 13:17]
+        x_init_sim[17:21] = ur_eq[0, :4]
+
+        lower_u = np.asarray(ocp_solver.acados_ocp.constraints.lbu, dtype=float)
+        upper_u = np.asarray(ocp_solver.acados_ocp.constraints.ubu, dtype=float)
+        if np.any(equilibrium_control < lower_u) or np.any(equilibrium_control > upper_u):
+            raise ValueError(
+                "The requested workpoint equilibrium violates the NMPC input constraints: "
+                f"u_eq={equilibrium_control}, bounds=[{lower_u}, {upper_u}]."
+            )
+        for stage in range(ocp_solver.N + 1):
+            ocp_solver.set(stage, "x", x_init)
+        for stage in range(ocp_solver.N):
+            ocp_solver.set(stage, "u", equilibrium_control)
 
     # ---------- Visualization ----------
     viz = Visualizer(
@@ -668,8 +755,14 @@ def main(args):
     t_sqp_start = 2.5
     t_sqp_end = 3.0
 
+    control_stride = None
+    if args.scenario == STEP_RESPONSE_SCENARIO:
+        control_stride = int(round(ts_ctrl / ts_sim))
+        if control_stride < 1 or not np.isclose(control_stride * ts_sim, ts_ctrl, rtol=0.0, atol=1e-12):
+            raise ValueError("The controller period must be an integer multiple of the simulation period.")
+
     # ========== Run simulation ==========
-    u_cmd = u_init
+    u_cmd = equilibrium_control.copy()
     t_ctl = 0.0
     x_now_sim = x_init_sim
     for i in range(N_sim):
@@ -701,6 +794,8 @@ def main(args):
             target_xyz, target_rpy, active_segment = get_constraint_sweep_target(args, t_now)
         elif args.scenario == "servo_delay_sweep":
             target_xyz, target_rpy, active_segment = get_servo_delay_sweep_target(args, t_now)
+        elif args.scenario == STEP_RESPONSE_SCENARIO:
+            target_xyz, target_rpy, active_segment = get_step_response_target(args, t_now)
         else:
             active_segment = -1
             target_xyz = np.array([[0.3, 0.6, 1.0]]).T
@@ -771,7 +866,8 @@ def main(args):
         }
         solver_status = 0
 
-        if t_ctl >= ts_ctrl:
+        is_control_time = i % control_stride == 0 if control_stride is not None else t_ctl >= ts_ctrl
+        if is_control_time:
             t_ctl = 0.0
             control_was_updated = True
 
@@ -890,6 +986,121 @@ def main(args):
             solve_time_history,
             solver_failure_count,
         )
+    elif args.scenario == STEP_RESPONSE_SCENARIO:
+        completed = len(x_history) == N_sim
+        time_input = np.arange(len(x_history), dtype=float) * ts_sim
+        time_state = np.arange(len(x_history) + 1, dtype=float) * ts_sim
+        state_plant = np.vstack((x_init_sim, np.asarray(x_history))) if x_history else np.asarray(x_init_sim)[None, :]
+        reference_position = np.zeros((len(time_state), 3))
+        reference_quaternion = np.zeros((len(time_state), 4))
+        reference_rpy = np.zeros((len(time_state), 3))
+        for ref_index, ref_time in enumerate(time_state):
+            ref_xyz, ref_rpy, _ = get_step_response_target(args, ref_time)
+            reference_position[ref_index] = ref_xyz.flatten()
+            reference_rpy[ref_index] = ref_rpy.flatten()
+            reference_quaternion[ref_index] = tf.quaternion_from_euler(*ref_rpy.flatten(), axes="sxyz")
+
+        pre_mask = (time_state >= max(0.0, args.step_time - 0.5)) & (time_state < args.step_time)
+        if np.any(pre_mask):
+            pre_position_error = np.linalg.norm(state_plant[pre_mask, :3] - reference_position[pre_mask], axis=1)
+            pre_attitude_error = quaternion_geodesic_error(state_plant[pre_mask, 6:10], reference_quaternion[pre_mask])
+            pre_velocity = np.linalg.norm(state_plant[pre_mask, 3:6], axis=1)
+            pre_angular_velocity = np.linalg.norm(state_plant[pre_mask, 10:13], axis=1)
+            stability_values = {
+                "position_error_max_m": float(np.max(pre_position_error)),
+                "attitude_error_max_deg": float(np.degrees(np.max(pre_attitude_error))),
+                "velocity_max_m_s": float(np.max(pre_velocity)),
+                "angular_velocity_max_rad_s": float(np.max(pre_angular_velocity)),
+            }
+            pre_step_stable = (
+                stability_values["position_error_max_m"] <= 0.01
+                and stability_values["attitude_error_max_deg"] <= 1.0
+                and stability_values["velocity_max_m_s"] <= 0.02
+                and stability_values["angular_velocity_max_rad_s"] <= 0.02
+            )
+        else:
+            stability_values = {
+                "position_error_max_m": None,
+                "attitude_error_max_deg": None,
+                "velocity_max_m_s": None,
+                "angular_velocity_max_rad_s": None,
+            }
+            pre_step_stable = False
+
+        state_constraints = ocp_solver.acados_ocp.constraints
+        input_lower = np.asarray(state_constraints.lbu, dtype=float)
+        input_upper = np.asarray(state_constraints.ubu, dtype=float)
+        case = StepCase(args.step_axis, args.step_amplitude, tuple(args.workpoint_rpy_deg))
+        solve_wall = np.asarray([row["wall_time_ms"] * 1e-3 for row in solve_time_rows])
+
+        def timing_array(field):
+            return np.asarray(
+                [np.nan if row[field] is None else row[field] * 1e-3 for row in solve_time_rows], dtype=float
+            )
+
+        metadata = {
+            "kind": "nmpc_step_response",
+            "scenario": STEP_RESPONSE_SCENARIO,
+            "case_id": case.slug,
+            "controller_model": type(nmpc).__name__,
+            "plant_model": type(sim_nmpc).__name__,
+            "workpoint_rpy_deg": list(map(float, args.workpoint_rpy_deg)),
+            "step": {
+                "axis": args.step_axis,
+                "amplitude_input": float(args.step_amplitude),
+                "amplitude_input_unit": case.amplitude_unit,
+                "amplitude_si": float(case.amplitude_si),
+            },
+            "timing": {
+                "controller_period_s": float(ts_ctrl),
+                "simulation_period_s": float(ts_sim),
+                "step_time_s": float(args.step_time),
+                "total_duration_s": float(args.total_duration),
+                "steady_window_s": list(map(float, args.steady_window)),
+            },
+            "equilibrium": {"control": equilibrium_control.tolist(), "state_controller": x_init.tolist()},
+            "constraints": {
+                "state": {
+                    "indices": np.asarray(state_constraints.idxbx, dtype=int).tolist(),
+                    "lower": np.asarray(state_constraints.lbx, dtype=float).tolist(),
+                    "upper": np.asarray(state_constraints.ubx, dtype=float).tolist(),
+                },
+                "input": {"lower": input_lower.tolist(), "upper": input_upper.tolist()},
+            },
+            "controller_parameters": {
+                key: value.item() if isinstance(value, np.generic) else value for key, value in nmpc.params.items()
+            },
+            "physical_parameters": list(map(float, nmpc.phys.physical_param_list)),
+            "validation": {
+                "completed": completed,
+                "pre_step_stable": pre_step_stable,
+                "solver_failure_count": int(solver_failure_count),
+                **stability_values,
+            },
+        }
+        arrays = {
+            "time_state": time_state,
+            "time_input": time_input,
+            "state_plant": state_plant,
+            "state_controller": state_plant[:, :nx],
+            "reference_position": reference_position,
+            "reference_quaternion": reference_quaternion,
+            "reference_rpy": reference_rpy,
+            "control_applied": np.asarray(u_history).reshape((-1, nu)),
+            "control_updated": np.asarray(control_update_history, dtype=bool),
+            "solve_time": np.asarray([row["sim_time_s"] for row in solve_time_rows]),
+            "solve_wall_time": solve_wall,
+            "solve_acados_time_tot": timing_array("acados_time_tot_ms"),
+            "solve_acados_time_lin": timing_array("acados_time_lin_ms"),
+            "solve_acados_time_qp": timing_array("acados_time_qp_ms"),
+            "solver_status": np.asarray([row["solver_status"] for row in solve_time_rows], dtype=int),
+        }
+        save_run_bundle(args.save_run, metadata, **arrays)
+        print("STEP_RESPONSE_RUN=" + args.save_run)
+        if not completed:
+            raise RuntimeError("The step-response simulation ended early; a partial run bundle was saved.")
+        metrics = compute_run_metrics(arrays, metadata)
+        print("METRICS_JSON=" + json.dumps(metrics, separators=(",", ":"), allow_nan=True))
 
     if args.solve_time_csv is not None:
         write_solve_time_csv(args.solve_time_csv, solve_time_rows)
@@ -917,6 +1128,7 @@ def main(args):
                 t_total_sim,
                 np.asarray(target_xyz_history),
                 np.asarray(target_q_history),
+                output_prefix=args.plot_output,
             )
 
     if args.save_data:
@@ -983,9 +1195,51 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--scenario",
-        choices=("legacy", "constraint_sweep", "servo_delay_sweep"),
+        choices=("legacy", "constraint_sweep", "servo_delay_sweep", STEP_RESPONSE_SCENARIO),
         default="legacy",
         help="Simulation task. The default preserves the original setpoint task.",
+    )
+    parser.add_argument(
+        "--step-axis",
+        choices=STEP_RESPONSE_AXES,
+        default="x",
+        help="Commanded DoF for step_response.",
+    )
+    parser.add_argument(
+        "--step-amplitude",
+        type=float,
+        default=0.2,
+        help="Step amplitude: metres for position axes and degrees for attitude axes.",
+    )
+    parser.add_argument(
+        "--workpoint-rpy-deg",
+        type=float,
+        nargs=3,
+        metavar=("ROLL", "PITCH", "YAW"),
+        default=[0.0, 0.0, 0.0],
+        help="Attitude workpoint [deg] for step_response.",
+    )
+    parser.add_argument("--step-time", type=float, default=2.0, help="Step application time [s].")
+    parser.add_argument("--total-duration", type=float, default=10.0, help="Step-response duration [s].")
+    parser.add_argument(
+        "--steady-window",
+        type=float,
+        nargs=2,
+        metavar=("START", "END"),
+        default=[9.0, 10.0],
+        help="Steady-state metric window [s].",
+    )
+    parser.add_argument("--save-run", type=str, default=None, help="Structured step-response NPZ output path.")
+    parser.add_argument(
+        "--no-build",
+        action="store_true",
+        help="Reuse previously generated acados controller and simulator code.",
+    )
+    parser.add_argument(
+        "--plot-output",
+        type=str,
+        default=None,
+        help="Output prefix for plot_type=3 PNG/PDF figures.",
     )
     parser.add_argument(
         "--test-thrust-max",

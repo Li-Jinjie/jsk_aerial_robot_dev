@@ -467,6 +467,7 @@ class Visualizer:
         t_total_sim: float,
         position_cmd: np.ndarray,
         attitude_cmd_q: np.ndarray,
+        output_prefix: str = None,
     ):
         """Plot pose tracking and actuator command/state pairs in a 2x2 layout."""
         if not (self.is_qd and self.include_servo_model and self.include_thrust_model):
@@ -514,7 +515,6 @@ class Visualizer:
             ax.plot(time_data, state[:, idx], "-", color=color, label=f"{label} state")
         ax.set_title("Position tracking")
         ax.set_ylabel("Position (m)")
-        ax.set_ylim([-1.8, 1.6])
         ax.legend(framealpha=legend_alpha, ncol=2)
 
         # Euler angles in degrees.
@@ -525,7 +525,6 @@ class Visualizer:
             ax.plot(time_data, euler_state[:, idx], "-", color=color, label=f"{label} state")
         ax.set_title("Attitude tracking")
         ax.set_ylabel(r"Euler angle ($^\circ$)")
-        ax.set_ylim([-32, 56])
         ax.legend(framealpha=legend_alpha, ncol=2)
 
         # Simulator state order is base(13), servo(4), thrust(4).
@@ -558,6 +557,11 @@ class Visualizer:
 
         plt.tight_layout()
         fig.subplots_adjust(hspace=0.2, wspace=0.2)
+        if output_prefix is not None:
+            output_prefix = os.path.abspath(output_prefix)
+            os.makedirs(os.path.dirname(output_prefix), exist_ok=True)
+            fig.savefig(output_prefix + ".png", dpi=200, bbox_inches="tight")
+            fig.savefig(output_prefix + ".pdf", bbox_inches="tight")
         plt.show()
 
     def visualize_rpy(self, ocp_model_name: str, ts_sim: float, t_total_sim: float):
