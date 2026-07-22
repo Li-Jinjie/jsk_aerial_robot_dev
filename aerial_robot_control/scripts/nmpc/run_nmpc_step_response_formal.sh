@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Formal 36-case six-DoF step-response experiment for servo-model NMPC.
+# Formal 90-case six-DoF step-response experiment for servo-model NMPC.
 #
 # Fixed experiment configuration:
 #   controller:       model 1, NMPCTiltQdServo (Beetle-art parameters)
@@ -11,8 +11,10 @@
 #   duration:         10.0 s
 #   steady window:    9.0..10.0 s
 #   repetitions:      one deterministic run per condition
-#   matrix:           18 zero-workpoint pose steps and 18 position steps at
-#                     [30,0,0] and [30,30,0] deg attitude workpoints
+#   position steps:   0.2, 0.4, 0.6, 0.8, and 1.0 m on x/y/z
+#   attitude steps:   10, 30, 50, 70, and 90 deg on local roll/pitch/yaw
+#   workpoints:       [0,0,0], [30,0,0], and [30,30,0] deg
+#   matrix:           all six axes at all three workpoints, 90 runs total
 #
 # Statistics reported in English:
 #   - Rise Time (10--90%), Settling Time (2% band), Percentage Overshoot,
@@ -25,60 +27,57 @@
 #   - Minimum Constraint Margin, Constraint Violation Count, Mean/P95/Worst-
 #     Case Solution Time, Control-Deadline Misses, and Solver Failure Count.
 #
-# Formal results recorded on 2026-07-22 with +/-5 m/s velocity bounds (36/36
-# runs completed and all 36 workpoints passed the pre-step stability test):
+# Formal 90-case results recorded on 2026-07-22 with +/-5 m/s velocity bounds
+# (90/90 runs completed and passed the pre-step stability test):
 #
 # | Axis  | Runs | Mean rise [s] | Mean settling [s] | Mean overshoot [%] | Mean RMSE |
 # |:------|-----:|--------------:|------------------:|-------------------:|----------:|
-# | x     |    9 |        0.6900 |            1.7013 |             2.7176 | 0.1383 m  |
-# | y     |    9 |        0.6896 |            1.7132 |             2.6199 | 0.1390 m  |
-# | z     |    9 |        0.5546 |            1.4038 |             3.4940 | 0.1212 m  |
-# | roll  |    3 |        0.9398 |            1.9680 |             0.0001 | 6.5246 deg|
-# | pitch |    3 |        0.9190 |            1.9930 |             0.0007 | 6.5445 deg|
-# | yaw   |    3 |        0.5512 |            0.8960 |             1.4579 | 6.7284 deg|
+# | x     |   15 |        0.6894 |            1.7020 |             2.7254 | 0.1465 m  |
+# | y     |   15 |        0.6897 |            1.7132 |             2.6195 | 0.1473 m  |
+# | z     |   15 |        0.5547 |            1.4042 |             3.4955 | 0.1284 m  |
+# | roll  |   15 |        0.8409 |            1.7965 |             0.0000 | 9.8197 deg|
+# | pitch |   15 |        0.8406 |            1.7967 |             0.0001 | 9.6937 deg|
+# | yaw   |   15 |        0.5919 |            1.2120 |             0.7942 | 9.6902 deg|
 #
-# Position-step results by attitude workpoint (nine runs per row):
+# Results by attitude workpoint (15 position and 15 attitude runs per row):
 #
-# | Workpoint R/P/Y [deg] | Mean rise [s] | Mean settling [s] | Mean overshoot [%] | Mean RMSE [m] | Max attitude deviation [deg] |
-# |:----------------------|--------------:|------------------:|-------------------:|--------------:|-----------------------------:|
-# | 0 / 0 / 0             |        0.6472 |            1.5722 |             2.9319 |        0.1337 |                      21.3140 |
-# | 30 / 0 / 0            |        0.6392 |            1.6270 |             3.0373 |        0.1325 |                      15.5730 |
-# | 30 / 30 / 0           |        0.6478 |            1.6191 |             2.8623 |        0.1324 |                      16.7719 |
+# | Workpoint [deg] | Pos. rise [s] | Pos. RMSE [m] | Att. rise [s] | Att. settling [s] | Att. RMSE [deg] | Max position drift [m] |
+# |:----------------|--------------:|--------------:|--------------:|------------------:|----------------:|-----------------------:|
+# | 0 / 0 / 0       |        0.6470 |        0.1417 |        0.7819 |            1.5539 |          9.9092 |                 0.1642 |
+# | 30 / 0 / 0      |        0.6392 |        0.1403 |        0.7504 |            1.5111 |          9.6314 |                 0.1476 |
+# | 30 / 30 / 0     |        0.6476 |        0.1402 |        0.7410 |            1.7401 |          9.6630 |                 0.1157 |
 #
 # Constraint and real-time results:
-#   - All 36 runs completed with zero OCP solver failures, zero input-bound
-#     violations, zero plant-thrust-state violations, and no acados deadline
-#     misses. Mean acados time_tot was 0.2388 ms and the worst case was
-#     0.6150 ms, versus the 10 ms control period.
-#   - No state bound was violated. Peak absolute linear speeds were
-#     [1.5824, 1.5749, 1.8124] m/s, well below the new 5 m/s bound. Peak
-#     absolute body rates were [2.4686, 2.6919, 1.9247] rad/s, also below the
-#     6 rad/s bound. Maximum thrust and servo commands were 19.9122 N and
-#     1.3954 rad, below their 30 N and pi limits.
-#   - The wrapper wall-clock measurement recorded 35 >10 ms host-side
-#     outliers, while every solver-reported acados time remained below 1 ms.
+#   - All 90 runs completed with zero OCP solver failures, zero state-bound,
+#     input-bound, and plant-thrust-state violations, and no acados deadline
+#     misses. Mean acados time_tot was 0.2361 ms and the worst case was
+#     0.6670 ms, versus the 10 ms control period.
+#   - Peak absolute linear speeds were [1.5824, 1.5749, 1.8124] m/s, below the
+#     5 m/s bound. Peak absolute body rates were [3.4495, 3.5441, 3.7554]
+#     rad/s, below the 6 rad/s bound. Maximum thrust and servo commands were
+#     19.9122 N and 2.6560 rad, below their 30 N and pi limits.
+#   - The wrapper wall-clock measurement recorded one >10 ms host-side outlier
+#     per run (90 total), while every solver-reported acados time was below
+#     0.7 ms.
 #
 # Main observations:
-#   - Removing the active +/-1 m/s bound shortened mean 1.0 m rise time from
-#     0.9148 to 0.6773 s for x, from 0.9121 to 0.6824 s for y, and from 0.8418
-#     to 0.5552 s for z. This confirms that the old velocity bound materially
-#     limited the large-position-step response.
-#   - The faster response increased mean position overshoot and cross-axis
-#     attitude motion. At the zero-attitude workpoint, maximum attitude
-#     deviation increased from 14.2138 to 21.3140 deg. The speed improvement
-#     therefore comes with a stronger rotational transient.
-#   - The nonzero attitude workpoints still did not degrade mean position RMSE
-#     relative to the zero-attitude workpoint. Mean position RMSE remained
-#     between 0.1324 and 0.1337 m.
-#   - Yaw was the fastest attitude channel. Roll and pitch had essentially no
-#     overshoot but slower approximately 2 s settling times.
-#   - All maneuvers were feasible under the recorded state and actuator bounds;
-#     no tested response approached the new linear-velocity limit.
+#   - Position tracking changed little across attitude workpoints: mean RMSE
+#     stayed between 0.1402 and 0.1417 m and mean rise time between 0.6392 and
+#     0.6476 s.
+#   - Local-axis attitude steps were also consistent across workpoints. Mean
+#     attitude RMSE stayed between 9.6314 and 9.9092 deg. The [30,30,0] deg
+#     workpoint had the longest mean attitude settling time (1.7401 s), but the
+#     smallest maximum position drift (0.1157 m).
+#   - Yaw remained the fastest attitude channel. Roll and pitch had negligible
+#     overshoot, while yaw had 0.7942% mean overshoot.
+#   - All 70 and 90 deg maneuvers completed without saturation or constraint
+#     violation. Omega=6 rad/s was not active even in the expanded attitude set.
 #
-# Recorded result directory:
-#   experiment_results/nmpc_step_response_20260722_170709
-# Previous +/-1 m/s comparison directory:
-#   experiment_results/nmpc_step_response_20260722_155749
+# Recorded 90-case result directory:
+#   experiment_results/nmpc_step_response_20260722_173105
+# Previous 36-case comparison directories:
+#   experiment_results/nmpc_step_response_20260722_170709  (+/-5 m/s)
+#   experiment_results/nmpc_step_response_20260722_155749  (+/-1 m/s)
 #
 # Generated results (all beneath one unique result directory):
 #   runs/*.npz                    structured time-series bundles
@@ -86,7 +85,7 @@
 #   round_times/*.csv             per-control-update solver timing
 #   plot_type_3/*.{png,pdf}       original plot_type==3 style figures
 #   metrics.jsonl                 one English metric record per valid run
-#   manifest.json                 status and paths for all 36 cases
+#   manifest.json                 status and paths for all 90 cases
 #   analysis/step_response_metrics.{csv,json}
 #   analysis/step_response_summary.md
 #   analysis/cases/*.{png,pdf} and aggregate metric figures
@@ -127,13 +126,13 @@ import csv
 import pathlib
 import sys
 
-from nmpc_tilt_mt.utils.step_response_experiment import base36_cases
+from nmpc_tilt_mt.utils.step_response_experiment import base90_cases
 
 path = pathlib.Path(sys.argv[1])
 with path.open("w", newline="") as stream:
     writer = csv.writer(stream, delimiter="\t", lineterminator="\n")
     writer.writerow(("order", "case_id", "axis", "amplitude", "unit", "roll_deg", "pitch_deg", "yaw_deg"))
-    for order, case in enumerate(base36_cases(), start=1):
+    for order, case in enumerate(base90_cases(), start=1):
         writer.writerow((order, case.slug, case.axis, case.amplitude, case.amplitude_unit, *case.workpoint_rpy_deg))
 PY
 
@@ -150,7 +149,7 @@ PY
             build_args+=(--no-build)
         fi
 
-        echo "[${order}/36] axis=${axis}, amplitude=${amplitude} ${unit}, workpoint=[${roll},${pitch},${yaw}] deg"
+        echo "[${order}/90] axis=${axis}, amplitude=${amplitude} ${unit}, workpoint=[${roll},${pitch},${yaw}] deg"
         set +e
         MPLBACKEND=Agg MPLCONFIGDIR="${MPL_CACHE_DIR}" \
             "${PYTHON_BIN}" "${SCRIPT_DIR}/sim_nmpc.py" 1 \
@@ -208,7 +207,7 @@ for status in statuses:
     })
 manifest = {
     "scenario": "step_response",
-    "suite": "base36",
+    "suite": "base90",
     "controller_model": 1,
     "sim_model": 0,
     "cases": cases,
@@ -263,7 +262,7 @@ fields = [
 lines = [
     "# NMPC step-response summary",
     "",
-    f"Completed metric bundles: {len(records)}/36; valid pre-step-stable runs: {len(valid)}/36.",
+    f"Completed metric bundles: {len(records)}/90; valid pre-step-stable runs: {len(valid)}/90.",
     "",
     "| Statistic | Mean | Median | Maximum | Unit |",
     "|:--|--:|--:|--:|:--|",
@@ -292,5 +291,5 @@ output.write_text("\n".join(lines) + "\n")
 PY
 
 successful_runs="$(${PYTHON_BIN} -c 'import json,sys; print(sum(c["success"] for c in json.load(open(sys.argv[1]))["cases"]))' "${MANIFEST_FILE}")"
-echo "Completed ${successful_runs}/36 runs. Results: ${RESULT_DIR}"
-[[ "${successful_runs}" == "36" ]]
+echo "Completed ${successful_runs}/90 runs. Results: ${RESULT_DIR}"
+[[ "${successful_runs}" == "90" ]]

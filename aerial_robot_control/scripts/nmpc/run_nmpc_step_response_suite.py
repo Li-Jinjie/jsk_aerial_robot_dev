@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the 36-case NMPC step-response matrix through sim_nmpc.py."""
+"""Run the 90-case NMPC step-response matrix through sim_nmpc.py."""
 
 import argparse
 import datetime
@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 
-from nmpc_tilt_mt.utils.step_response_experiment import base36_cases
+from nmpc_tilt_mt.utils.step_response_experiment import base90_cases
 
 
 def main(args):
@@ -25,13 +25,14 @@ def main(args):
     script = os.path.abspath(os.path.join(os.path.dirname(__file__), "sim_nmpc.py"))
     manifest = {
         "scenario": "step_response",
-        "suite": "base36",
+        "suite": "base90",
         "output_dir": output_dir,
         "controller_model": 1,
         "sim_model": 0,
         "cases": [],
     }
-    for index, case in enumerate(base36_cases()):
+    cases = base90_cases()
+    for index, case in enumerate(cases):
         run_path = os.path.join(run_dir, case.slug + ".npz")
         log_path = os.path.join(log_dir, case.slug + ".log")
         command = [
@@ -54,7 +55,7 @@ def main(args):
         ]
         if index > 0 or args.no_build:
             command.append("--no-build")
-        print(f"[{index + 1:02d}/36] {case.slug}", flush=True)
+        print(f"[{index + 1:02d}/{len(cases)}] {case.slug}", flush=True)
         with open(log_path, "w") as log_stream:
             result = subprocess.run(command, stdout=log_stream, stderr=subprocess.STDOUT, text=True, check=False)
         entry = {
@@ -73,8 +74,8 @@ def main(args):
             json.dump(manifest, stream, indent=2, sort_keys=True)
 
     successes = sum(case["success"] for case in manifest["cases"])
-    print(f"Completed {successes}/36 cases. Manifest: {os.path.join(output_dir, 'manifest.json')}")
-    return 0 if successes == 36 else 1
+    print(f"Completed {successes}/{len(cases)} cases. Manifest: {os.path.join(output_dir, 'manifest.json')}")
+    return 0 if successes == len(cases) else 1
 
 
 if __name__ == "__main__":

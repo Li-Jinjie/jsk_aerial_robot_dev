@@ -2,7 +2,12 @@ import unittest
 
 import numpy as np
 
-from nmpc_tilt_mt.utils.step_response_experiment import base36_cases, scalar_step_metrics
+from argparse import Namespace
+
+import transformations as tf
+
+from nmpc_tilt_mt.utils.step_response_experiment import base36_cases, base90_cases, scalar_step_metrics
+from sim_nmpc import get_step_response_target
 
 
 class StepResponseExperimentTest(unittest.TestCase):
@@ -10,6 +15,25 @@ class StepResponseExperimentTest(unittest.TestCase):
         cases = base36_cases()
         self.assertEqual(len(cases), 36)
         self.assertEqual(len({case.slug for case in cases}), 36)
+
+    def test_expanded_matrix_has_90_unique_cases(self):
+        cases = base90_cases()
+        self.assertEqual(len(cases), 90)
+        self.assertEqual(len({case.slug for case in cases}), 90)
+
+    def test_attitude_step_is_composed_in_workpoint_frame(self):
+        args = Namespace(
+            workpoint_rpy_deg=[30.0, 30.0, 0.0],
+            step_time=2.0,
+            step_axis="roll",
+            step_amplitude=90.0,
+        )
+        _, target_rpy, active = get_step_response_target(args, 2.0)
+        actual = tf.euler_matrix(*target_rpy.flatten(), axes="sxyz")
+        workpoint = tf.euler_matrix(*np.radians(args.workpoint_rpy_deg), axes="sxyz")
+        expected = workpoint @ tf.rotation_matrix(np.radians(90.0), [1.0, 0.0, 0.0])
+        np.testing.assert_allclose(actual, expected, atol=1e-12)
+        self.assertEqual(active, 1)
 
     def test_monotonic_positive_step(self):
         time = np.linspace(0.0, 10.0, 10001)

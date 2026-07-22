@@ -105,12 +105,21 @@ def get_servo_delay_sweep_target(args, t_now):
 def get_step_response_target(args, t_now):
     """Return the workpoint pose with one commanded axis stepped at step_time."""
     target_xyz = np.zeros((3, 1))
-    target_rpy = np.radians(np.asarray(args.workpoint_rpy_deg, dtype=float)).reshape(3, 1)
+    workpoint_rpy = np.radians(np.asarray(args.workpoint_rpy_deg, dtype=float))
+    target_rpy = workpoint_rpy.reshape(3, 1)
     if t_now >= args.step_time:
         if args.step_axis in STEP_POSITION_AXES:
             target_xyz[STEP_POSITION_AXES.index(args.step_axis), 0] = args.step_amplitude
         else:
-            target_rpy[STEP_ATTITUDE_AXES.index(args.step_axis), 0] += np.radians(args.step_amplitude)
+            axis_index = STEP_ATTITUDE_AXES.index(args.step_axis)
+            axis_vector = np.eye(3)[axis_index]
+            # Compose the increment in the workpoint/body frame:
+            # R_ref = R_wp Exp(delta_theta [e_i]_x).  Converting the resulting
+            # rotation back to Euler is only an adapter for the existing
+            # reference-generator interface; the saved command is quaternion based.
+            rotation_wp = tf.euler_matrix(*workpoint_rpy, axes="sxyz")
+            rotation_delta = tf.rotation_matrix(np.radians(args.step_amplitude), axis_vector)
+            target_rpy = np.asarray(tf.euler_from_matrix(rotation_wp @ rotation_delta, axes="sxyz")).reshape(3, 1)
     return target_xyz, target_rpy, int(t_now >= args.step_time)
 
 
@@ -1050,6 +1059,7 @@ def main(args):
                 "amplitude_input": float(args.step_amplitude),
                 "amplitude_input_unit": case.amplitude_unit,
                 "amplitude_si": float(case.amplitude_si),
+                "attitude_composition": "R_ref=R_wp*Exp(delta_theta*e_axis_hat)",
             },
             "timing": {
                 "controller_period_s": float(ts_ctrl),
