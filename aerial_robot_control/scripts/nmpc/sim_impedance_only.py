@@ -10,6 +10,7 @@ from nmpc_tilt_mt.utils.fir_differentiator import FIRDifferentiator
 from nmpc_tilt_mt.utils.force_impedance_experiment import (
     SCENARIO_DURATION,
     SCENARIO_NAME,
+    default_run_bundle_path,
     get_force_comparison_wrench,
     impedance_parameters,
     save_run_bundle,
@@ -38,6 +39,9 @@ def main(args):
             sim_nmpc = NominalImpedance(config_file="BeetleNMPCFullServoForceImp.yaml", force_only=True)
         else:
             sim_nmpc = NominalImpedance()
+
+    if args.scenario == SCENARIO_NAME and args.save_run is None:
+        args.save_run = default_run_bundle_path("nominal", sim_nmpc.params)
 
     # Get time constants
     if sim_nmpc.include_servo_model:
@@ -141,6 +145,9 @@ def main(args):
             "sim_model": sim_solver.model_name,
             "ts_sim": ts_sim,
             "interaction_frame": "ee",
+            "plot_state_frame": "ee",
+            "scenario_duration": SCENARIO_DURATION,
+            "enlarge_factor": sim_nmpc.params.get("enlarge_factor"),
             "impedance": impedance_parameters(sim_nmpc.params),
         }
         save_run_bundle(
@@ -198,7 +205,12 @@ if __name__ == "__main__":
         help="Disturbance scenario. The force comparison scenario is an 18 s force-only experiment.",
     )
 
-    parser.add_argument("--save-run", type=str, default=None, help="Optional path for a structured NPZ run bundle.")
+    parser.add_argument(
+        "--save-run",
+        type=str,
+        default=None,
+        help="Structured NPZ path. The comparison scenario defaults to the organized paper data directory.",
+    )
 
     args = parser.parse_args()
     main(args)

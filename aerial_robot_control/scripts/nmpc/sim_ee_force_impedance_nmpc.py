@@ -10,6 +10,7 @@ from nmpc_tilt_mt.utils.fir_differentiator import FIRDifferentiator
 from nmpc_tilt_mt.utils.force_impedance_experiment import (
     SCENARIO_DURATION,
     SCENARIO_NAME,
+    default_run_bundle_path,
     get_force_comparison_wrench,
     impedance_parameters,
     save_run_bundle,
@@ -33,6 +34,45 @@ def rotation_matrix_from_quaternion(qwxyz):
             [2 * qx * qz - 2 * qw * qy, 2 * qy * qz + 2 * qw * qx, 1 - 2 * qx**2 - 2 * qy**2],
         ]
     )
+
+
+def rotation_matrix_from_rpy(rpy):
+    """Return R_WF for fixed-axis roll, pitch, yaw."""
+    roll, pitch, yaw = np.asarray(rpy, dtype=float).reshape(3)
+    cr, sr = np.cos(roll), np.sin(roll)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    return np.array(
+        [
+            [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+            [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+            [-sp, cp * sr, cp * cr],
+        ]
+    )
+
+
+def rpy_from_rotation_matrix(rotation):
+    """Return fixed-axis roll, pitch, yaw from a rotation matrix."""
+    rotation = np.asarray(rotation, dtype=float)
+    pitch = np.arcsin(np.clip(-rotation[2, 0], -1.0, 1.0))
+    if abs(np.cos(pitch)) > 1e-9:
+        roll = np.arctan2(rotation[2, 1], rotation[2, 2])
+        yaw = np.arctan2(rotation[1, 0], rotation[0, 0])
+    else:
+        roll = np.arctan2(-rotation[1, 2], rotation[1, 1])
+        yaw = 0.0
+    return np.array([roll, pitch, yaw])
+
+
+def ee_target_to_cog(target_xyz_ee, target_rpy_ee, ee_p, ee_q):
+    """Convert an externally supplied world/EE pose target to a world/CoG target."""
+    target_xyz_ee = np.asarray(target_xyz_ee, dtype=float).reshape(3)
+    rotation_wt = rotation_matrix_from_rpy(target_rpy_ee)
+    rotation_be = rotation_matrix_from_quaternion(ee_q)
+    rotation_wb = rotation_wt @ rotation_be.T
+    target_xyz_cog = target_xyz_ee - rotation_wb @ np.asarray(ee_p, dtype=float)
+    target_rpy_cog = rpy_from_rotation_matrix(rotation_wb)
+    return target_xyz_cog.reshape(3, 1), target_rpy_cog.reshape(3, 1)
 
 
 def wrench_at_ee_to_cog(wrench_ee, q_wb, ee_p, ee_q):
@@ -130,6 +170,15 @@ def main(args):
     else:
         raise ValueError("Invalid NMPC type.")
 
+    if args.scenario == SCENARIO_NAME and args.save_run is None:
+        descriptor = (
+            f"controller-{args.controller_state_frame}_"
+            f"load-{args.wrench_application_point}_"
+            f"plot-{args.plot_state_frame}_"
+            f"acc-{args.ee_acceleration}"
+        )
+        args.save_run = default_run_bundle_path("nmpc", nmpc.params, descriptor)
+
     # Get time constants
     if nmpc.include_servo_model:
         t_servo_ctrl = nmpc.phys.t_servo
@@ -150,9 +199,9 @@ def main(args):
 
     x_init = np.zeros(nx)
     x_init[6] = 1.0  # qw
-    if args.scenario == SCENARIO_NAME and args.controller_state_frame == "ee":
-        # With identity initial attitude, this places the EE (not the CoG) at
-        # the origin so that it matches the ideal impedance initial condition.
+    if args.scenario == SCENARIO_NAME:
+        # The external command is EE-centric for both controller variants.
+        # With identity attitude this CoG state places the physical EE at zero.
         x_init[0:3] = -np.asarray(nmpc.phys.ball_effector_p)
     u_init = np.zeros(nu)
     if args.scenario == SCENARIO_NAME:
@@ -207,8 +256,9 @@ def main(args):
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
     if args.scenario == SCENARIO_NAME:
-        if args.controller_state_frame == "ee":
-            x_init_sim[0:3] = -np.asarray(sim_nmpc.phys.ball_effector_p)
+        # Both controller-frame ablations start from the same physical pose:
+        # the EE is at the world origin and the CoG is offset by -p_BE.
+        x_init_sim[0:3] = -np.asarray(sim_nmpc.phys.ball_effector_p)
         # The plant includes rotor lag, so initialize its rotor states at the
         # same hover operating point instead of introducing a takeoff transient.
         x_init_sim[17:21] = sim_nmpc.phys.mass * sim_nmpc.phys.gravity / 4.0
@@ -338,8 +388,20 @@ def main(args):
         #         yaw = 90.0 / 180.0 * np.pi
         #         target_rpy = np.array([[roll, pitch, yaw]]).T
 
-        # Compute reference trajectory from target pose
-        xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy)
+        # Planning remains EE-centric.  A CoG-centric controller receives the
+        # externally transformed equivalent CoG/body pose reference.
+        if args.controller_state_frame == "cog":
+            controller_target_xyz, controller_target_rpy = ee_target_to_cog(
+                target_xyz,
+                target_rpy,
+                sim_nmpc.phys.ball_effector_p,
+                sim_nmpc.phys.ball_effector_q,
+            )
+        else:
+            controller_target_xyz, controller_target_rpy = target_xyz, target_rpy
+
+        # Compute reference trajectory from the controller-frame target pose.
+        xr, ur = reference_generator.compute_trajectory(controller_target_xyz, controller_target_rpy)
 
         if args.plot_type == 2:
             if nx > 13:
@@ -526,6 +588,10 @@ def main(args):
             "est_dist_type": args.est_dist_type,
             "torque_compensation": args.torque_compensation,
             "ee_acceleration": args.ee_acceleration,
+            "reference_input_frame": "ee",
+            "reference_transform": "ee_to_cog_external" if args.controller_state_frame == "cog" else "identity",
+            "scenario_duration": SCENARIO_DURATION,
+            "enlarge_factor": nmpc.params.get("enlarge_factor"),
             "impedance": impedance_parameters(nmpc.params),
         }
         save_run_bundle(
@@ -664,7 +730,12 @@ if __name__ == "__main__":
         help="Acceleration used by force impedance: full rigid-body EE acceleration or CoG linear acceleration.",
     )
 
-    parser.add_argument("--save-run", type=str, default=None, help="Optional path for a structured NPZ run bundle.")
+    parser.add_argument(
+        "--save-run",
+        type=str,
+        default=None,
+        help="Structured NPZ path. The comparison scenario defaults to the organized paper data directory.",
+    )
 
     args = parser.parse_args()
     main(args)

@@ -8,8 +8,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import scienceplots  # noqa: F401 - registers the SciencePlots styles.
 
 from nmpc_tilt_mt.utils.force_impedance_experiment import (
+    PAPER_RESULTS_ROOT,
+    SCENARIO_DURATION,
+    SCENARIO_EVENT_TIMES,
     SCENARIO_NAME,
     STEADY_STATE_WINDOWS,
     load_run_bundle,
@@ -18,6 +22,23 @@ from nmpc_tilt_mt.utils.force_impedance_experiment import (
 
 AXES = ("x", "y", "z")
 BASELINE_WINDOW = (1.5, 2.0)
+FRAME_SYMBOLS = {"cog": "B", "ee": "T"}
+
+
+def _configure_plot_style():
+    plt.style.use(["science", "grid"])
+    plt.rcParams.update(
+        {
+            "font.size": 14,
+            "axes.labelsize": 15,
+            "axes.titlesize": 15,
+            "xtick.labelsize": 14,
+            "ytick.labelsize": 14,
+            "legend.fontsize": 14,
+            "figure.titlesize": 15,
+            "lines.linewidth": 1.8,
+        }
+    )
 
 
 def _validate_bundle(path, data, metadata):
@@ -42,6 +63,10 @@ def _validate_impedance_match(nmpc_metadata, truth_metadata):
         rhs = np.asarray(truth_metadata["impedance"][name], dtype=float)
         if not np.allclose(lhs, rhs, rtol=1e-10, atol=1e-12):
             raise ValueError(f"Impedance {name} differs: NMPC={lhs}, truth={rhs}.")
+    nmpc_duration = float(nmpc_metadata.get("scenario_duration", SCENARIO_DURATION))
+    truth_duration = float(truth_metadata.get("scenario_duration", SCENARIO_DURATION))
+    if not np.isclose(nmpc_duration, truth_duration):
+        raise ValueError(f"Scenario duration differs: NMPC={nmpc_duration}, truth={truth_duration}.")
 
 
 def _quaternion_to_rpy(quaternion_wxyz):
@@ -77,7 +102,7 @@ def _get_plot_state(data):
 
 def _calculate_metrics(time, nmpc_state, truth_state):
     rows = []
-    comparison_mask = (time >= 2.0) & (time <= 17.0)
+    comparison_mask = (time >= 2.0) & (time <= SCENARIO_DURATION)
 
     for quantity, offset, unit in (("position", 0, "m"), ("velocity", 3, "m/s")):
         for axis_index, axis_name in enumerate(AXES):
@@ -113,34 +138,71 @@ def _write_metrics(path, rows):
         writer.writerows(rows)
 
 
-def _plot(output_prefix, nmpc_data, truth_time, time_nmpc, state_nmpc, state_truth, plot_state_frame):
-    figure = plt.figure(figsize=(12, 12), constrained_layout=True)
-    grid = figure.add_gridspec(4, 2, height_ratios=(0.8, 1.0, 1.0, 1.0))
+def _plot(
+    output_prefix,
+    nmpc_data,
+    truth_time,
+    time_nmpc,
+    state_nmpc,
+    state_truth,
+    plot_state_frame,
+    run_label,
+):
+    _configure_plot_style()
+    figure = plt.figure(figsize=(15, 14), constrained_layout=True)
+    grid = figure.add_gridspec(4, 2)
 
-    force_axis = figure.add_subplot(grid[0, :])
+    force_axis = figure.add_subplot(grid[0, 0])
+    torque_axis = figure.add_subplot(grid[0, 1])
     force_time = nmpc_data["time_input"]
     wrench_key = "applied_wrench_at_point" if "applied_wrench_at_point" in nmpc_data.files else "applied_wrench_ee"
     applied_force = nmpc_data[wrench_key][:, :3]
-    for index, axis_name in enumerate(AXES):
-        force_axis.step(force_time, applied_force[:, index], where="post", label=f"$f_{axis_name}$")
-    force_axis.set_ylabel("Applied force [N]")
-    force_axis.set_xlim(0.0, 18.0)
-    force_axis.grid(True, alpha=0.3)
-    force_axis.legend(ncol=3)
+    if "applied_wrench_cog" in nmpc_data.files:
+        lever_arm_torque = nmpc_data["applied_wrench_cog"][:, 3:6]
+    elif "torque_compensation_b" in nmpc_data.files:
+        lever_arm_torque = nmpc_data["torque_compensation_b"]
+    else:
+        raise ValueError("NMPC bundle has neither applied_wrench_cog nor torque_compensation_b.")
 
+    for index, axis_name in enumerate(AXES):
+        force_axis.step(
+            force_time,
+            applied_force[:, index],
+            where="post",
+            label=rf"${{}}^{{T}}\!f_{{{axis_name}}}$",
+        )
+        torque_axis.plot(
+            force_time,
+            lever_arm_torque[:, index],
+            label=rf"${{}}^{{B}}\!\tau_{{{axis_name}}}$",
+        )
+    force_axis.set_ylabel("Applied force [N]")
+    torque_axis.set_ylabel(r"Lever-arm torque [N$\cdot$m]")
+    force_axis.legend(ncol=3)
+    torque_axis.legend(ncol=3)
+
+    frame_symbol = FRAME_SYMBOLS.get(plot_state_frame.lower(), plot_state_frame.upper())
     for axis_index, axis_name in enumerate(AXES):
         position_axis = figure.add_subplot(grid[axis_index + 1, 0])
         velocity_axis = figure.add_subplot(grid[axis_index + 1, 1])
 
-        position_axis.plot(truth_time, state_truth[:, axis_index], "k--", linewidth=1.7, label="ideal impedance")
-        position_axis.plot(time_nmpc, state_nmpc[:, axis_index], linewidth=1.4, label="NMPC")
-        position_axis.set_ylabel(f"{plot_state_frame.upper()} {axis_name} displacement [m]")
-        position_axis.grid(True, alpha=0.3)
+        position_axis.plot(
+            truth_time,
+            state_truth[:, axis_index],
+            "k--",
+            label="Nominal impedance",
+        )
+        position_axis.plot(time_nmpc, state_nmpc[:, axis_index], label="Force-impedance NMPC")
+        position_axis.set_ylabel(rf"${{}}^{{{frame_symbol}}}\!p_{{{axis_name}}}$ [m]")
 
-        velocity_axis.plot(truth_time, state_truth[:, axis_index + 3], "k--", linewidth=1.7, label="ideal impedance")
-        velocity_axis.plot(time_nmpc, state_nmpc[:, axis_index + 3], linewidth=1.4, label="NMPC")
-        velocity_axis.set_ylabel(f"{axis_name} velocity [m/s]")
-        velocity_axis.grid(True, alpha=0.3)
+        velocity_axis.plot(
+            truth_time,
+            state_truth[:, axis_index + 3],
+            "k--",
+            label="Nominal impedance",
+        )
+        velocity_axis.plot(time_nmpc, state_nmpc[:, axis_index + 3], label="Force-impedance NMPC")
+        velocity_axis.set_ylabel(rf"${{}}^{{{frame_symbol}}}\!v_{{{axis_name}}}$ [m/s]")
 
         if axis_index == 0:
             position_axis.legend()
@@ -149,13 +211,18 @@ def _plot(output_prefix, nmpc_data, truth_time, time_nmpc, state_nmpc, state_tru
             position_axis.set_xlabel("Time [s]")
             velocity_axis.set_xlabel("Time [s]")
 
-    figure.suptitle(f"{plot_state_frame.upper()} force impedance: NMPC versus ideal second-order response")
+    for axis in figure.axes:
+        axis.set_xlim(0.0, SCENARIO_DURATION)
+
+    if run_label:
+        figure.suptitle(run_label)
     for extension in ("png", "pdf"):
-        figure.savefig(f"{output_prefix}.{extension}", dpi=200)
+        figure.savefig(f"{output_prefix}.{extension}", dpi=300)
     plt.close(figure)
 
 
 def _plot_rotational_diagnostics(output_prefix, nmpc_data, metadata, run_label):
+    _configure_plot_style()
     required = ("state_raw", "torque_compensation_b")
     missing = [name for name in required if name not in nmpc_data.files]
     if missing:
@@ -182,10 +249,10 @@ def _plot_rotational_diagnostics(output_prefix, nmpc_data, metadata, run_label):
     axes[2].set_ylabel("Angular velocity [rad/s]")
     axes[3].set_ylabel("Lever-arm torque [N m]")
     axes[3].set_xlabel("Time [s]")
-    axes[3].set_xlim(0.0, 18.0)
+    axes[3].set_xlim(0.0, SCENARIO_DURATION)
 
     for axis in axes:
-        for event_time in (2.0, 7.0, 12.0, 17.0):
+        for event_time in SCENARIO_EVENT_TIMES:
             axis.axvline(event_time, color="0.65", linewidth=0.8, linestyle=":")
         axis.grid(True, alpha=0.3)
         axis.legend(ncol=3, loc="best")
@@ -224,10 +291,22 @@ def main(args):
         state_truth_raw = _subtract_position_baseline(truth_time, _get_plot_state(truth_data)[:, :6])
         state_truth = _interpolate_columns(truth_time, state_truth_raw, time_nmpc)
 
-        output_directory = os.path.dirname(os.path.abspath(args.output_prefix))
+        comparison_name = os.path.splitext(os.path.basename(args.nmpc))[0] + "_vs_nominal"
+        if args.output_prefix is None:
+            args.output_prefix = os.path.join(PAPER_RESULTS_ROOT, "figures", comparison_name)
+        args.output_prefix = os.path.abspath(args.output_prefix)
+        if args.metrics_path is None:
+            if args.output_prefix.startswith(os.path.join(PAPER_RESULTS_ROOT, "figures")):
+                args.metrics_path = os.path.join(PAPER_RESULTS_ROOT, "metrics", comparison_name + ".csv")
+            else:
+                args.metrics_path = f"{args.output_prefix}_metrics.csv"
+
+        args.metrics_path = os.path.abspath(args.metrics_path)
+        output_directory = os.path.dirname(args.output_prefix)
         os.makedirs(output_directory, exist_ok=True)
+        os.makedirs(os.path.dirname(args.metrics_path), exist_ok=True)
         metrics = _calculate_metrics(time_nmpc, state_nmpc, state_truth)
-        metrics_path = f"{args.output_prefix}_metrics.csv"
+        metrics_path = args.metrics_path
         _write_metrics(metrics_path, metrics)
         _plot(
             args.output_prefix,
@@ -237,14 +316,23 @@ def main(args):
             state_nmpc,
             state_truth_raw,
             plot_state_frame,
+            args.run_label,
         )
-        diagnostic_prefix = _plot_rotational_diagnostics(args.output_prefix, nmpc_data, nmpc_metadata, args.run_label)
+        diagnostic_prefix = None
+        if args.rotational_diagnostics:
+            diagnostic_prefix = _plot_rotational_diagnostics(
+                args.output_prefix,
+                nmpc_data,
+                nmpc_metadata,
+                args.run_label,
+            )
     finally:
         nmpc_data.close()
         truth_data.close()
 
     print(f"Comparison figure saved to {args.output_prefix}.png and {args.output_prefix}.pdf")
-    print(f"Rotational diagnostics saved to {diagnostic_prefix}.png and {diagnostic_prefix}.pdf")
+    if diagnostic_prefix is not None:
+        print(f"Rotational diagnostics saved to {diagnostic_prefix}.png and {diagnostic_prefix}.pdf")
     print(f"Metrics saved to {metrics_path}")
     for row in metrics:
         print(
@@ -257,6 +345,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare NMPC force impedance against the ideal second-order model.")
     parser.add_argument("--nmpc", required=True, help="NMPC run bundle generated by sim_ee_force_impedance_nmpc.py.")
     parser.add_argument("--truth", required=True, help="Ideal run bundle generated by sim_impedance_only.py.")
-    parser.add_argument("--output-prefix", required=True, help="Output path without an extension.")
-    parser.add_argument("--run-label", default="", help="Optional label added to the diagnostics figure title.")
+    parser.add_argument(
+        "--output-prefix",
+        default=None,
+        help="Output path without an extension. Default: organized paper figures directory.",
+    )
+    parser.add_argument(
+        "--metrics-path",
+        default=None,
+        help="CSV metrics path. Default: organized paper metrics directory.",
+    )
+    parser.add_argument("--run-label", default="", help="Optional LaTeX-compatible figure title.")
+    parser.add_argument(
+        "--rotational-diagnostics",
+        action="store_true",
+        help="Also generate the legacy attitude/angular-velocity diagnostics figure.",
+    )
     main(parser.parse_args())

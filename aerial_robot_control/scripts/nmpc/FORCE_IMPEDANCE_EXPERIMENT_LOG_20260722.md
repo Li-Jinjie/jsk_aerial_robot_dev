@@ -1,6 +1,6 @@
 # Force-impedance NMPC development and experiment log
 
-Date summarized: 2026-07-22 (Asia/Tokyo)
+Initially summarized: 2026-07-22; updated 2026-07-23 (Asia/Tokyo)
 
 This document records the design decisions, fixes, commands, and experimental
 results from the force-impedance NMPC conversation.  It is intended to make the
@@ -156,7 +156,8 @@ Do not replace this with a literal slice.
 
 ## 7. Shared comparison scenario and saved data
 
-Scenario name: `force-impedance-compare`; duration: 18 s.
+Scenario name: `force-impedance-compare`; current duration: 20 s.  Historical
+runs made before 2026-07-23 used 18 s.
 
 | Time (s) | World force (N) | EE contact torque |
 | --- | --- | --- |
@@ -164,18 +165,18 @@ Scenario name: `force-impedance-compare`; duration: 18 s.
 | 2–7 | `[5, 0, 0]` | zero |
 | 7–12 | `[5, -5, 0]` | zero |
 | 12–17 | `[5, -5, -5]` | zero |
-| 17–18 | `[0, 0, 0]` | zero |
+| 17–20 | `[0, 0, 0]` | zero |
 
-Steady-state metric windows are 6–7 s, 11–12 s, and 16–17 s.
+Steady-state metric windows are 6–7 s, 11–12 s, 16–17 s, and the post-release
+window 19–20 s.
 
 Structured compressed NPZ bundles store time, controller/plant states, applied
 wrenches, controls, and JSON metadata.  Important arrays include `state_cog`,
 `state_ee`, `state_plot`, `applied_wrench_at_point`, and
 `applied_wrench_cog`.  `applied_wrench_ee` remains as a legacy-compatible alias.
 Metadata records scenario, controller/wrench/plot frames, controller and plant
-EE positions, acceleration mode, and virtual M/D/K.  It does **not** currently
-store `enlarge_factor`; preserve that value in the filename and `--run-label`,
-and verify it directly in the YAML before execution.
+EE positions, reference transform, acceleration mode, duration, virtual M/D/K,
+and `enlarge_factor`.  Preserve the parameters in the batch name as well.
 
 `plot_force_impedance_comparison.py` checks that the scenario and M/D/K match,
 baseline-subtracts position using 1.5–2.0 s, and emits:
@@ -206,7 +207,7 @@ Generate ideal truth for those M/D/K values:
 MPLBACKEND=Agg MPLCONFIGDIR=/tmp/nmpc_force_imp_mpl \
 python3 sim_impedance_only.py --sim_model 1 -p 4 \
   --scenario force-impedance-compare \
-  --save-run sim_data/comparison/nominal_force_impedance_UNIQUE.npz
+  --save-run experiment_results/impedance/paper/BATCH/data/nominal_UNIQUE.npz
 ```
 
 Generate an EE-centric run with full EE acceleration:
@@ -220,7 +221,7 @@ python3 sim_ee_force_impedance_nmpc.py 2 -e 0 -p 4 \
   --torque-compensation lever-arm \
   --ee-acceleration full \
   --scenario force-impedance-compare \
-  --save-run sim_data/comparison/nmpc_force_impedance_ee_full_UNIQUE.npz
+  --save-run experiment_results/impedance/paper/BATCH/data/nmpc_ee_UNIQUE.npz
 ```
 
 For an otherwise matching run using CoG linear acceleration, change only:
@@ -229,18 +230,19 @@ For an otherwise matching run using CoG linear acceleration, change only:
 --ee-acceleration cog
 ```
 
-Generate the latest CoG-controller/EE-load/CoG-display case:
+Generate the current CoG-controller/EE-load/EE-display case.  The simulator
+performs the external EE-to-CoG reference conversion automatically:
 
 ```bash
 MPLBACKEND=Agg MPLCONFIGDIR=/tmp/nmpc_force_imp_mpl \
 python3 sim_ee_force_impedance_nmpc.py 2 -e 0 -p 4 \
   --controller-state-frame cog \
   --wrench-application-point ee \
-  --plot-state-frame cog \
+  --plot-state-frame ee \
   --torque-compensation lever-arm \
   --ee-acceleration cog \
   --scenario force-impedance-compare \
-  --save-run sim_data/comparison/nmpc_force_impedance_cog_controller_UNIQUE.npz
+  --save-run experiment_results/impedance/paper/BATCH/data/nmpc_cog_UNIQUE.npz
 ```
 
 Plot either run:
@@ -248,10 +250,11 @@ Plot either run:
 ```bash
 MPLBACKEND=Agg MPLCONFIGDIR=/tmp/nmpc_force_imp_mpl \
 python3 plot_force_impedance_comparison.py \
-  --nmpc sim_data/comparison/NMPC_RUN.npz \
-  --truth sim_data/comparison/TRUTH_RUN.npz \
+  --nmpc experiment_results/impedance/paper/BATCH/data/NMPC_RUN.npz \
+  --truth experiment_results/impedance/paper/BATCH/data/TRUTH_RUN.npz \
   --run-label 'K=..., enlarge_factor=...' \
-  --output-prefix experiment_results/force_impedance_comparison_UNIQUE
+  --output-prefix experiment_results/impedance/paper/BATCH/figures/COMPARISON \
+  --metrics-path experiment_results/impedance/paper/BATCH/metrics/COMPARISON.csv
 ```
 
 ## 9. Recorded experiment results
@@ -275,7 +278,7 @@ oscillation in the recorded ef8 case.  The latest CoG-centric controller with a
 physically correct EE load greatly reduced translational error while retaining
 the expected attitude response to lever-arm torque.
 
-## 10. Latest verified run
+## 10. Verified run from 2026-07-22 (historical)
 
 At the time of the latest run, the YAML contained:
 
@@ -360,3 +363,38 @@ and torque compensation constant, then vary exactly one of:
 Record each run's metadata and use the same truth bundle only when M/D/K match.
 Inspect both the translational plot and rotational diagnostics before assigning
 a cause to a steady-state error or oscillation.
+
+## 13. Paper workflow update (2026-07-23)
+
+The formal comparison workflow now uses a 20 s scenario and stores artifacts
+under `experiment_results/impedance/paper/<batch>/` with separate `data`,
+`figures`, and `metrics` directories.  When `--save-run` is omitted for the
+comparison scenario, both simulators generate a unique parameterized NPZ name
+under the common paper data directory.
+
+The main plot uses SciencePlots with all configured fonts at least 14 pt.  Its
+4x2 layout is:
+
+```text
+EE applied force       | CoG lever-arm torque
+EE x position          | EE x velocity
+EE y position          | EE y velocity
+EE z position          | EE z velocity
+```
+
+The current LaTeX labels use left superscript `T` for EE quantities and `B` for
+CoG/body quantities.  The old rotational-diagnostics plot is optional via
+`--rotational-diagnostics`.
+
+For the CoG-controller case, the planning interface remains EE-centric and the
+simulator converts the pose externally:
+
+```text
+R_WB = R_WT R_BE^T
+p_WB = p_WT - R_WB p_BE
+```
+
+Both the CoG- and EE-controller plant states now initialize the CoG at
+`-p_BE`, making initial EE position and velocity exactly zero.  The first paper
+batch is documented in
+`experiment_results/impedance/paper/m1p5_d10_k20_ef2_20260723/README.md`.
