@@ -6,11 +6,26 @@ from argparse import Namespace
 
 import transformations as tf
 
-from nmpc_tilt_mt.utils.step_response_experiment import base36_cases, base90_cases, scalar_step_metrics
+from nmpc_tilt_mt.utils.step_response_experiment import base30_cases, base36_cases, base90_cases, scalar_step_metrics
 from sim_nmpc import get_step_response_target
 
 
 class StepResponseExperimentTest(unittest.TestCase):
+    def test_zero_workpoint_matrix_has_30_expected_cases(self):
+        cases = base30_cases()
+        self.assertEqual(len(cases), 30)
+        self.assertEqual(len({case.slug for case in cases}), 30)
+        self.assertEqual({case.workpoint_rpy_deg for case in cases}, {(0.0, 0.0, 0.0)})
+        self.assertEqual({case.axis for case in cases}, {"x", "y", "z", "roll", "pitch", "yaw"})
+        self.assertEqual(
+            {case.amplitude for case in cases if case.axis in ("x", "y", "z")},
+            {0.2, 0.4, 0.6, 0.8, 1.0},
+        )
+        self.assertEqual(
+            {case.amplitude for case in cases if case.axis in ("roll", "pitch", "yaw")},
+            {10.0, 30.0, 50.0, 70.0, 90.0},
+        )
+
     def test_base_matrix_has_36_unique_cases(self):
         cases = base36_cases()
         self.assertEqual(len(cases), 36)

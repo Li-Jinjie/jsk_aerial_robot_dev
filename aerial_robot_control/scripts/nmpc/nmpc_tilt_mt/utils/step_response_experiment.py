@@ -56,6 +56,19 @@ def base36_cases():
     return cases
 
 
+def base30_cases():
+    """Return all six-axis steps at the zero-attitude workpoint."""
+    cases = []
+    zero = WORKPOINTS_RPY_DEG[0]
+    for axis in POSITION_AXES:
+        cases.extend(StepCase(axis, amplitude, zero) for amplitude in POSITION_AMPLITUDES_M)
+    for axis in ATTITUDE_AXES:
+        cases.extend(StepCase(axis, amplitude, zero) for amplitude in ATTITUDE_AMPLITUDES_DEG)
+    if len(cases) != 30 or len({case.slug for case in cases}) != 30:
+        raise RuntimeError("The zero-workpoint step-response matrix must contain 30 unique cases.")
+    return cases
+
+
 def base90_cases():
     """Return five amplitudes on all six axes at all three attitude workpoints."""
     cases = []

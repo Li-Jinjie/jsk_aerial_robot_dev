@@ -184,7 +184,7 @@ def plot_metric_summary(metrics, output_prefix, position):
                 label=rf"WP $({workpoint_text})$",
             )
         )
-    legend_handles = [handle for pair in zip(axis_handles, workpoint_handles) for handle in pair]
+    legend_handles = axis_handles + workpoint_handles
     fig.legend(
         handles=legend_handles,
         loc="upper center",

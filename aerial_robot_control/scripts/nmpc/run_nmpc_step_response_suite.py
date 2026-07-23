@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the 90-case NMPC step-response matrix through sim_nmpc.py."""
+"""Run a selected NMPC step-response matrix through sim_nmpc.py."""
 
 import argparse
 import datetime
@@ -8,7 +8,13 @@ import os
 import subprocess
 import sys
 
-from nmpc_tilt_mt.utils.step_response_experiment import base90_cases
+from nmpc_tilt_mt.utils.step_response_experiment import base30_cases, base90_cases
+
+
+CASE_FACTORIES = {
+    "base30": base30_cases,
+    "base90": base90_cases,
+}
 
 
 def main(args):
@@ -19,22 +25,25 @@ def main(args):
     os.makedirs(output_dir)
     run_dir = os.path.join(output_dir, "runs")
     log_dir = os.path.join(output_dir, "logs")
+    timing_dir = os.path.join(output_dir, "round_times")
     os.makedirs(run_dir)
     os.makedirs(log_dir)
+    os.makedirs(timing_dir)
 
     script = os.path.abspath(os.path.join(os.path.dirname(__file__), "sim_nmpc.py"))
     manifest = {
         "scenario": "step_response",
-        "suite": "base90",
+        "suite": args.suite,
         "output_dir": output_dir,
         "controller_model": 1,
         "sim_model": 0,
         "cases": [],
     }
-    cases = base90_cases()
+    cases = CASE_FACTORIES[args.suite]()
     for index, case in enumerate(cases):
         run_path = os.path.join(run_dir, case.slug + ".npz")
         log_path = os.path.join(log_dir, case.slug + ".log")
+        timing_path = os.path.join(timing_dir, case.slug + ".csv")
         command = [
             sys.executable,
             script,
@@ -51,6 +60,8 @@ def main(args):
             *[str(value) for value in case.workpoint_rpy_deg],
             "--save-run",
             run_path,
+            "--solve-time-csv",
+            timing_path,
             "--no_viz",
         ]
         if index > 0 or args.no_build:
@@ -81,6 +92,12 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", default=None, help="New output directory; defaults to a timestamped path.")
+    parser.add_argument(
+        "--suite",
+        choices=tuple(CASE_FACTORIES),
+        default="base90",
+        help="Step-response case matrix to run.",
+    )
     parser.add_argument(
         "--no-build",
         action="store_true",
