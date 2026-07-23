@@ -57,8 +57,9 @@ class NMPCTiltQdServoForceImpedance(QDNMPCBase):
         rot_tb = rot_bt.T
 
         # Force disturbance participates in the translational impedance cost.
-        # Torque disturbance remains in the vector only to preserve the state
-        # layout; it has zero cost weight and is not estimated by the simulation.
+        # Torque disturbance remains outside the compliant residual: it has zero
+        # direct cost weight, while still entering the rotational dynamics for
+        # disturbance-aware attitude control.
         state_y = ca.vertcat(
             self.p + rot_wb @ self.ee_p,
             self.v + rot_wb @ skew_w @ self.ee_p,

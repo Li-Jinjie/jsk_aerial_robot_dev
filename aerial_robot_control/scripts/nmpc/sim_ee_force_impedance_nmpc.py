@@ -175,7 +175,8 @@ def main(args):
             f"controller-{args.controller_state_frame}_"
             f"load-{args.wrench_application_point}_"
             f"plot-{args.plot_state_frame}_"
-            f"acc-{args.ee_acceleration}"
+            f"acc-{args.ee_acceleration}_"
+            f"wrench-ref-{args.reference_wrench_feedforward}"
         )
         args.save_run = default_run_bundle_path("nmpc", nmpc.params, descriptor)
 
@@ -364,6 +365,20 @@ def main(args):
             disturb = disturb_interaction
         applied_wrench_cog_all[i, :] = disturb
 
+        # In perfect-information mode, make the current wrench available before
+        # both reference generation and the NMPC solve. This avoids an
+        # artificial one-simulation-step feedforward delay at wrench changes.
+        if args.est_dist_type == 0:
+            disturb_estimated[0:3] = disturb[0:3]
+            if args.torque_compensation == "lever-arm":
+                disturb_estimated[3:6] = lever_arm_torque_from_force(
+                    disturb_estimated[0:3], x_now_sim[6:10], sim_nmpc.phys.ball_effector_p
+                )
+            elif args.torque_compensation == "estimator":
+                disturb_estimated[3:6] = disturb[3:6]
+            else:
+                disturb_estimated[3:6] = 0.0
+
         # --------- Update state estimation ---------
         assert nmpc.include_impedance or nmpc.include_cog_dist_model
         # Assemble state from simulation and disturbance estimation
@@ -400,8 +415,14 @@ def main(args):
         else:
             controller_target_xyz, controller_target_rpy = target_xyz, target_rpy
 
-        # Compute reference trajectory from the controller-frame target pose.
-        xr, ur = reference_generator.compute_trajectory(controller_target_xyz, controller_target_rpy)
+        # Compute the equilibrium actuator reference using the same estimated
+        # external wrench that enters the NMPC disturbance state.
+        reference_wrench = disturb_estimated if args.reference_wrench_feedforward == "estimated" else None
+        xr, ur = reference_generator.compute_trajectory(
+            controller_target_xyz,
+            controller_target_rpy,
+            estimated_wrench=reference_wrench,
+        )
 
         if args.plot_type == 2:
             if nx > 13:
@@ -468,19 +489,6 @@ def main(args):
 
         # By default, the u_cmd is the mpc command
         u_cmd = copy.deepcopy(u_mpc)
-
-        if args.est_dist_type == 0:
-            disturb_estimated[0:3] = disturb[0:3]
-            if args.torque_compensation == "lever-arm":
-                disturb_estimated[3:6] = lever_arm_torque_from_force(
-                    disturb_estimated[0:3], x_now_sim[6:10], sim_nmpc.phys.ball_effector_p
-                )
-            elif args.torque_compensation == "estimator":
-                # With perfect disturbance information, use the complete
-                # equivalent CoG torque as the ideal estimator result.
-                disturb_estimated[3:6] = disturb[3:6]
-            else:
-                disturb_estimated[3:6] = 0.0
 
         # Disturbance estimation is related to the sensor update frequency
         if t_sensor >= ts_sensor and args.est_dist_type != 0:
@@ -587,6 +595,7 @@ def main(args):
             "plant_ee_p": list(sim_nmpc.phys.ball_effector_p),
             "est_dist_type": args.est_dist_type,
             "torque_compensation": args.torque_compensation,
+            "reference_wrench_feedforward": args.reference_wrench_feedforward,
             "ee_acceleration": args.ee_acceleration,
             "reference_input_frame": "ee",
             "reference_transform": "ee_to_cog_external" if args.controller_state_frame == "cog" else "identity",
@@ -717,10 +726,17 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--reference-wrench-feedforward",
+        choices=("none", "estimated"),
+        default="estimated",
+        help="External wrench used to generate equilibrium thrust/servo references. Default: estimated.",
+    )
+
+    parser.add_argument(
         "--scenario",
         choices=("default", SCENARIO_NAME),
         default="default",
-        help="Disturbance scenario. The force comparison scenario is an 18 s force-only experiment.",
+        help="Disturbance scenario. The force comparison scenario is a 20 s force-only experiment.",
     )
 
     parser.add_argument(

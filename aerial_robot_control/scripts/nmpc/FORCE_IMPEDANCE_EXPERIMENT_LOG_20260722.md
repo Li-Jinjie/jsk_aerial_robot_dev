@@ -398,3 +398,42 @@ Both the CoG- and EE-controller plant states now initialize the CoG at
 `-p_BE`, making initial EE position and velocity exactly zero.  The first paper
 batch is documented in
 `experiment_results/impedance/paper/m1p5_d10_k20_ef2_20260723/README.md`.
+
+## 14. Estimated-wrench actuator references (2026-07-23)
+
+The original QD reference generator allocated only the gravity wrench.  This
+made its thrust and servo-angle references describe unloaded hover while the
+NMPC dynamics simultaneously predicted the external EE force and lever-arm
+torque.  Because actuator and attitude references are soft costs, those
+inconsistent references produced a real optimization tradeoff.
+
+`QDNMPCReferenceGenerator.compute_trajectory` now accepts the optional mixed
+frame estimate `[force_world, torque_body]` and allocates the static balancing
+actuator wrench:
+
+```text
+f_u^B   = R_WB^T (mg e_z - f_ext^W)
+tau_u^B = -tau_ext^B
+```
+
+Existing callers remain compatible because the optional argument defaults to
+zero.  `sim_ee_force_impedance_nmpc.py` exposes
+`--reference-wrench-feedforward {none,estimated}`, with `estimated` as the
+default, and stores the selection in NPZ metadata.  Perfect-information
+disturbances are now updated before reference generation and the NMPC solve,
+removing the former one-simulation-step delay at wrench transitions.
+
+An allocation check reconstructed a representative desired actuator wrench with
+a maximum residual of `6.4e-14`.  The M1.5/D10/K20/ef2 validation batch is in
+`experiment_results/impedance/paper/m1p5_d10_k20_ef2_wrench_ref_20260723`.
+
+For the CoG controller, EE position RMSE changed from
+`[0.021828, 0.040866, 0.007113] m` to
+`[0.005268, 0.005798, 0.003652] m`.  The maximum position MAE over the three
+loaded steady windows fell below `5.8e-5 m` on all axes.
+
+For the EE controller, position RMSE changed from
+`[0.010012, 0.016733, 0.008740] m` to
+`[0.011044, 0.013700, 0.004857] m`.  Loaded steady errors also fell below
+`5.8e-5 m`; the small increase in whole-run X RMSE is caused by switching
+transients rather than steady offset.

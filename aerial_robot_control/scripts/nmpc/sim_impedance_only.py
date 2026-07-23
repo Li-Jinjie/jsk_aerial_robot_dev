@@ -202,7 +202,7 @@ if __name__ == "__main__":
         "--scenario",
         choices=("default", SCENARIO_NAME),
         default="default",
-        help="Disturbance scenario. The force comparison scenario is an 18 s force-only experiment.",
+        help="Disturbance scenario. The force comparison scenario is a 20 s force-only experiment.",
     )
 
     parser.add_argument(

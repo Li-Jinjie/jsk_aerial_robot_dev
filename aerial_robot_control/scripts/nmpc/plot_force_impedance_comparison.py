@@ -237,7 +237,7 @@ def _plot_rotational_diagnostics(output_prefix, nmpc_data, metadata, run_label):
     applied_force_w = nmpc_data[wrench_key][:, :3]
     lever_arm_torque_b = nmpc_data["torque_compensation_b"]
 
-    figure, axes = plt.subplots(4, 1, figsize=(12, 11), sharex=True, constrained_layout=True)
+    figure, axes = plt.subplots(4, 1, figsize=(8, 7), sharex=True, constrained_layout=True)
     for index, axis_name in enumerate(AXES):
         axes[0].step(input_time, applied_force_w[:, index], where="post", label=f"$f_{axis_name}^W$")
         axes[1].plot(state_time, rpy_deg[:, index], label=("roll", "pitch", "yaw")[index])

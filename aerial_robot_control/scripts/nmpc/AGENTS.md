@@ -27,6 +27,9 @@ detailed development history, equations, commands, and recorded results are in
 - `plot_force_impedance_comparison.py` uses SciencePlots and produces a 4x2
   paper figure: EE force / CoG lever-arm torque in row one, then XYZ
   position / velocity.  All configured font sizes are at least 14 pt.
+- `QDNMPCReferenceGenerator.compute_trajectory` accepts an optional mixed-frame
+  external wrench estimate `[force_world, torque_body]`.  The force-impedance
+  simulator enables this equilibrium actuator-reference feedforward by default.
 
 ## Frame options are independent
 
@@ -83,6 +86,10 @@ identity attitude so that the EE starts at the world origin.
   directory.
 - Keep the terminal force-impedance residual independent of control-dependent
   acceleration.  It currently uses `-fds_w` at the terminal node intentionally.
+- Preserve the actuator-reference balance convention:
+  `f_u^B = R_WB^T (mg e_z - f_ext^W)` and
+  `tau_u^B = -tau_ext^B`.  `--reference-wrench-feedforward none` is the
+  ablation switch; `estimated` is the default.
 - Preserve unrelated local files and generated data.  This workspace may have a
   dirty worktree; never reset or delete them as cleanup.
 
@@ -109,6 +116,7 @@ python3 sim_ee_force_impedance_nmpc.py 2 -e 0 -p 4 \
   --wrench-application-point ee \
   --plot-state-frame ee \
   --torque-compensation lever-arm \
+  --reference-wrench-feedforward estimated \
   --ee-acceleration full \
   --scenario force-impedance-compare \
   --save-run experiment_results/impedance/paper/BATCH/data/nmpc_ee_UNIQUE.npz
@@ -123,6 +131,7 @@ python3 sim_ee_force_impedance_nmpc.py 2 -e 0 -p 4 \
   --wrench-application-point ee \
   --plot-state-frame ee \
   --torque-compensation lever-arm \
+  --reference-wrench-feedforward estimated \
   --ee-acceleration cog \
   --scenario force-impedance-compare \
   --save-run experiment_results/impedance/paper/BATCH/data/nmpc_cog_UNIQUE.npz
@@ -156,5 +165,7 @@ following:
 5. For EE loading, the saved CoG torque equals the lever-arm cross product.
 6. Comparison truth and NMPC runs have identical scenario and M/D/K metadata.
 7. Both controller-frame variants begin with EE position and velocity at zero.
+8. Reference allocation reconstructs the requested gravity/external-wrench
+   balance through the allocation matrix to numerical precision.
 
 Communicate experiment conclusions in Chinese unless the user asks otherwise.

@@ -119,7 +119,7 @@ class QDNMPCReferenceGenerator:
                 a_ref[i] += 2 * np.pi
         return a_ref
 
-    def compute_trajectory(self, target_xyz, target_rpy):
+    def compute_trajectory(self, target_xyz, target_rpy, estimated_wrench=None):
         """
         Convert current target pose to a reference trajectory over the entire horizon.
         Compute target quaternions and control reference from a target rotation and then
@@ -127,6 +127,9 @@ class QDNMPCReferenceGenerator:
 
         :param target_xyz: Target position
         :param target_rpy: Target orientation (roll, pitch, yaw)
+        :param estimated_wrench: Optional ``[force_world, torque_body]`` external
+            wrench estimate. The actuator reference balances this wrench in
+            addition to gravity.
         :return xr: Reference for the state x
         :return ur: Reference for the input u
         """
@@ -139,12 +142,23 @@ class QDNMPCReferenceGenerator:
         qwxyz = tf.quaternion_from_euler(roll, pitch, yaw, axes="sxyz")
         target_qwxyz = np.array([qwxyz]).T
 
-        # Convert [0,0,gravity] to Body frame
+        if estimated_wrench is None:
+            estimated_wrench = np.zeros(6)
+        estimated_wrench = np.asarray(estimated_wrench, dtype=float).reshape(-1)
+        if estimated_wrench.size != 6:
+            raise ValueError("Estimated wrench should contain [force_world, torque_body].")
+
+        # Static actuator wrench reference:
+        #   R_WB f_u^B + f_ext^W - mg e_z = 0
+        #   tau_u^B + tau_ext^B = 0
+        # The force estimate is expressed in World and the torque estimate in
+        # Body, matching the disturbance-state convention used by the NMPC.
         q_inv = tf.quaternion_conjugate(qwxyz)
-        rot_inv = tf.quaternion_matrix(q_inv)
-        fg_w = np.array([0, 0, self.mass * self.gravity, 0])  # World frame
-        fg_b = rot_inv @ fg_w  # Body frame
-        target_wrench = np.array([[fg_b.item(0), fg_b.item(1), fg_b.item(2), 0, 0, 0]]).T
+        rot_bw = tf.quaternion_matrix(q_inv)[:3, :3]
+        actuator_force_w = np.array([0.0, 0.0, self.mass * self.gravity]) - estimated_wrench[0:3]
+        actuator_force_b = rot_bw @ actuator_force_w
+        actuator_torque_b = -estimated_wrench[3:6]
+        target_wrench = np.concatenate((actuator_force_b, actuator_torque_b)).reshape(6, 1)
 
         # A faster method if alloc_mat is dynamic:  x, _, _, _ = np.linalg.lstsq(alloc_mat, target_wrench, rcond=None)
         target_force = self.alloc_mat_pinv @ target_wrench
