@@ -29,13 +29,13 @@ def _configure_plot_style():
     plt.style.use(["science", "grid"])
     plt.rcParams.update(
         {
-            "font.size": 14,
-            "axes.labelsize": 15,
-            "axes.titlesize": 15,
-            "xtick.labelsize": 14,
-            "ytick.labelsize": 14,
-            "legend.fontsize": 14,
-            "figure.titlesize": 15,
+            "font.size": 16,
+            "axes.labelsize": 17,
+            "axes.titlesize": 17,
+            "xtick.labelsize": 16,
+            "ytick.labelsize": 16,
+            "legend.fontsize": 16,
+            "figure.titlesize": 17,
             "lines.linewidth": 1.8,
         }
     )
@@ -149,8 +149,8 @@ def _plot(
     run_label,
 ):
     _configure_plot_style()
-    figure = plt.figure(figsize=(15, 14), constrained_layout=True)
-    grid = figure.add_gridspec(4, 2)
+    figure = plt.figure(figsize=(12, 12), constrained_layout=True)
+    grid = figure.add_gridspec(5, 2)
 
     force_axis = figure.add_subplot(grid[0, 0])
     torque_axis = figure.add_subplot(grid[0, 1])
@@ -169,15 +169,15 @@ def _plot(
             force_time,
             applied_force[:, index],
             where="post",
-            label=rf"${{}}^{{T}}\!f_{{{axis_name}}}$",
+            label=rf"$f_{axis_name}$",
         )
         torque_axis.plot(
             force_time,
             lever_arm_torque[:, index],
-            label=rf"${{}}^{{B}}\!\tau_{{{axis_name}}}$",
+            label=rf"$\tau_{axis_name}$",
         )
-    force_axis.set_ylabel("Applied force [N]")
-    torque_axis.set_ylabel(r"Lever-arm torque [N$\cdot$m]")
+    force_axis.set_ylabel("Applied $^W\\boldsymbol{f}_{T_o}$ [N]")
+    torque_axis.set_ylabel("Lever-arm $^B\\boldsymbol{\\tau}_{B_o}$ [N$\cdot$m]")
     force_axis.legend(ncol=3)
     torque_axis.legend(ncol=3)
 
@@ -193,7 +193,7 @@ def _plot(
             label="Nominal impedance",
         )
         position_axis.plot(time_nmpc, state_nmpc[:, axis_index], label="Force-impedance NMPC")
-        position_axis.set_ylabel(rf"${{}}^{{{frame_symbol}}}\!p_{{{axis_name}}}$ [m]")
+        position_axis.set_ylabel(rf"$^W p_{{{frame_symbol}_o,{axis_name}}}$ [m]")
 
         velocity_axis.plot(
             truth_time,
@@ -202,14 +202,38 @@ def _plot(
             label="Nominal impedance",
         )
         velocity_axis.plot(time_nmpc, state_nmpc[:, axis_index + 3], label="Force-impedance NMPC")
-        velocity_axis.set_ylabel(rf"${{}}^{{{frame_symbol}}}\!v_{{{axis_name}}}$ [m/s]")
+        velocity_axis.set_ylabel(rf"$^W v_{{{frame_symbol}_o,{axis_name}}}$ [m/s]")
 
         if axis_index == 0:
             position_axis.legend()
             velocity_axis.legend()
-        if axis_index == 2:
-            position_axis.set_xlabel("Time [s]")
-            velocity_axis.set_xlabel("Time [s]")
+
+    if "state_raw" not in nmpc_data.files:
+        raise ValueError("NMPC bundle is missing state_raw for attitude and angular-velocity plots.")
+    state_raw = nmpc_data["state_raw"]
+    rpy_deg = np.rad2deg(_quaternion_to_rpy(state_raw[:, 6:10]))
+    omega_b = state_raw[:, 10:13]
+
+    attitude_axis = figure.add_subplot(grid[4, 0])
+    angular_velocity_axis = figure.add_subplot(grid[4, 1])
+    for axis_index, axis_name in enumerate(AXES):
+        attitude_axis.plot(
+            time_nmpc,
+            rpy_deg[:, axis_index],
+            label=(r"$\phi$", r"$\theta$", r"$\psi$")[axis_index],
+        )
+        angular_velocity_axis.plot(
+            time_nmpc,
+            omega_b[:, axis_index],
+            label=rf"$\omega_{axis_name}$",
+        )
+
+    attitude_axis.set_ylabel(r"Attitude $^W\boldsymbol{\Theta}_{B_o}$ [deg]")
+    angular_velocity_axis.set_ylabel(r"Angular velocity $^B\boldsymbol{\omega}_{B_o}$ [rad/s]")
+    attitude_axis.set_xlabel("Time [s]")
+    angular_velocity_axis.set_xlabel("Time [s]")
+    attitude_axis.legend(ncol=3)
+    angular_velocity_axis.legend(ncol=3)
 
     for axis in figure.axes:
         axis.set_xlim(0.0, SCENARIO_DURATION)
