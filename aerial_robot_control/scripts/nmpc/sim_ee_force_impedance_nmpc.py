@@ -647,110 +647,124 @@ if __name__ == "__main__":
     parser.add_argument(
         "model",
         type=int,
-        help="The NMPC model to be simulated. "
-        "Options: 0 (servo disturbance), 1 (full impedance), 2 (force impedance + attitude tracking).",
+        choices=(0, 1, 2),
+        help="NMPC controller model: 0=servo disturbance, 1=full impedance, "
+        "2=translational force impedance with ordinary attitude/torque tracking.",
     )
 
     parser.add_argument(
         "-sim",
         "--sim_model",
         type=int,
+        choices=(0, 1),
         default=0,
-        help="The simulation model. " "Options: 0 (default: servo+thrust+dist), 1 (pure impedance).",
+        help="Plant model: 0=servo, thrust, and disturbance dynamics; 1=ideal impedance. Default: 0.",
     )
 
     parser.add_argument(
         "-p",
         "--plot_type",
         type=int,
+        choices=(0, 1, 2, 3, 4),
         default=0,
-        help="The type of plot. " "Options: 0 (default: full), 1 (less), 2 (only rpy).",
+        help="Visualization mode: 0=full, 1=reduced, 2=RPY only, 3=disturbance, "
+        "4=save without plotting. Default: 0.",
     )
 
     parser.add_argument(
         "-e",
         "--est_dist_type",
         type=int,
+        choices=(0, 1, 2, 3, 4, 5),
         default=0,
-        help="The type of disturbance estimation. "
-        "Options: 0 (None), 1 (default: only use sensors), "
-        "2-5 (different MHE implementations).",
+        help="Disturbance estimation mode: 0=none, 1=sensor-based estimate, " "2-5=MHE variants. Default: 0.",
     )
 
     parser.add_argument(
         "-b",
         "--if_use_ang_acc",
         type=int,
+        choices=(0, 1),
         default=0,
-        help="Flag to use ground truth angular acceleration. Default: 0 (False)",
+        help="Use ground-truth angular acceleration: 0=false, 1=true. Default: 0.",
     )
 
     parser.add_argument(
-        "-a", "--arch", type=str, default="qd", help="The robot's architecture. Options: bi, tri, qd (default)."
+        "-a",
+        "--arch",
+        type=str,
+        choices=("bi", "tri", "qd"),
+        default="qd",
+        help="Robot architecture. Default: qd.",
     )
 
     parser.add_argument(
         "--interaction-frame",
         choices=("cog", "ee"),
         default=None,
-        help="Deprecated shorthand setting both --wrench-application-point and --plot-state-frame.",
+        help="Deprecated shorthand for setting both --wrench-application-point and --plot-state-frame. "
+        "Unset by default.",
     )
 
     parser.add_argument(
         "--controller-state-frame",
         choices=("cog", "ee"),
         default="ee",
-        help="Kinematic point used by the NMPC force-impedance cost. Default: ee.",
+        help="Kinematic point used by the controller's translational force-impedance state and cost. Default: ee.",
     )
 
     parser.add_argument(
         "--wrench-application-point",
         choices=("cog", "ee"),
         default=None,
-        help="Physical point where the simulated interaction wrench is applied. Default: ee.",
+        help="Physical point where the simulated environment applies its wrench. " "Effective default: ee.",
     )
 
     parser.add_argument(
         "--plot-state-frame",
         choices=("cog", "ee"),
         default=None,
-        help="Kinematic point used for saved/plotted position and velocity. Default: ee.",
+        help="Kinematic point saved as state_plot and used for plotted position and velocity. "
+        "Effective default: ee.",
     )
 
     parser.add_argument(
         "--torque-compensation",
         choices=("none", "lever-arm", "estimator"),
         default=None,
-        help="Torque disturbance source for all models: none, force-derived lever-arm torque, or torque estimator. "
-        "Default: estimator for model 0/1, lever-arm for model 2.",
+        help="Torque disturbance source: none, force-derived lever-arm torque, or estimator output. "
+        "Default: estimator for model 0/1; lever-arm for model 2.",
     )
 
     parser.add_argument(
         "--reference-wrench-feedforward",
         choices=("none", "estimated"),
         default="estimated",
-        help="External wrench used to generate equilibrium thrust/servo references. Default: estimated.",
+        help="External wrench feedforward used to balance equilibrium actuator references. Default: estimated.",
     )
 
     parser.add_argument(
         "--scenario",
         choices=("default", SCENARIO_NAME),
         default="default",
-        help="Disturbance scenario. The force comparison scenario is a 20 s force-only experiment.",
+        help="Disturbance scenario; force-impedance-compare selects the shared 20 s force schedule. "
+        "Default: default.",
     )
 
     parser.add_argument(
         "--ee-acceleration",
         choices=("full", "cog"),
         default="full",
-        help="Acceleration used by force impedance: full rigid-body EE acceleration or CoG linear acceleration.",
+        help="Acceleration used by the force-impedance residual: full=rigid-body EE acceleration, "
+        "cog=CoG linear acceleration. Default: full.",
     )
 
     parser.add_argument(
         "--save-run",
         type=str,
         default=None,
-        help="Structured NPZ path. The comparison scenario defaults to the organized paper data directory.",
+        help="Structured NPZ output path. If omitted, the comparison scenario creates a unique file "
+        "in the organized paper data directory; the default scenario does not save an NPZ.",
     )
 
     args = parser.parse_args()
