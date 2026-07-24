@@ -170,6 +170,7 @@ void nmpc::TiltMtServoNMPC::initGeneralParams()
   getParam<bool>(nmpc_nh, "is_body_rate_ctrl", is_body_rate_ctrl_, false);
   getParam<bool>(nmpc_nh, "is_print_phys_params", is_print_phys_params_, false);
   getParam<bool>(nmpc_nh, "is_debug", is_debug_, false);
+  getParam<bool>(nmpc_nh, "is_convert_ee_traj_to_cog", is_ee_traj_to_cog_conversion_enabled_, false);
 
   if (is_debug_)
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
@@ -489,11 +490,10 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
   }
   else if (traj_child_frame_id_ == "ee")
   {
-    // if (robot_model_->hasFrame("ee_contact"))
-    //   robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
-    // else
-    //   ROS_WARN_THROTTLE(5, "No frame named ee_contact in the robot model! The end-effector pose will be set to
-    //   CoG.");
+    if (robot_model_->hasFrame("ee_contact"))
+      robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
+    else
+      ROS_WARN_THROTTLE(5, "No frame named ee_contact in the robot model! The end-effector pose will be set to CoG.");
   }
   else
   {
@@ -1009,6 +1009,8 @@ void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJo
     return;
   }
 
+  const bool should_convert_ee_traj_to_cog = is_ee_traj_to_cog_conversion_enabled_ && msg->joint_names[0] == "ee";
+
   /* For set-point regulation, if the traj planner sends the same traj, we can skip the calculation of allocation. */
   // check if two trajectories are the same
   int max_same_idx = 0;
@@ -1035,7 +1037,7 @@ void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJo
       geometry_msgs::Vector3 omega = point.velocities[0].angular;
       geometry_msgs::Vector3 ang_acc = point.accelerations[0].angular;
 
-      if (msg->joint_names[0] == "ee")
+      if (should_convert_ee_traj_to_cog)
       {
         // convert the EE reference trajectory to the CoG frame
         tf::Vector3 cog_pos, cog_vel, cog_acc, cog_omega, cog_ang_acc;
@@ -1056,7 +1058,7 @@ void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJo
   }
 
   x_u_ref_.header.stamp = msg->header.stamp;
-  x_u_ref_.child_frame_id = msg->joint_names[0];
+  x_u_ref_.child_frame_id = should_convert_ee_traj_to_cog ? "cog" : msg->joint_names[0];
   callbackSetRefXU(boost::make_shared<const aerial_robot_msgs::PredXU>(x_u_ref_));
 
   last_traj_msg_ = *msg;
