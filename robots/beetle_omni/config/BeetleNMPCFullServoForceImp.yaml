@@ -1,7 +1,10 @@
+mpc_solver_name: aerial_robot_control::mpc_solver::TiltQdServoDistCoGForceImpMdlMPCSolver
+aerial_robot_control_name: aerial_robot_control/nmpc_controller/tilt_mt/servo_force_imp_nmpc
+
 controller:
   alloc:
     type: 1
-    ft_thresh: 1.5
+    ft_thresh_bias: 1.5
 
   nmpc:
     T_samp: 0.01
@@ -27,11 +30,6 @@ controller:
     Qp_xy: 20
     Qp_z: 20
 
-    # Unused orientation impedance parameters retained for the common
-    # six-dimensional impedance parameter layout.
-    oMxy: 0.0
-    oMz: 0.0
-
     # Ordinary attitude tracking (from BeetleNMPCFullDist.yaml)
     Qw_xy: 5
     Qw_z: 5
@@ -45,5 +43,6 @@ controller:
 
     is_attitude_ctrl: false
     is_body_rate_ctrl: false
+    is_convert_ee_traj_to_cog: true
     is_print_phys_params: false
     is_debug: false

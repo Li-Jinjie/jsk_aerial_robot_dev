@@ -11,6 +11,7 @@ MODELS=(
 #    NMPCTiltQdNoServo
 #    NMPCTiltQdServo
 #    NMPCTiltQdServoDist
+#    NMPCTiltQdServoCoGForceImpedance
 #    NMPCTiltQdServoImpedance
 #    NMPCTiltQdServoThrustDist
 #    NMPCTiltQdServoThrustImpedance
