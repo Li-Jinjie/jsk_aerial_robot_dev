@@ -77,6 +77,7 @@ protected:
   bool is_body_rate_ctrl_;
   bool is_print_phys_params_;
   bool is_debug_;
+  bool is_ee_traj_to_cog_conversion_enabled_;
 
   double mass_;
   double gravity_const_;
