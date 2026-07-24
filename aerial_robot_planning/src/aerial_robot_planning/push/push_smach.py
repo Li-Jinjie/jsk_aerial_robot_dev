@@ -25,7 +25,6 @@ import tty
 import numpy as np
 import rospy
 import smach
-import tf_conversions as tf
 from scipy.spatial.transform import Rotation as R, Slerp
 
 from std_srvs.srv import Trigger
@@ -64,6 +63,9 @@ class PushTask:
 
     name: str
     targets: Sequence[PushTarget]
+    slide_direction_world: Optional[Tuple[float, float, float]] = None
+    fixed_attitude_rpy: Optional[Tuple[float, float, float]] = None
+    return_to_initial_standoff: bool = False
 
 
 @dataclass(frozen=True)
@@ -179,9 +181,22 @@ THREE_PUSH_TARGETS: Tuple[PushTarget, ...] = (
     ),
 )
 
+PUSH_AND_SLIDE_TARGET = PushTarget(
+    standoff_pos=(0.0, 1.0, 1.2),
+    contact_pos=(1.1, 1.0, 1.2),
+    desired_force=5.0,
+)
+
 DEFAULT_PUSH_TASKS: Tuple[PushTask, ...] = (
     PushTask("single target", (THREE_PUSH_TARGETS[0],)),
     PushTask("three targets", THREE_PUSH_TARGETS),
+    PushTask(
+        "push and slide",
+        (PUSH_AND_SLIDE_TARGET,),
+        slide_direction_world=(0.0, 0.0, 1.0),
+        fixed_attitude_rpy=(0.0, np.pi / 2, 0.0),
+        return_to_initial_standoff=True,
+    ),
 )
 
 
@@ -311,12 +326,22 @@ class PushIO:
     ) -> bool:
         pos_err = float(np.linalg.norm(self.get_position() - p_xyz))
         vel_err = float(np.linalg.norm(self.get_linear_velocity()))
-
-        roll, pitch, yaw = tf.transformations.euler_from_quaternion(self.get_orientation_xyzw())
-        roll_r, pitch_r, yaw_r = tf.transformations.euler_from_quaternion(q_xyzw)
-        ang_err = float(np.linalg.norm([roll - roll_r, pitch - pitch_r, yaw - yaw_r]))
+        ang_err = _quaternion_angular_distance(self.get_orientation_xyzw(), q_xyzw)
 
         return pos_err < pos_tol and ang_err < ang_tol and vel_err < vel_tol
+
+
+def _quaternion_angular_distance(q_a: np.ndarray, q_b: np.ndarray) -> float:
+    """Return the shortest rotation angle between two xyzw quaternions."""
+    q_a = np.asarray(q_a, dtype=float)
+    q_b = np.asarray(q_b, dtype=float)
+    norm_a = float(np.linalg.norm(q_a))
+    norm_b = float(np.linalg.norm(q_b))
+    if norm_a <= 1e-9 or norm_b <= 1e-9:
+        return np.inf
+
+    cos_half_angle = abs(float(np.dot(q_a, q_b))) / (norm_a * norm_b)
+    return float(2.0 * np.arccos(np.clip(cos_half_angle, 0.0, 1.0)))
 
 
 def _unit(v: np.ndarray) -> np.ndarray:
@@ -348,6 +373,30 @@ def _quat_for_target(target: PushTarget, body_z_rotation_override: Optional[floa
     return R.from_matrix(rot_w_b).as_quat()
 
 
+def _force_reference_at_time(
+    elapsed: float,
+    p_contact: np.ndarray,
+    p_final: np.ndarray,
+    slide_velocity_world: np.ndarray,
+    ramp_duration: float,
+    hold_duration: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Return the force-phase position and accumulated slide offset."""
+    elapsed = max(float(elapsed), 0.0)
+    slide_elapsed = np.clip(elapsed - ramp_duration, 0.0, hold_duration)
+    slide_offset = np.asarray(slide_velocity_world, dtype=float) * slide_elapsed
+
+    if elapsed < ramp_duration:
+        alpha = elapsed / ramp_duration
+        p = p_contact + (p_final - p_contact) * alpha
+    elif elapsed < ramp_duration + hold_duration:
+        p = p_final + slide_offset
+    else:
+        alpha = min((elapsed - ramp_duration - hold_duration) / ramp_duration, 1.0)
+        p = p_final + (p_contact - p_final) * alpha + slide_offset
+    return p, slide_offset
+
+
 # ======================================================================================
 # Shared context (NOT stored in userdata, so the introspection server can pickle userdata)
 # ======================================================================================
@@ -368,17 +417,23 @@ class PushContext:
         self.push_tasks = list(push_tasks)
         self.fixed_push_targets = list(fixed_push_targets) if fixed_push_targets is not None else None
         self.push_targets: List[PushTarget] = list(fixed_push_targets) if fixed_push_targets is not None else []
+        self.selected_task: Optional[PushTask] = (
+            PushTask("fixed targets", self.push_targets) if fixed_push_targets is not None else None
+        )
         self.robot_name: Optional[str] = None
         self.io: Optional[PushIO] = None
         self.target_idx = 0
         self.contact_p: Optional[np.ndarray] = None
         self.retreat_start_p: Optional[np.ndarray] = None
+        self.retreat_standoff_p: Optional[np.ndarray] = None
+        self.return_standoff_p: Optional[np.ndarray] = None
         self.finish_after_retreat = False
         self.body_z_rotation_override: Optional[float] = None
         self.max_force_displacement = 0.10
         self.min_force_samples = 20
         self.contact_peak_window = 0.10
         self.contact_confirm_timeout = 0.50
+        self.slide_speed = 0.10
         self.back_key = "b"
         self.back_requested = threading.Event()
         self.back_monitor: Optional[TerminalBackMonitor] = None
@@ -386,7 +441,28 @@ class PushContext:
 
     def select_task(self, task_idx: int) -> None:
         task = self.push_tasks[task_idx]
+        self.selected_task = task
         self.push_targets = list(task.targets)
+
+    def target_quaternion(self, target: PushTarget) -> np.ndarray:
+        if self.selected_task is not None and self.selected_task.fixed_attitude_rpy is not None:
+            return R.from_euler("xyz", self.selected_task.fixed_attitude_rpy).as_quat()
+        return _quat_for_target(target, self.body_z_rotation_override)
+
+    def slide_velocity_world(self) -> np.ndarray:
+        if self.selected_task is None or self.selected_task.slide_direction_world is None:
+            return np.zeros(3)
+        direction = _unit(np.asarray(self.selected_task.slide_direction_world, dtype=float))
+        return self.slide_speed * direction
+
+    def prepare_target_retreat(self, target: PushTarget) -> None:
+        initial_standoff = np.asarray(target.standoff_pos, dtype=float)
+        self.retreat_standoff_p = initial_standoff.copy()
+        self.return_standoff_p = (
+            initial_standoff.copy()
+            if self.selected_task is not None and self.selected_task.return_to_initial_standoff
+            else None
+        )
 
     def start_back_monitor(self) -> None:
         self.stop_back_monitor()
@@ -555,6 +631,8 @@ class InitPushState(PushBaseState):
         self.ctx.target_idx = 0
         self.ctx.contact_p = None
         self.ctx.retreat_start_p = None
+        self.ctx.retreat_standoff_p = None
+        self.ctx.return_standoff_p = None
         self.ctx.finish_after_retreat = False
         self.ctx.robot_name = userdata.robot_name
         self.ctx.body_z_rotation_override = rospy.get_param("~push_body_z_rotation", None)
@@ -580,6 +658,7 @@ class InitPushState(PushBaseState):
             self.ctx.contact_peak_window = float(rospy.get_param(f"{push_param_ns}/contact_peak_window", 0.10))
             self.ctx.contact_confirm_timeout = float(rospy.get_param(f"{push_param_ns}/contact_confirm_timeout", 0.50))
             self.ctx.back_key = str(rospy.get_param(f"{push_param_ns}/back_key", "b")).lower()
+            slide_speed_param = rospy.get_param(f"{push_param_ns}/slide_speed", 0.10)
         except (TypeError, ValueError):
             rospy.logerr("PUSH/INIT: invalid force safety parameter type.")
             return "failed"
@@ -631,6 +710,21 @@ class InitPushState(PushBaseState):
                 len(self.ctx.push_targets),
             )
 
+        if self.ctx.selected_task is not None and self.ctx.selected_task.slide_direction_world is not None:
+            try:
+                self.ctx.slide_speed = float(slide_speed_param)
+            except (TypeError, ValueError):
+                rospy.logerr("PUSH/INIT: slide_speed must be a finite positive number.")
+                return "failed"
+            if not np.isfinite(self.ctx.slide_speed) or self.ctx.slide_speed <= 0.0:
+                rospy.logerr("PUSH/INIT: slide_speed must be finite and positive.")
+                return "failed"
+            rospy.loginfo(
+                "PUSH/INIT: slide speed=%.3f m/s in world direction %s.",
+                self.ctx.slide_speed,
+                self.ctx.selected_task.slide_direction_world,
+            )
+
         if self.ctx.io is None:
             rospy.loginfo("PUSH/INIT: initializing IO ...")
             try:
@@ -659,6 +753,8 @@ class SelectState(PushBaseState):
         if idx >= n:
             rospy.loginfo("PUSH/SELECT: all %d target(s) done.", n)
             return "finished"
+        target = self.ctx.push_targets[idx]
+        self.ctx.prepare_target_retreat(target)
         if self.ctx.is_back_requested():
             self._prepare_operator_retreat(self.ctx.io.get_position())
             return "retreat"
@@ -677,7 +773,7 @@ class AlignState(PushBaseState):
         io = self.ctx.io
         target = self.ctx.push_targets[self.ctx.target_idx]
         p = np.array(target.standoff_pos, dtype=float)
-        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
+        q = self.ctx.target_quaternion(target)
 
         # Ramp from the current pose to the standoff so the first reference has ~zero
         # tracking error (a far constant setpoint can otherwise diverge the NMPC solver).
@@ -733,7 +829,7 @@ class CalibrateState(PushBaseState):
         io = self.ctx.io
         target = self.ctx.push_targets[self.ctx.target_idx]
         p = np.array(target.standoff_pos, dtype=float)
-        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
+        q = self.ctx.target_quaternion(target)
 
         service_name = f"/{self.ctx.robot_name}/controller/wrench_est/calibrate"
         service_deadline = time.monotonic() + 3.0
@@ -797,7 +893,7 @@ class ApproachState(PushBaseState):
         p0 = np.array(target.standoff_pos, dtype=float)
         p1 = np.array(target.contact_pos, dtype=float)
         approach_dir = _approach_dir_for(target)
-        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
+        q = self.ctx.target_quaternion(target)
 
         rospy.loginfo(
             "PUSH/APPROACH: moving toward contact %s at %.2f m/s ...",
@@ -880,8 +976,10 @@ class ApplyForceState(PushBaseState):
         io = self.ctx.io
         target = self.ctx.push_targets[self.ctx.target_idx]
         approach_dir = _approach_dir_for(target)
-        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
+        q = self.ctx.target_quaternion(target)
         p_contact = np.array(self.ctx.contact_p, dtype=float)
+        p_standoff = np.array(target.standoff_pos, dtype=float)
+        slide_velocity_world = self.ctx.slide_velocity_world()
 
         # 1) accumulate the initial contact force while holding p_contact
         rospy.loginfo("PUSH/APPLY: accumulating initial contact force ...")
@@ -967,13 +1065,20 @@ class ApplyForceState(PushBaseState):
             delta,
             target.desired_force,
         )
+        if np.linalg.norm(slide_velocity_world) > 0.0:
+            rospy.loginfo(
+                "PUSH/APPLY: sliding at world velocity %s m/s for %.1f s during force hold.",
+                np.round(slide_velocity_world, 3).tolist(),
+                self.T_FORCE_HOLD,
+            )
 
-        # 2) ramp-up p_contact -> p_final, 3) hold, 4) ramp-down p_final -> p_contact.
-        # ramp-up and ramp-down use the same duration (T_FORCE_RAMP). Ends back at p_contact.
+        # 2) ramp up the normal force, 3) hold it while optionally sliding,
+        # 4) ramp down at the final slide position.
         t_ramp_down_start = self.T_FORCE_RAMP + self.T_FORCE_HOLD
         t_total = t_ramp_down_start + self.T_FORCE_RAMP
         t_start = rospy.Time.now().to_sec()
         p = p_contact.copy()
+        slide_offset = np.zeros(3)
         while not rospy.is_shutdown():
             if self.preempt_requested():
                 self.service_preempt()
@@ -987,21 +1092,32 @@ class ApplyForceState(PushBaseState):
             t = rospy.Time.now().to_sec() - t_start
             if t >= t_total:
                 break
-            if t < self.T_FORCE_RAMP:  # ramp-up
-                p = p_contact + (p_final - p_contact) * (t / self.T_FORCE_RAMP)
-            elif t < t_ramp_down_start:  # hold
-                p = p_final
-            else:  # ramp-down
-                tau = t - t_ramp_down_start
-                p = p_final + (p_contact - p_final) * (tau / self.T_FORCE_RAMP)
+            p, slide_offset = _force_reference_at_time(
+                t,
+                p_contact,
+                p_final,
+                slide_velocity_world,
+                self.T_FORCE_RAMP,
+                self.T_FORCE_HOLD,
+            )
+            self.ctx.retreat_standoff_p = p_standoff + slide_offset
             io.publish_pose_ref(p, q)
             self.rate.sleep()
 
         if rospy.is_shutdown():
             return "aborted"
 
-        io.publish_pose_ref(p_contact, q)
-        self.ctx.retreat_start_p = p_contact
+        p_contact_end, slide_offset = _force_reference_at_time(
+            t_total,
+            p_contact,
+            p_final,
+            slide_velocity_world,
+            self.T_FORCE_RAMP,
+            self.T_FORCE_HOLD,
+        )
+        self.ctx.retreat_standoff_p = p_standoff + slide_offset
+        io.publish_pose_ref(p_contact_end, q)
+        self.ctx.retreat_start_p = p_contact_end
         return "applied"
 
 
@@ -1017,8 +1133,13 @@ class RetreatState(PushBaseState):
         self.ctx.consume_back_request()
         io = self.ctx.io
         target = self.ctx.push_targets[self.ctx.target_idx]
-        p_standoff = np.array(target.standoff_pos, dtype=float)
-        q = _quat_for_target(target, self.ctx.body_z_rotation_override)
+        p_standoff = (
+            np.array(self.ctx.retreat_standoff_p, dtype=float)
+            if self.ctx.retreat_standoff_p is not None
+            else np.array(target.standoff_pos, dtype=float)
+        )
+        p_return = np.array(self.ctx.return_standoff_p, dtype=float) if self.ctx.return_standoff_p is not None else None
+        q = self.ctx.target_quaternion(target)
         if self.ctx.retreat_start_p is not None:
             p_start = np.array(self.ctx.retreat_start_p, dtype=float)
         elif self.ctx.contact_p is not None:
@@ -1047,9 +1168,30 @@ class RetreatState(PushBaseState):
             rospy.logerr("PUSH/RETREAT: failed to reach standoff (%s).", move_result.reason)
             return "aborted"
 
+        if p_return is not None and not np.allclose(p_standoff, p_return):
+            rospy.loginfo(
+                "PUSH/RETREAT: clear of wall; returning to initial standoff %s ...",
+                np.round(p_return, 3).tolist(),
+            )
+            move_result = self._move_at_speed(
+                io,
+                p_standoff,
+                p_return,
+                q,
+                self.RETREAT_SPEED,
+                self.RETREAT_TIMEOUT,
+                allow_back=False,
+            )
+            self.ctx.consume_back_request()
+            if move_result.reason != "reached":
+                rospy.logerr("PUSH/RETREAT: failed to return to initial standoff (%s).", move_result.reason)
+                return "aborted"
+
         should_finish = self.ctx.finish_after_retreat
         self.ctx.contact_p = None
         self.ctx.retreat_start_p = None
+        self.ctx.retreat_standoff_p = None
+        self.ctx.return_standoff_p = None
         self.ctx.finish_after_retreat = False
         if should_finish:
             rospy.logwarn("PUSH/RETREAT: safe retreat completed; terminating the push task.")
