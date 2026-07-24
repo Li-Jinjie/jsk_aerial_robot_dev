@@ -1037,15 +1037,14 @@ void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJo
 
       if (msg->joint_names[0] == "ee")
       {
-        // convert the position and velocity from CoG to end-effector frame
-        tf::Vector3 cog_pos, cog_vel, cog_omega;
+        // convert the EE reference trajectory to the CoG frame
+        tf::Vector3 cog_pos, cog_vel, cog_acc, cog_omega, cog_ang_acc;
         tf::Quaternion cog_quat;
-        robot_model_->convertFromEEContactToCoG(tf::Vector3(pos.x, pos.y, pos.z), tf::Vector3(vel.x, vel.y, vel.z),
-                                                tf::Quaternion(quat.x, quat.y, quat.z, quat.w),
-                                                tf::Vector3(omega.x, omega.y, omega.z), cog_pos, cog_vel, cog_quat,
-                                                cog_omega);
-        setXrUrRef(cog_pos, cog_vel, tf::Vector3(acc.x, acc.y, acc.z), cog_quat, cog_omega,
-                   tf::Vector3(ang_acc.x, ang_acc.y, ang_acc.z), i);
+        robot_model_->convertFromEEContactToCoG(
+            tf::Vector3(pos.x, pos.y, pos.z), tf::Vector3(vel.x, vel.y, vel.z), tf::Vector3(acc.x, acc.y, acc.z),
+            tf::Quaternion(quat.x, quat.y, quat.z, quat.w), tf::Vector3(omega.x, omega.y, omega.z),
+            tf::Vector3(ang_acc.x, ang_acc.y, ang_acc.z), cog_pos, cog_vel, cog_acc, cog_quat, cog_omega, cog_ang_acc);
+        setXrUrRef(cog_pos, cog_vel, cog_acc, cog_quat, cog_omega, cog_ang_acc, i);
       }
       else
       {
@@ -1214,8 +1213,8 @@ std::vector<double> nmpc::TiltMtServoNMPC::meas2VecX(bool is_modified_by_traj_fr
       // convert the position and velocity from CoG to end-effector frame
       tf::Vector3 target_ee_pos, target_ee_vel, target_ee_omega;
       tf::Quaternion target_ee_quat;
-      robot_model_->convertFromCoGToEEContact(pos, vel, quat, ang_vel, target_ee_pos, target_ee_vel, target_ee_quat,
-                                              target_ee_omega);
+      robot_model_->convertFromCoGToEEContactNoAcc(pos, vel, quat, ang_vel, target_ee_pos, target_ee_vel,
+                                                   target_ee_quat, target_ee_omega);
 
       pos = target_ee_pos;
       vel = target_ee_vel;

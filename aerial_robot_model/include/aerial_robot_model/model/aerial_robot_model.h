@@ -204,13 +204,22 @@ public:
     quat = { qw, qx, qy, qz };
   }
 
+  void convertFromCoGToEEContactNoAcc(const tf::Vector3& cog_pos_in_w, const tf::Vector3& cog_vel_in_w,
+                                      const tf::Quaternion& cog_quat, const tf::Vector3& cog_omega,
+                                      tf::Vector3& ee_pos_in_w, tf::Vector3& ee_vel_in_w, tf::Quaternion& ee_quat,
+                                      tf::Vector3& ee_omega) const;
+
   void convertFromCoGToEEContact(const tf::Vector3& cog_pos_in_w, const tf::Vector3& cog_vel_in_w,
-                                 const tf::Quaternion& cog_quat, const tf::Vector3& cog_omega, tf::Vector3& ee_pos_in_w,
-                                 tf::Vector3& ee_vel_in_w, tf::Quaternion& ee_quat, tf::Vector3& ee_omega) const;
+                                 const tf::Vector3& cog_acc_in_w, const tf::Quaternion& cog_quat,
+                                 const tf::Vector3& cog_omega, const tf::Vector3& cog_ang_acc, tf::Vector3& ee_pos_in_w,
+                                 tf::Vector3& ee_vel_in_w, tf::Vector3& ee_acc_in_w, tf::Quaternion& ee_quat,
+                                 tf::Vector3& ee_omega, tf::Vector3& ee_ang_acc) const;
 
   void convertFromEEContactToCoG(const tf::Vector3& ee_pos_in_w, const tf::Vector3& ee_vel_in_w,
-                                 const tf::Quaternion& ee_quat, const tf::Vector3& ee_omega, tf::Vector3& cog_pos_in_w,
-                                 tf::Vector3& cog_vel_in_w, tf::Quaternion& cog_quat, tf::Vector3& cog_omega) const;
+                                 const tf::Vector3& ee_acc_in_w, const tf::Quaternion& ee_quat,
+                                 const tf::Vector3& ee_omega, const tf::Vector3& ee_ang_acc, tf::Vector3& cog_pos_in_w,
+                                 tf::Vector3& cog_vel_in_w, tf::Vector3& cog_acc_in_w, tf::Quaternion& cog_quat,
+                                 tf::Vector3& cog_omega, tf::Vector3& cog_ang_acc) const;
 
 private:
   // kinematics

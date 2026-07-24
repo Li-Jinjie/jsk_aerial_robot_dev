@@ -702,11 +702,21 @@ KDL::JntArray RobotModel::convertEigenToKDL(const Eigen::VectorXd& joint_vector)
   return joint_positions;
 }
 
-void RobotModel::convertFromCoGToEEContact(const tf::Vector3& cog_pos_in_w, const tf::Vector3& cog_vel_in_w,
-                                           const tf::Quaternion& cog_quat, const tf::Vector3& cog_omega,
-                                           tf::Vector3& ee_pos_in_w, tf::Vector3& ee_vel_in_w, tf::Quaternion& ee_quat,
-                                           tf::Vector3& ee_omega) const
+void RobotModel::convertFromCoGToEEContactNoAcc(const tf::Vector3& cog_pos_in_w, const tf::Vector3& cog_vel_in_w,
+                                                const tf::Quaternion& cog_quat, const tf::Vector3& cog_omega,
+                                                tf::Vector3& ee_pos_in_w, tf::Vector3& ee_vel_in_w,
+                                                tf::Quaternion& ee_quat, tf::Vector3& ee_omega) const
 {
+  if (!hasFrame("ee_contact"))
+  {
+    ROS_WARN_THROTTLE(5, "No frame named ee_contact in the robot model! Treating CoG as the end-effector pose.");
+    ee_pos_in_w = cog_pos_in_w;
+    ee_vel_in_w = cog_vel_in_w;
+    ee_quat = cog_quat;
+    ee_omega = cog_omega;
+    return;
+  }
+
   // get the conversion from CoG to end-effector (EE) contact frame
   std::vector<double> cog_to_ee_p, cog_to_ee_q;
   getCoGtoFramePosQuat("ee_contact", cog_to_ee_p, cog_to_ee_q);
@@ -726,11 +736,57 @@ void RobotModel::convertFromCoGToEEContact(const tf::Vector3& cog_pos_in_w, cons
   ee_omega = cog_to_ee_mtx.inverse() * cog_omega;
 }
 
-void RobotModel::convertFromEEContactToCoG(const tf::Vector3& ee_pos_in_w, const tf::Vector3& ee_vel_in_w,
-                                           const tf::Quaternion& ee_quat, const tf::Vector3& ee_omega,
-                                           tf::Vector3& cog_pos_in_w, tf::Vector3& cog_vel_in_w,
-                                           tf::Quaternion& cog_quat, tf::Vector3& cog_omega) const
+void RobotModel::convertFromCoGToEEContact(const tf::Vector3& cog_pos_in_w, const tf::Vector3& cog_vel_in_w,
+                                           const tf::Vector3& cog_acc_in_w, const tf::Quaternion& cog_quat,
+                                           const tf::Vector3& cog_omega, const tf::Vector3& cog_ang_acc,
+                                           tf::Vector3& ee_pos_in_w, tf::Vector3& ee_vel_in_w, tf::Vector3& ee_acc_in_w,
+                                           tf::Quaternion& ee_quat, tf::Vector3& ee_omega,
+                                           tf::Vector3& ee_ang_acc) const
 {
+  convertFromCoGToEEContactNoAcc(cog_pos_in_w, cog_vel_in_w, cog_quat, cog_omega, ee_pos_in_w, ee_vel_in_w, ee_quat,
+                                 ee_omega);
+
+  if (!hasFrame("ee_contact"))
+  {
+    ee_acc_in_w = cog_acc_in_w;
+    ee_ang_acc = cog_ang_acc;
+    return;
+  }
+
+  std::vector<double> cog_to_ee_p, cog_to_ee_q;
+  getCoGtoFramePosQuat("ee_contact", cog_to_ee_p, cog_to_ee_q);
+
+  tf::Vector3 p_ee_in_cog(cog_to_ee_p[0], cog_to_ee_p[1], cog_to_ee_p[2]);
+  tf::Matrix3x3 cog_to_ee_mtx;
+  cog_to_ee_mtx.setRotation(tf::Quaternion(cog_to_ee_q[1], cog_to_ee_q[2], cog_to_ee_q[3], cog_to_ee_q[0]));
+
+  tf::Matrix3x3 cog_mtx;
+  cog_mtx.setRotation(cog_quat);
+
+  ee_acc_in_w =
+      cog_acc_in_w + cog_mtx * (cog_ang_acc.cross(p_ee_in_cog) + cog_omega.cross(cog_omega.cross(p_ee_in_cog)));
+  ee_ang_acc = cog_to_ee_mtx.inverse() * cog_ang_acc;
+}
+
+void RobotModel::convertFromEEContactToCoG(const tf::Vector3& ee_pos_in_w, const tf::Vector3& ee_vel_in_w,
+                                           const tf::Vector3& ee_acc_in_w, const tf::Quaternion& ee_quat,
+                                           const tf::Vector3& ee_omega, const tf::Vector3& ee_ang_acc,
+                                           tf::Vector3& cog_pos_in_w, tf::Vector3& cog_vel_in_w,
+                                           tf::Vector3& cog_acc_in_w, tf::Quaternion& cog_quat, tf::Vector3& cog_omega,
+                                           tf::Vector3& cog_ang_acc) const
+{
+  if (!hasFrame("ee_contact"))
+  {
+    ROS_WARN_THROTTLE(5, "No frame named ee_contact in the robot model! Treating the end-effector pose as CoG.");
+    cog_pos_in_w = ee_pos_in_w;
+    cog_vel_in_w = ee_vel_in_w;
+    cog_acc_in_w = ee_acc_in_w;
+    cog_quat = ee_quat;
+    cog_omega = ee_omega;
+    cog_ang_acc = ee_ang_acc;
+    return;
+  }
+
   // get the conversion from CoG to end-effector (EE) contact frame
   std::vector<double> cog_to_ee_p, cog_to_ee_q;
   getCoGtoFramePosQuat("ee_contact", cog_to_ee_p, cog_to_ee_q);
@@ -753,11 +809,18 @@ void RobotModel::convertFromEEContactToCoG(const tf::Vector3& ee_pos_in_w, const
   // ^B omega = ^B_T R * ^T omega
   cog_omega = cog_to_ee_mtx * ee_omega;
 
+  // ^B alpha = ^B_T R * ^T alpha
+  cog_ang_acc = cog_to_ee_mtx * ee_ang_acc;
+
   // ^W p_B = ^W p_T - ^W_B R * ^B p_T
   cog_pos_in_w = ee_pos_in_w - cog_mtx * p_ee_in_cog;
 
   // ^W v_B = ^W v_T - ^W_B R * (^B omega x ^B p_T)
   cog_vel_in_w = ee_vel_in_w - cog_mtx * cog_omega.cross(p_ee_in_cog);
+
+  // ^W a_B = ^W a_T - ^W_B R * (^B alpha x ^B p_T + ^B omega x (^B omega x ^B p_T))
+  cog_acc_in_w =
+      ee_acc_in_w - cog_mtx * (cog_ang_acc.cross(p_ee_in_cog) + cog_omega.cross(cog_omega.cross(p_ee_in_cog)));
 
   // ^W_B q
   cog_mtx.getRotation(cog_quat);
