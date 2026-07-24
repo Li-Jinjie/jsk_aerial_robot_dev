@@ -427,6 +427,7 @@ class PushContext:
         self.retreat_start_p: Optional[np.ndarray] = None
         self.retreat_standoff_p: Optional[np.ndarray] = None
         self.return_standoff_p: Optional[np.ndarray] = None
+        self.hover_p: Optional[np.ndarray] = None
         self.finish_after_retreat = False
         self.body_z_rotation_override: Optional[float] = None
         self.max_force_displacement = 0.10
@@ -633,6 +634,7 @@ class InitPushState(PushBaseState):
         self.ctx.retreat_start_p = None
         self.ctx.retreat_standoff_p = None
         self.ctx.return_standoff_p = None
+        self.ctx.hover_p = None
         self.ctx.finish_after_retreat = False
         self.ctx.robot_name = userdata.robot_name
         self.ctx.body_z_rotation_override = rospy.get_param("~push_body_z_rotation", None)
@@ -741,7 +743,7 @@ class SelectState(PushBaseState):
     """Decide whether another target remains."""
 
     def __init__(self, ctx):
-        super().__init__(ctx, outcomes=["next", "finished", "retreat", "aborted"])
+        super().__init__(ctx, outcomes=["next", "level_hover", "retreat", "aborted"])
 
     def execute(self, userdata):
         if self.preempt_requested():
@@ -752,7 +754,7 @@ class SelectState(PushBaseState):
         n = len(self.ctx.push_targets)
         if idx >= n:
             rospy.loginfo("PUSH/SELECT: all %d target(s) done.", n)
-            return "finished"
+            return "level_hover"
         target = self.ctx.push_targets[idx]
         self.ctx.prepare_target_retreat(target)
         if self.ctx.is_back_requested():
@@ -1125,7 +1127,7 @@ class RetreatState(PushBaseState):
     """Unload the force by ramping back to the standoff pose, then advance the index."""
 
     def __init__(self, ctx):
-        super().__init__(ctx, outcomes=["retreated", "aborted"])
+        super().__init__(ctx, outcomes=["retreated", "level_hover", "aborted"])
 
     def execute(self, userdata):
         # The initiating request has already been consumed. Any repeated key press
@@ -1168,6 +1170,7 @@ class RetreatState(PushBaseState):
             rospy.logerr("PUSH/RETREAT: failed to reach standoff (%s).", move_result.reason)
             return "aborted"
 
+        p_retreat_end = p_standoff
         if p_return is not None and not np.allclose(p_standoff, p_return):
             rospy.loginfo(
                 "PUSH/RETREAT: clear of wall; returning to initial standoff %s ...",
@@ -1186,8 +1189,10 @@ class RetreatState(PushBaseState):
             if move_result.reason != "reached":
                 rospy.logerr("PUSH/RETREAT: failed to return to initial standoff (%s).", move_result.reason)
                 return "aborted"
+            p_retreat_end = p_return
 
         should_finish = self.ctx.finish_after_retreat
+        self.ctx.hover_p = p_retreat_end.copy()
         self.ctx.contact_p = None
         self.ctx.retreat_start_p = None
         self.ctx.retreat_standoff_p = None
@@ -1195,10 +1200,56 @@ class RetreatState(PushBaseState):
         self.ctx.finish_after_retreat = False
         if should_finish:
             rospy.logwarn("PUSH/RETREAT: safe retreat completed; terminating the push task.")
-            return "aborted"
+            return "level_hover"
 
         self.ctx.target_idx += 1
         return "retreated"
+
+
+class LevelHoverState(PushBaseState):
+    """Hold position while smoothly returning the vehicle attitude to level."""
+
+    def __init__(self, ctx):
+        super().__init__(ctx, outcomes=["hovering", "aborted"])
+
+    def execute(self, userdata):
+        io = self.ctx.io
+        p = np.array(self.ctx.hover_p, dtype=float) if self.ctx.hover_p is not None else io.get_position()
+        q_level = R.from_euler("xyz", [0.0, 0.0, 0.0]).as_quat()
+
+        self.ctx.consume_back_request()
+        rospy.loginfo("PUSH/LEVEL_HOVER: returning to level attitude while holding %s ...", np.round(p, 3).tolist())
+        move_result = self._move_at_speed(
+            io,
+            p,
+            p,
+            q_level,
+            self.ALIGN_SPEED,
+            self.T_ALIGN_TIMEOUT,
+            q_from=io.get_orientation_xyzw(),
+            ang_speed=self.ALIGN_ANG_SPEED,
+            allow_back=False,
+        )
+        if move_result.reason != "reached":
+            rospy.logerr("PUSH/LEVEL_HOVER: attitude ramp failed (%s).", move_result.reason)
+            return "aborted"
+
+        t_start = rospy.Time.now().to_sec()
+        while not rospy.is_shutdown():
+            if self.preempt_requested():
+                self.service_preempt()
+                return "aborted"
+
+            io.publish_pose_ref(p, q_level)
+            if io.reached_pose(p, q_level, self.ALIGN_POS_TOL, self.ALIGN_ANG_TOL, self.ALIGN_VEL_TOL):
+                rospy.loginfo("PUSH/LEVEL_HOVER: level hovering pose reached.")
+                return "hovering"
+            if rospy.Time.now().to_sec() - t_start > self.T_ALIGN_TIMEOUT:
+                rospy.logerr("PUSH/LEVEL_HOVER: settle timeout.")
+                return "aborted"
+            self.rate.sleep()
+
+        return "aborted"
 
 
 class FinishPushState(smach.State):
@@ -1240,7 +1291,7 @@ def create_push_state_machine(
             SelectState(ctx),
             transitions={
                 "next": "ALIGN",
-                "finished": "FINISH_PUSH",
+                "level_hover": "LEVEL_HOVER",
                 "retreat": "RETREAT",
                 "aborted": "FINISH_PUSH",
             },
@@ -1284,7 +1335,16 @@ def create_push_state_machine(
         smach.StateMachine.add(
             "RETREAT",
             RetreatState(ctx),
-            transitions={"retreated": "SELECT", "aborted": "FINISH_PUSH"},
+            transitions={
+                "retreated": "SELECT",
+                "level_hover": "LEVEL_HOVER",
+                "aborted": "FINISH_PUSH",
+            },
+        )
+        smach.StateMachine.add(
+            "LEVEL_HOVER",
+            LevelHoverState(ctx),
+            transitions={"hovering": "FINISH_PUSH", "aborted": "FINISH_PUSH"},
         )
         smach.StateMachine.add(
             "FINISH_PUSH",
