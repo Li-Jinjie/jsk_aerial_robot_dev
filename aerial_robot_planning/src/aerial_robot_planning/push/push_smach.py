@@ -1243,6 +1243,12 @@ class LevelHoverState(PushBaseState):
             io.publish_pose_ref(p, q_level)
             if io.reached_pose(p, q_level, self.ALIGN_POS_TOL, self.ALIGN_ANG_TOL, self.ALIGN_VEL_TOL):
                 rospy.loginfo("PUSH/LEVEL_HOVER: level hovering pose reached.")
+                service_name = f"/{self.ctx.robot_name}/controller/wrench_est/calibrate"
+                try:
+                    rospy.ServiceProxy(service_name, Trigger)()
+                    rospy.loginfo("PUSH/LEVEL_HOVER: sent wrench estimator calibration request.")
+                except rospy.ServiceException as error:
+                    rospy.logwarn("PUSH/LEVEL_HOVER: failed to send calibration request: %s", error)
                 return "hovering"
             if rospy.Time.now().to_sec() - t_start > self.T_ALIGN_TIMEOUT:
                 rospy.logerr("PUSH/LEVEL_HOVER: settle timeout.")
