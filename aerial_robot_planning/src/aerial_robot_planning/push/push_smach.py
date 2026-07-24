@@ -13,8 +13,14 @@
 
 from collections import deque
 from dataclasses import dataclass
+import os
+import select
+import sys
+import termios
 import threading
+import time
 from typing import List, Tuple, Optional, Sequence
+import tty
 
 import numpy as np
 import rospy
@@ -66,6 +72,91 @@ class MoveResult:
 
     position: np.ndarray
     reason: str
+
+
+class TerminalBackMonitor:
+    """Watch a terminal for one non-blocking retreat key press."""
+
+    def __init__(
+        self,
+        key: str,
+        back_requested: threading.Event,
+        input_stream=None,
+        poll_period: float = 0.02,
+    ):
+        self.key = key.lower()
+        self.back_requested = back_requested
+        self.input_stream = input_stream if input_stream is not None else sys.stdin
+        self.poll_period = poll_period
+        self._fd = None
+        self._saved_termios = None
+        self._stop_requested = threading.Event()
+        self._thread = None
+
+    def start(self) -> bool:
+        """Enter cbreak mode and start monitoring. Return false for non-TTY input."""
+        if self._thread is not None and self._thread.is_alive():
+            return True
+
+        try:
+            self._fd = self.input_stream.fileno()
+            if not os.isatty(self._fd):
+                rospy.logwarn(
+                    "PUSH/INIT: stdin is not a terminal; the '%s' retreat shortcut is unavailable.",
+                    self.key,
+                )
+                self._fd = None
+                return False
+            self._saved_termios = termios.tcgetattr(self._fd)
+            tty.setcbreak(self._fd, termios.TCSANOW)
+        except (AttributeError, OSError, termios.error) as error:
+            rospy.logwarn("PUSH/INIT: failed to enable the retreat shortcut: %s", error)
+            self._restore_terminal()
+            return False
+
+        self._stop_requested.clear()
+        self._thread = threading.Thread(target=self._run, name="push_back_key", daemon=True)
+        self._thread.start()
+        rospy.loginfo("PUSH: press '%s' at any time to retreat and return to IDLE.", self.key)
+        return True
+
+    def _run(self) -> None:
+        while not self._stop_requested.is_set() and not rospy.is_shutdown():
+            try:
+                readable, _, _ = select.select([self._fd], [], [], self.poll_period)
+                if not readable:
+                    continue
+                key = os.read(self._fd, 1).decode(errors="ignore").lower()
+            except (OSError, ValueError):
+                break
+
+            if key == self.key and not self.back_requested.is_set():
+                self.back_requested.set()
+                rospy.logwarn("PUSH: operator requested retreat with '%s'.", self.key)
+
+    def stop(self) -> None:
+        """Stop monitoring, discard pending keystrokes, and restore terminal settings."""
+        self._stop_requested.set()
+        if self._thread is not None and self._thread is not threading.current_thread():
+            self._thread.join(timeout=max(0.1, 2.0 * self.poll_period))
+        self._thread = None
+
+        if self._fd is not None:
+            try:
+                while select.select([self._fd], [], [], 0.0)[0]:
+                    os.read(self._fd, 1024)
+            except (OSError, ValueError):
+                pass
+        self._restore_terminal()
+
+    def _restore_terminal(self) -> None:
+        if self._fd is not None and self._saved_termios is not None:
+            try:
+                termios.tcsetattr(self._fd, termios.TCSADRAIN, self._saved_termios)
+            except (OSError, termios.error):
+                pass
+        self._saved_termios = None
+        self._fd = None
 
 
 # The first target reproduces the original PushWallTraj attitude because the default
@@ -288,10 +379,32 @@ class PushContext:
         self.min_force_samples = 20
         self.contact_peak_window = 0.10
         self.contact_confirm_timeout = 0.50
+        self.back_key = "b"
+        self.back_requested = threading.Event()
+        self.back_monitor: Optional[TerminalBackMonitor] = None
+        rospy.on_shutdown(self.stop_back_monitor)
 
     def select_task(self, task_idx: int) -> None:
         task = self.push_tasks[task_idx]
         self.push_targets = list(task.targets)
+
+    def start_back_monitor(self) -> None:
+        self.stop_back_monitor()
+        self.back_requested.clear()
+        self.back_monitor = TerminalBackMonitor(self.back_key, self.back_requested)
+        self.back_monitor.start()
+
+    def stop_back_monitor(self) -> None:
+        if self.back_monitor is not None:
+            self.back_monitor.stop()
+            self.back_monitor = None
+        self.back_requested.clear()
+
+    def is_back_requested(self) -> bool:
+        return self.back_requested.is_set()
+
+    def consume_back_request(self) -> None:
+        self.back_requested.clear()
 
 
 # ======================================================================================
@@ -348,11 +461,13 @@ class PushBaseState(smach.State):
         contact_peak_window=0.0,
         q_from=None,
         ang_speed=None,
+        allow_back=True,
     ) -> MoveResult:
         """Advance the pose reference from p_from to p_to at a constant speed.
 
         Returns both the last commanded position and the stop reason. The reason is one
-        of ``reached``, ``contact``, ``timeout``, ``preempted``, or ``shutdown``.
+        of ``reached``, ``contact``, ``back_requested``, ``timeout``, ``preempted``,
+        or ``shutdown``.
 
         By default the orientation is held constant at ``q``. If ``q_from`` is given, the
         orientation is slerped from ``q_from`` to ``q`` over the ramp, and progress is
@@ -384,6 +499,8 @@ class PushBaseState(smach.State):
                 self.service_preempt()
                 rospy.logwarn("PUSH: move preempted.")
                 return MoveResult(p, "preempted")
+            if allow_back and self.ctx.is_back_requested():
+                return MoveResult(p, "back_requested")
 
             t = rospy.Time.now().to_sec() - t_start
             s = min(t / T, 1.0) if T > 1e-9 else 1.0
@@ -413,6 +530,12 @@ class PushBaseState(smach.State):
 
         return MoveResult(p, "shutdown")
 
+    def _prepare_operator_retreat(self, position: np.ndarray) -> None:
+        self.ctx.consume_back_request()
+        self.ctx.retreat_start_p = np.array(position, dtype=float)
+        self.ctx.finish_after_retreat = True
+        rospy.logwarn("PUSH: entering RETREAT at the operator's request.")
+
 
 # ======================================================================================
 # States
@@ -428,6 +551,7 @@ class InitPushState(PushBaseState):
         super().__init__(ctx, outcomes=["start", "failed"], input_keys=["robot_name"])
 
     def execute(self, userdata):
+        self.ctx.stop_back_monitor()
         self.ctx.target_idx = 0
         self.ctx.contact_p = None
         self.ctx.retreat_start_p = None
@@ -455,6 +579,7 @@ class InitPushState(PushBaseState):
             self.ctx.min_force_samples = int(rospy.get_param(f"{push_param_ns}/min_force_samples", 20))
             self.ctx.contact_peak_window = float(rospy.get_param(f"{push_param_ns}/contact_peak_window", 0.10))
             self.ctx.contact_confirm_timeout = float(rospy.get_param(f"{push_param_ns}/contact_confirm_timeout", 0.50))
+            self.ctx.back_key = str(rospy.get_param(f"{push_param_ns}/back_key", "b")).lower()
         except (TypeError, ValueError):
             rospy.logerr("PUSH/INIT: invalid force safety parameter type.")
             return "failed"
@@ -470,6 +595,9 @@ class InitPushState(PushBaseState):
             return "failed"
         if not np.isfinite(self.ctx.contact_confirm_timeout) or self.ctx.contact_confirm_timeout <= 0.0:
             rospy.logerr("PUSH/INIT: contact_confirm_timeout must be finite and positive.")
+            return "failed"
+        if len(self.ctx.back_key) != 1:
+            rospy.logerr("PUSH/INIT: back_key must contain exactly one character.")
             return "failed"
 
         rospy.loginfo(
@@ -511,6 +639,7 @@ class InitPushState(PushBaseState):
                 rospy.logerr(f"PUSH/INIT: failed to initialize IO: {e}")
                 return "failed"
 
+        self.ctx.start_back_monitor()
         return "start"
 
 
@@ -518,7 +647,7 @@ class SelectState(PushBaseState):
     """Decide whether another target remains."""
 
     def __init__(self, ctx):
-        super().__init__(ctx, outcomes=["next", "finished", "aborted"])
+        super().__init__(ctx, outcomes=["next", "finished", "retreat", "aborted"])
 
     def execute(self, userdata):
         if self.preempt_requested():
@@ -530,6 +659,9 @@ class SelectState(PushBaseState):
         if idx >= n:
             rospy.loginfo("PUSH/SELECT: all %d target(s) done.", n)
             return "finished"
+        if self.ctx.is_back_requested():
+            self._prepare_operator_retreat(self.ctx.io.get_position())
+            return "retreat"
 
         rospy.loginfo("PUSH/SELECT: starting target %d / %d.", idx + 1, n)
         return "next"
@@ -539,7 +671,7 @@ class AlignState(PushBaseState):
     """Move to the standoff pose with the end-effector facing the surface normal."""
 
     def __init__(self, ctx):
-        super().__init__(ctx, outcomes=["aligned", "aborted"])
+        super().__init__(ctx, outcomes=["aligned", "retreat", "aborted"])
 
     def execute(self, userdata):
         io = self.ctx.io
@@ -562,6 +694,9 @@ class AlignState(PushBaseState):
             q_from=q0,
             ang_speed=self.ALIGN_ANG_SPEED,
         )
+        if move_result.reason == "back_requested":
+            self._prepare_operator_retreat(move_result.position)
+            return "retreat"
         if move_result.reason != "reached":
             rospy.logerr("PUSH/ALIGN: failed to reach the standoff (%s).", move_result.reason)
             return "aborted"
@@ -572,6 +707,9 @@ class AlignState(PushBaseState):
             if self.preempt_requested():
                 self.service_preempt()
                 return "aborted"
+            if self.ctx.is_back_requested():
+                self._prepare_operator_retreat(p)
+                return "retreat"
 
             io.publish_pose_ref(p, q)
             if io.reached_pose(p, q, self.ALIGN_POS_TOL, self.ALIGN_ANG_TOL, self.ALIGN_VEL_TOL):
@@ -589,7 +727,7 @@ class CalibrateState(PushBaseState):
     """Calibrate the wrench estimator while off-contact (runs before every push)."""
 
     def __init__(self, ctx):
-        super().__init__(ctx, outcomes=["calibrated", "aborted"])
+        super().__init__(ctx, outcomes=["calibrated", "retreat", "aborted"])
 
     def execute(self, userdata):
         io = self.ctx.io
@@ -598,17 +736,36 @@ class CalibrateState(PushBaseState):
         q = _quat_for_target(target, self.ctx.body_z_rotation_override)
 
         service_name = f"/{self.ctx.robot_name}/controller/wrench_est/calibrate"
+        service_deadline = time.monotonic() + 3.0
         try:
             rospy.loginfo("PUSH/CALIBRATE: waiting for %s ...", service_name)
-            rospy.wait_for_service(service_name, timeout=3.0)
+            while not rospy.is_shutdown():
+                if self.ctx.is_back_requested():
+                    self._prepare_operator_retreat(p)
+                    return "retreat"
+                remaining = service_deadline - time.monotonic()
+                if remaining <= 0.0:
+                    rospy.logerr("PUSH/CALIBRATE: service wait timeout for %s.", service_name)
+                    return "aborted"
+                try:
+                    rospy.wait_for_service(service_name, timeout=min(0.1, remaining))
+                    break
+                except rospy.ROSException:
+                    continue
+
+            if rospy.is_shutdown():
+                return "aborted"
+            if self.ctx.is_back_requested():
+                self._prepare_operator_retreat(p)
+                return "retreat"
             response = rospy.ServiceProxy(service_name, Trigger)()
+            if self.ctx.is_back_requested():
+                self._prepare_operator_retreat(p)
+                return "retreat"
             if not response.success:
                 rospy.logerr("PUSH/CALIBRATE: calibration rejected: %s", response.message)
                 return "aborted"
             rospy.loginfo("PUSH/CALIBRATE: calibration succeeded: %s", response.message)
-        except rospy.ROSException as e:
-            rospy.logerr(f"PUSH/CALIBRATE: service wait timeout for {service_name}: {e}")
-            return "aborted"
         except rospy.ServiceException as e:
             rospy.logerr(f"PUSH/CALIBRATE: failed to call {service_name}: {e}")
             return "aborted"
@@ -619,6 +776,9 @@ class CalibrateState(PushBaseState):
             if self.preempt_requested():
                 self.service_preempt()
                 return "aborted"
+            if self.ctx.is_back_requested():
+                self._prepare_operator_retreat(p)
+                return "retreat"
             io.publish_pose_ref(p, q)
             self.rate.sleep()
 
@@ -629,7 +789,7 @@ class ApproachState(PushBaseState):
     """Ramp the reference from standoff to the contact pose until contact is sensed."""
 
     def __init__(self, ctx):
-        super().__init__(ctx, outcomes=["contact", "aborted"])
+        super().__init__(ctx, outcomes=["contact", "retreat", "aborted"])
 
     def execute(self, userdata):
         io = self.ctx.io
@@ -658,6 +818,9 @@ class ApproachState(PushBaseState):
         )
 
         self.ctx.retreat_start_p = move_result.position
+        if move_result.reason == "back_requested":
+            self._prepare_operator_retreat(move_result.position)
+            return "retreat"
         if move_result.reason == "reached":
             rospy.loginfo(
                 "PUSH/APPROACH: nominal point reached; holding for %.2f s to confirm contact.",
@@ -669,6 +832,9 @@ class ApproachState(PushBaseState):
                     self.service_preempt()
                     self.ctx.finish_after_retreat = True
                     return "aborted"
+                if self.ctx.is_back_requested():
+                    self._prepare_operator_retreat(move_result.position)
+                    return "retreat"
 
                 io.publish_pose_ref(move_result.position, q)
                 contact_force = io.peak_contact_force_along(approach_dir, self.ctx.contact_peak_window)
@@ -708,7 +874,7 @@ class ApplyForceState(PushBaseState):
     """Accumulate the initial contact force, then over-shoot to reach desired_force."""
 
     def __init__(self, ctx):
-        super().__init__(ctx, outcomes=["applied", "aborted"])
+        super().__init__(ctx, outcomes=["applied", "retreat", "aborted"])
 
     def execute(self, userdata):
         io = self.ctx.io
@@ -727,6 +893,9 @@ class ApplyForceState(PushBaseState):
                 self.ctx.retreat_start_p = p_contact
                 self.ctx.finish_after_retreat = True
                 return "aborted"
+            if self.ctx.is_back_requested():
+                self._prepare_operator_retreat(p_contact)
+                return "retreat"
 
             io.publish_pose_ref(p_contact, q)
             f = io.contact_force_along(approach_dir)
@@ -737,6 +906,9 @@ class ApplyForceState(PushBaseState):
 
         if rospy.is_shutdown():
             return "aborted"
+        if self.ctx.is_back_requested():
+            self._prepare_operator_retreat(p_contact)
+            return "retreat"
         if force_num < self.ctx.min_force_samples:
             rospy.logerr(
                 "PUSH/APPLY: only %d valid force samples (minimum %d); retreating.",
@@ -808,6 +980,9 @@ class ApplyForceState(PushBaseState):
                 self.ctx.retreat_start_p = p
                 self.ctx.finish_after_retreat = True
                 return "aborted"
+            if self.ctx.is_back_requested():
+                self._prepare_operator_retreat(p)
+                return "retreat"
 
             t = rospy.Time.now().to_sec() - t_start
             if t >= t_total:
@@ -837,6 +1012,9 @@ class RetreatState(PushBaseState):
         super().__init__(ctx, outcomes=["retreated", "aborted"])
 
     def execute(self, userdata):
+        # The initiating request has already been consumed. Any repeated key press
+        # during RETREAT is deliberately ignored so the safe motion can complete.
+        self.ctx.consume_back_request()
         io = self.ctx.io
         target = self.ctx.push_targets[self.ctx.target_idx]
         p_standoff = np.array(target.standoff_pos, dtype=float)
@@ -853,7 +1031,18 @@ class RetreatState(PushBaseState):
             np.round(p_standoff, 3).tolist(),
             self.RETREAT_SPEED,
         )
-        move_result = self._move_at_speed(io, p_start, p_standoff, q, self.RETREAT_SPEED, self.RETREAT_TIMEOUT)
+        move_result = self._move_at_speed(
+            io,
+            p_start,
+            p_standoff,
+            q,
+            self.RETREAT_SPEED,
+            self.RETREAT_TIMEOUT,
+            q_from=io.get_orientation_xyzw(),
+            ang_speed=self.ALIGN_ANG_SPEED,
+            allow_back=False,
+        )
+        self.ctx.consume_back_request()
         if move_result.reason != "reached":
             rospy.logerr("PUSH/RETREAT: failed to reach standoff (%s).", move_result.reason)
             return "aborted"
@@ -868,6 +1057,18 @@ class RetreatState(PushBaseState):
 
         self.ctx.target_idx += 1
         return "retreated"
+
+
+class FinishPushState(smach.State):
+    """Restore terminal input before handing control back to the parent IDLE state."""
+
+    def __init__(self, ctx):
+        smach.State.__init__(self, outcomes=["done"])
+        self.ctx = ctx
+
+    def execute(self, userdata):
+        self.ctx.stop_back_monitor()
+        return "done"
 
 
 # ======================================================================================
@@ -890,41 +1091,63 @@ def create_push_state_machine(
         smach.StateMachine.add(
             "INIT_PUSH",
             InitPushState(ctx),
-            transitions={"start": "SELECT", "failed": "DONE_PUSH"},
+            transitions={"start": "SELECT", "failed": "FINISH_PUSH"},
         )
         smach.StateMachine.add(
             "SELECT",
             SelectState(ctx),
             transitions={
                 "next": "ALIGN",
-                "finished": "DONE_PUSH",
-                "aborted": "DONE_PUSH",
+                "finished": "FINISH_PUSH",
+                "retreat": "RETREAT",
+                "aborted": "FINISH_PUSH",
             },
         )
         smach.StateMachine.add(
             "ALIGN",
             AlignState(ctx),
-            transitions={"aligned": "CALIBRATE", "aborted": "DONE_PUSH"},
+            transitions={
+                "aligned": "CALIBRATE",
+                "retreat": "RETREAT",
+                "aborted": "FINISH_PUSH",
+            },
         )
         smach.StateMachine.add(
             "CALIBRATE",
             CalibrateState(ctx),
-            transitions={"calibrated": "APPROACH", "aborted": "DONE_PUSH"},
+            transitions={
+                "calibrated": "APPROACH",
+                "retreat": "RETREAT",
+                "aborted": "FINISH_PUSH",
+            },
         )
         smach.StateMachine.add(
             "APPROACH",
             ApproachState(ctx),
-            transitions={"contact": "APPLY", "aborted": "RETREAT"},
+            transitions={
+                "contact": "APPLY",
+                "retreat": "RETREAT",
+                "aborted": "RETREAT",
+            },
         )
         smach.StateMachine.add(
             "APPLY",
             ApplyForceState(ctx),
-            transitions={"applied": "RETREAT", "aborted": "RETREAT"},
+            transitions={
+                "applied": "RETREAT",
+                "retreat": "RETREAT",
+                "aborted": "RETREAT",
+            },
         )
         smach.StateMachine.add(
             "RETREAT",
             RetreatState(ctx),
-            transitions={"retreated": "SELECT", "aborted": "DONE_PUSH"},
+            transitions={"retreated": "SELECT", "aborted": "FINISH_PUSH"},
+        )
+        smach.StateMachine.add(
+            "FINISH_PUSH",
+            FinishPushState(ctx),
+            transitions={"done": "DONE_PUSH"},
         )
 
     return sm_sub
