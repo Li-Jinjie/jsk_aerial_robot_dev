@@ -415,10 +415,13 @@ void nmpc::TiltMtServoNMPC::updateInertialParams()
   mass_ = robot_model_->getMass();
   gravity_const_ = robot_model_->getGravity()[2];
   Eigen::Matrix3d inertia_mtx = robot_model_->getInertia<Eigen::Matrix3d>();
-  inertia_.resize(3);
+  inertia_.resize(6);
   inertia_[0] = inertia_mtx(0, 0);
   inertia_[1] = inertia_mtx(1, 1);
   inertia_[2] = inertia_mtx(2, 2);
+  inertia_[3] = inertia_mtx(0, 1);
+  inertia_[4] = inertia_mtx(0, 2);
+  inertia_[5] = inertia_mtx(1, 2);
 }
 
 void nmpc::TiltMtServoNMPC::modifyVelConstraints(double vel_min, double vel_max) const
@@ -460,16 +463,19 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
   const map<int, int> rotor_dr = robot_model_->getRotorDirection();
   double kq_d_kt = abs(robot_model_->getMFRate());  // PAY ATTENTION: should be positive value
 
-  std::vector<double> phys_p(2 + 3 + 1 + 4 * rotor_num + 2 + 7, 0);
-  // order: mass, gravity, Ixx, Iyy, Izz, kq_d_kt, dr1, p1_b, dr2, p2_b, dr3, p3_b, dr4, p4_b, t_rotor, t_servo
-  // ee_p, ee_qwxyz
+  std::vector<double> phys_p(2 + 6 + 1 + 4 * rotor_num + 2 + 7, 0);
+  // order: mass, gravity, Ixx, Iyy, Izz, Ixy, Ixz, Iyz, kq_d_kt,
+  // dr1, p1_b, ..., drN, pN_b, t_rotor, t_servo, ee_p, ee_qwxyz
   phys_p[0] = mass_;
   phys_p[1] = gravity_const_;
   phys_p[2] = inertia_[0];
   phys_p[3] = inertia_[1];
   phys_p[4] = inertia_[2];
-  phys_p[5] = kq_d_kt;
-  int idx = 6;
+  phys_p[5] = inertia_[3];
+  phys_p[6] = inertia_[4];
+  phys_p[7] = inertia_[5];
+  phys_p[8] = kq_d_kt;
+  int idx = 9;
   for (int i = 0; i < rotor_num; i++)
   {
     phys_p[idx] = rotor_dr.find(i + 1)->second;
@@ -689,9 +695,11 @@ void nmpc::TiltMtServoNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::V
   ref_wrench_b(0) = ref_acc_b(0) * mass_;
   ref_wrench_b(1) = ref_acc_b(1) * mass_;
   ref_wrench_b(2) = ref_acc_b(2) * mass_;
-  ref_wrench_b(3) = ref_ang_acc_b.x() * inertia_.at(0);
-  ref_wrench_b(4) = ref_ang_acc_b.y() * inertia_.at(1);
-  ref_wrench_b(5) = ref_ang_acc_b.z() * inertia_.at(2);
+  Eigen::Matrix3d inertia_matrix;
+  inertia_matrix << inertia_.at(0), inertia_.at(3), inertia_.at(4), inertia_.at(3), inertia_.at(1), inertia_.at(5),
+      inertia_.at(4), inertia_.at(5), inertia_.at(2);
+  const Eigen::Vector3d reference_angular_acceleration(ref_ang_acc_b.x(), ref_ang_acc_b.y(), ref_ang_acc_b.z());
+  ref_wrench_b.tail<3>() = inertia_matrix * reference_angular_acceleration;
 
   /* calculate X U from ref, aka. control allocation */
   std::vector<double> x(NX);

@@ -28,8 +28,14 @@ class FakeSensor:
         self.mass = self.phys.mass
         self.gravity = self.phys.gravity
 
-        self.I = np.diag([self.phys.Ixx, self.phys.Iyy, self.phys.Izz])
-        self.I_inv = np.diag([1 / self.phys.Ixx, 1 / self.phys.Iyy, 1 / self.phys.Izz])
+        self.I = np.array(
+            [
+                [self.phys.Ixx, self.phys.Ixy, self.phys.Ixz],
+                [self.phys.Ixy, self.phys.Iyy, self.phys.Iyz],
+                [self.phys.Ixz, self.phys.Iyz, self.phys.Izz],
+            ]
+        )
+        self.I_inv = np.linalg.inv(self.I)
         self.g_i = np.array([0, 0, -self.phys.gravity])
 
         self.dr1 = self.phys.dr1

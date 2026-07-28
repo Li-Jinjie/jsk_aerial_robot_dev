@@ -182,6 +182,9 @@ class QDNMPCBase(RecedingHorizonBase):
         Ixx = ca.SX.sym("Ixx")
         Iyy = ca.SX.sym("Iyy")
         Izz = ca.SX.sym("Izz")
+        Ixy = ca.SX.sym("Ixy")
+        Ixz = ca.SX.sym("Ixz")
+        Iyz = ca.SX.sym("Iyz")
 
         kq_d_kt = ca.SX.sym("kq_d_kt")
 
@@ -206,7 +209,7 @@ class QDNMPCBase(RecedingHorizonBase):
         self.ee_q = ca.SX.sym("ee_qwxyz", 4)  # qw, qx, qy, qz
 
         # Build phy_params by interleaving dr and p_b for each rotor
-        phy_params = ca.vertcat(mass, gravity, Ixx, Iyy, Izz, kq_d_kt)
+        phy_params = ca.vertcat(mass, gravity, Ixx, Iyy, Izz, Ixy, Ixz, Iyz, kq_d_kt)
         for i in range(self.num_rotors):
             phy_params = ca.vertcat(phy_params, dr_list[i], p_b_list[i])
         phy_params = ca.vertcat(phy_params, t_rotor, t_servo, self.ee_p, self.ee_q)
@@ -306,8 +309,12 @@ class QDNMPCBase(RecedingHorizonBase):
 
 
         # Compute Inertia
-        I = ca.diag(ca.vertcat(Ixx, Iyy, Izz))
-        I_inv = ca.diag(ca.vertcat(1 / Ixx, 1 / Iyy, 1 / Izz))
+        I = ca.vertcat(
+            ca.horzcat(Ixx, Ixy, Ixz),
+            ca.horzcat(Ixy, Iyy, Iyz),
+            ca.horzcat(Ixz, Iyz, Izz),
+        )
+        I_inv = ca.inv(I)
         g_w = ca.vertcat(0, 0, -gravity)  # World frame
 
         # Dynamic model (Time-derivative of state)
@@ -646,11 +653,13 @@ class QDNMPCBase(RecedingHorizonBase):
         ocp.cost.yref_e = x_ref
 
         # Model parameters
-        # same order: phy_params = ca.vertcat(mass, gravity, inertia, kq_d_kt, dr, p1_b, p2_b, p3_b, p4_b, t_rotor, t_servo)
+        # same order: mass, gravity, Ixx, Iyy, Izz, Ixy, Ixz, Iyz,
+        # kq_d_kt, dr/p_b per rotor, t_rotor, t_servo, ee_p, ee_q
         self.acados_init_p = np.zeros(n_param)
         self.acados_init_p[0] = x_ref[6]  # qw
-        expected_param_length = 6 + 4 * self.num_rotors + 2 + 7
-        # mass, gravity, inertia(3), kq_d_kt + 4*num_rotors*(dr+p_b(3)) + t_rotor, t_servo + ee_p(3), ee_q(4)
+        expected_param_length = 9 + 4 * self.num_rotors + 2 + 7
+        # mass, gravity, inertia(6), kq_d_kt + 4*num_rotors*(dr+p_b(3))
+        # + t_rotor, t_servo + ee_p(3), ee_q(4)
         if len(self.phys.physical_param_list) != expected_param_length:
             raise ValueError(
                 f"Physical parameters length mismatch. Expected {expected_param_length} for {self.num_rotors} rotors, got {len(self.phys.physical_param_list)}."
@@ -703,7 +712,8 @@ class QDNMPCBase(RecedingHorizonBase):
         acados_sim.model = ocp_model
 
         n_param = ocp_model.p.size()[0]
-        # same order: phy_params = ca.vertcat(mass, gravity, inertia, kq_d_kt, dr, p1_b, p2_b, p3_b, p4_b, t_rotor, t_servo)
+        # same order: mass, gravity, inertia(6), kq_d_kt, dr/p_b per
+        # rotor, t_rotor, t_servo, ee_p, ee_q
         self.acados_init_p = np.zeros(n_param)
         self.acados_init_p[0] = 1.0  # qw
         self.acados_init_p[4 : 4 + len(self.phys.physical_param_list)] = np.array(self.phys.physical_param_list)

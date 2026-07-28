@@ -7,6 +7,9 @@ gravity = 9.798
 Ixx = 0.04170
 Iyy = 0.03945
 Izz = 0.07068
+Ixy = 0.0
+Ixz = 0.0
+Iyz = 0.0
 dr1 = 1
 p1_b = [0.137712, 0.137882, 0.0297217]
 dr2 = -1
@@ -29,7 +32,7 @@ c4 = -0.02439
 # fmt: off
 # concatenate the parameters to make a new list
 physical_param_list = [
-    mass, gravity, Ixx, Iyy, Izz,
+    mass, gravity, Ixx, Iyy, Izz, Ixy, Ixz, Iyz,
     kq_d_kt,
     dr1, p1_b[0], p1_b[1], p1_b[2],
     dr2, p2_b[0], p2_b[1], p2_b[2],

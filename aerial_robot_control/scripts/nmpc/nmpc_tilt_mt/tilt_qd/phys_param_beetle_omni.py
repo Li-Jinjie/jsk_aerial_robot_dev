@@ -7,6 +7,9 @@ gravity = 9.798
 Ixx = 0.0627958
 Iyy = 0.0620796
 Izz = 0.0948795
+Ixy = 0.0
+Ixz = 0.0
+Iyz = 0.0
 dr1 = 1
 dr2 = -1
 dr3 = 1
@@ -26,7 +29,7 @@ ball_effector_q = [1, 0, 0, 0]  # qw, qx, qy, qz
 # concatenate the parameters to make a new list
 # fmt: off
 physical_param_list = [
-    mass, gravity, Ixx, Iyy, Izz,
+    mass, gravity, Ixx, Iyy, Izz, Ixy, Ixz, Iyz,
     kq_d_kt,
     dr1, p1_b[0], p1_b[1], p1_b[2],
     dr2, p2_b[0], p2_b[1], p2_b[2],
