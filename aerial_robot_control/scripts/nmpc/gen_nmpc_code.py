@@ -3,6 +3,7 @@
 import argparse
 
 from nmpc_tilt_mt.archive import *
+from nmpc_tilt_mt.dragon import *
 from nmpc_tilt_mt.fix_qd import *
 from nmpc_tilt_mt.mhe import *
 from nmpc_tilt_mt.tilt_bi import *
