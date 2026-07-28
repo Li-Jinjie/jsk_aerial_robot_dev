@@ -18,7 +18,7 @@ protected:
   void initNMPCCostW() override;
   void initNMPCParams() override;
 
-  void controlCore(bool is_warmup = false) override;
+  void updateBeforeNMPCSolve(bool is_warmup) override;
   void sendCmd() override;
   std::vector<double> meas2VecX(bool is_modified_by_traj_frame) override;
   void allocateToXU(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i, const tf::Quaternion& ref_quat_ib,

@@ -105,12 +105,12 @@ void nmpc::TiltMtServoForceImpNMPC::updateForceAndLeverArmTorque()
   lever_arm_torque_b_ = lever_arm_b.cross(force_b);
 }
 
-void nmpc::TiltMtServoForceImpNMPC::controlCore(bool is_warmup)
+void nmpc::TiltMtServoForceImpNMPC::updateBeforeNMPCSolve(bool is_warmup)
 {
+  TiltMtServoDistNMPC::updateBeforeNMPCSolve(is_warmup);
+
   if (!is_warmup)
   {
-    updateITerm();
-    updateDisturbWrench();
     updateForceAndLeverArmTorque();
   }
   else
@@ -118,8 +118,6 @@ void nmpc::TiltMtServoForceImpNMPC::controlCore(bool is_warmup)
     estimated_force_w_.setValue(0.0, 0.0, 0.0);
     lever_arm_torque_b_.setValue(0.0, 0.0, 0.0);
   }
-
-  TiltMtServoNMPC::controlCore(is_warmup);
 }
 
 std::vector<double> nmpc::TiltMtServoForceImpNMPC::meas2VecX(bool is_modified_by_traj_frame)

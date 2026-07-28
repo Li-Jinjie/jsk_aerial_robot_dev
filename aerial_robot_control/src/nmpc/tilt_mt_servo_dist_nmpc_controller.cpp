@@ -21,16 +21,14 @@ void nmpc::TiltMtServoDistNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle n
   pub_disturb_wrench_ = nh_.advertise<geometry_msgs::WrenchStamped>("ext_wrench_est/value", 1);
 }
 
-void nmpc::TiltMtServoDistNMPC::controlCore(bool is_warmup)
+void nmpc::TiltMtServoDistNMPC::updateBeforeNMPCSolve(bool is_warmup)
 {
   if (!is_warmup)
   {
     updateITerm();
 
-    updateDisturbWrench();  // should be called before controlCore of parent class to keep fresh
+    updateDisturbWrench();
   }
-
-  TiltMtServoNMPC::controlCore();
 }
 
 void nmpc::TiltMtServoDistNMPC::sendCmd()

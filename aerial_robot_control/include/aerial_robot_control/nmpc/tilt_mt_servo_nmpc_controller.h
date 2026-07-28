@@ -152,6 +152,9 @@ protected:
   void sendCmd() override;
 
   // controlCore()
+  virtual void updateBeforeNMPCSolve(bool is_warmup)
+  {
+  }
   void prepareNMPCRef() override;
   void prepareNMPCParams() override;
 

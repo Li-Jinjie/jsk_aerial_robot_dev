@@ -50,10 +50,10 @@ protected:
   void initAllocMat() override;
 
   /* update() */
-  void controlCore(bool is_warmup = false) override;
   void sendCmd() override;
 
   // controlCore()
+  void updateBeforeNMPCSolve(bool is_warmup) override;
   void prepareNMPCParams() override;
 
   /* utils */

@@ -377,6 +377,9 @@ void nmpc::TiltMtServoNMPC::initAllocMat()
   }
 
   alloc_mat_pinv_ = aerial_robot_model::pseudoinverse(alloc_mat_);
+
+  // The fixed-rotor inverse depends on alloc_mat_. Recalculate it on its next use.
+  fix_rotor_idx_prev_ = -1;
 }
 
 /* Note: The difference between this function and prepareNMPCParams() is:
@@ -510,6 +513,11 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
 
 void nmpc::TiltMtServoNMPC::controlCore(bool is_warmup)
 {
+  // Keep geometry-dependent quantities consistent with the latest robot model.
+  initAllocMat();
+  calcFtThresh();
+  updateBeforeNMPCSolve(is_warmup);
+
   // restore velocity constraints after hovering
   if (navigator_->getNaviState() == aerial_robot_navigation::HOVER_STATE and has_restored_vel_ == false)
   {
