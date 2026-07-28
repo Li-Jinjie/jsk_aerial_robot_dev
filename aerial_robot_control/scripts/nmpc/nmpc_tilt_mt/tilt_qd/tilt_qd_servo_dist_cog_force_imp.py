@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- encoding: ascii -*-
+# This version is the real running version of tilt_qd_servo_dist_force_imp.py by eliminate the EE conversion.
 import numpy as np
 import casadi as ca
 

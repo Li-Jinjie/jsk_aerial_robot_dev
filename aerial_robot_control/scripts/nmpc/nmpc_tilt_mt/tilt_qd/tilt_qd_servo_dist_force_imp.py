@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: ascii -*-
+# This version is the debug version that include the EE conversion.
+# For running, please use the tilt_qd_servo_dist_cog_force_imp.py
 import numpy as np
 import casadi as ca
 from .qd_nmpc_base import QDNMPCBase
