@@ -132,7 +132,7 @@ void nmpc::TiltMtServoNMPC::reset()
   gimbal_ctrl_cmd_.position.clear();
   for (int i = 0; i < joint_num_; i++)
   {
-    gimbal_ctrl_cmd_.name.emplace_back("gimbal" + std::to_string(i + 1));
+    gimbal_ctrl_cmd_.name.emplace_back(getServoJointName(i));
     gimbal_ctrl_cmd_.position.push_back(xr_vec[13 + i]);  // servo angle
   }
 
@@ -562,7 +562,7 @@ void nmpc::TiltMtServoNMPC::controlCore(bool is_warmup)
   gimbal_ctrl_cmd_.position.clear();
   for (int i = 0; i < joint_num_; i++)
   {
-    gimbal_ctrl_cmd_.name.emplace_back("gimbal" + std::to_string(i + 1));
+    gimbal_ctrl_cmd_.name.emplace_back(getServoJointName(i));
     gimbal_ctrl_cmd_.position.push_back(getCommand(motor_num_ + i));
   }
 }

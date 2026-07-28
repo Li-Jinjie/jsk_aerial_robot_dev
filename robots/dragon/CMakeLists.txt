@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 find_package(Eigen3 REQUIRED)
+find_package(acados)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
@@ -46,8 +47,13 @@ add_dependencies(dragon_sensor_pluginlib aerial_robot_msgs_generate_messages_cpp
 add_library(dragon_robot_model src/model/hydrus_like_robot_model.cpp src/model/full_vectoring_robot_model.cpp)
 target_link_libraries(dragon_robot_model ${catkin_LIBRARIES} ${NLOPT_LIBRARIES})
 
-add_library(dragon_aerial_robot_controllib src/control/lqi_gimbal_control.cpp src/control/full_vectoring_control.cpp)
-target_link_libraries (dragon_aerial_robot_controllib dragon_robot_model dragon_navigation dragon_sensor_pluginlib ${catkin_LIBRARIES} ${Eigen3_LIBRARIES})
+add_library(dragon_aerial_robot_controllib
+  src/control/lqi_gimbal_control.cpp
+  src/control/full_vectoring_control.cpp
+  src/control/dragon_gimbal_servo_dist_nmpc.cpp
+)
+target_link_libraries (dragon_aerial_robot_controllib dragon_robot_model dragon_navigation dragon_sensor_pluginlib
+  ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} acados)
 add_dependencies(dragon_aerial_robot_controllib aerial_robot_msgs_generate_messages_cpp)
 
 add_library(dragon_navigation src/dragon_navigation.cpp)
@@ -87,4 +93,3 @@ if(CATKIN_ENABLE_TESTING)
   find_package(rostest REQUIRED)
   add_subdirectory(test)
 endif()
-

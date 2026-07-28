@@ -1,0 +1,51 @@
+mpc_solver_name: aerial_robot_control::mpc_solver::DragonGimbalServoDistMdlMPCSolver
+aerial_robot_control_name: aerial_robot_control/dragon_gimbal_servo_dist_nmpc
+wrench_estimator_name: aerial_robot_control::WrenchEstNone
+
+physical:
+  num_rotors: 4
+  num_servos: 8
+  t_rotor: 0.01
+  t_servo: 0.08
+
+controller:
+  alloc:
+    type: 0
+    ft_thresh_bias: 1.5
+
+  nmpc:
+    T_samp: 0.0125
+    T_horizon: 2.0
+    T_step: 0.1
+
+    w_max: 6.0
+    w_min: -6.0
+    v_max: 1.0
+    v_min: -1.0
+
+    thrust_max: 30.0
+    thrust_min: 2.0
+    a_max: 3.14
+    a_min: -3.14
+    servo_rate_max: 12.5
+
+    Qp_xy: 300.0
+    Qp_z: 400.0
+    Qv_xy: 10.0
+    Qv_z: 10.0
+    Qq_xy: 300.0
+    Qq_z: 600.0
+    Qw_xy: 5.0
+    Qw_z: 5.0
+    Qa: 2.0
+    Qft: 0.0
+    Rt: 2.0
+    Rac_d: 250.0
+
+    is_attitude_ctrl: false
+    is_body_rate_ctrl: false
+    is_print_phys_params: false
+    is_debug: false
+
+  if_use_est_force_4_control: false
+  if_use_est_torque_4_control: false

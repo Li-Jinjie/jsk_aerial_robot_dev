@@ -10,6 +10,7 @@
 #include "aerial_robot_control/nmpc/fix_qd_thrust_out_mdl/nmpc_solver.h"
 
 // tilt quadrotor
+#include "aerial_robot_control/nmpc/dragon_gimbal_servo_dist_mdl/nmpc_solver.h"
 #include "aerial_robot_control/nmpc/tilt_qd_servo_mdl/nmpc_solver.h"
 #include "aerial_robot_control/nmpc/tilt_qd_servo_dist_cog_force_imp_mdl/nmpc_solver.h"
 #include "aerial_robot_control/nmpc/tilt_qd_servo_dist_mdl/nmpc_solver.h"
@@ -38,6 +39,8 @@ PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltQdServoDistImpMdlMP
 PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltQdServoThrustDistMdlMPCSolver,
                        aerial_robot_control::mpc_solver::BaseMPCSolver)
 PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltQdServoThrustDistImpMdlMPCSolver,
+                       aerial_robot_control::mpc_solver::BaseMPCSolver)
+PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::DragonGimbalServoDistMdlMPCSolver,
                        aerial_robot_control::mpc_solver::BaseMPCSolver)
 
 PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltTriServoMdlMPCSolver,

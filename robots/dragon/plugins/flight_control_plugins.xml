@@ -7,4 +7,8 @@
   <class name="aerial_robot_control/dragon_full_vectoring" type="aerial_robot_control::DragonFullVectoringController" base_class_type="aerial_robot_control::ControlBase">
     <description> dragon control plugin: full vectoring control for x,y,z,roll,pitch,yaw </description>
   </class>
+
+  <class name="aerial_robot_control/dragon_gimbal_servo_dist_nmpc" type="aerial_robot_control::DragonGimbalServoDistNMPC" base_class_type="aerial_robot_control::ControlBase">
+    <description>DRAGON NMPC with four 3D thrust modules, eight first-order gimbal servos, and disturbance states.</description>
+  </class>
 </library>

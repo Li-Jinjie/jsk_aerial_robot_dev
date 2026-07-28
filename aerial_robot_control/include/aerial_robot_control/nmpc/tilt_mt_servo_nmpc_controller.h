@@ -39,10 +39,8 @@ using NMPCControlDynamicConfig = dynamic_reconfigure::Server<aerial_robot_contro
 
 namespace aerial_robot_control
 {
-
 namespace nmpc
 {
-
 class TiltMtServoNMPC : public BaseMPC
 {
 public:
@@ -81,6 +79,8 @@ protected:
 
   double mass_;
   double gravity_const_;
+  // Independent entries of the symmetric inertia matrix in this order:
+  // Ixx, Iyy, Izz, Ixy, Ixz, Iyz.
   std::vector<double> inertia_;
   int motor_num_;
   double t_rotor_;
@@ -192,6 +192,10 @@ protected:
   // ensure the continuity of servo angles
   double ensureOneServoContinuity(double a_ref, int idx) const;
   std::vector<double> ensureAllServoContinuity(std::vector<double>& a_ref_vec) const;
+  virtual std::string getServoJointName(int index) const
+  {
+    return "gimbal" + std::to_string(index + 1);
+  }
 
   // debug functions
   void printPhysicalParams();

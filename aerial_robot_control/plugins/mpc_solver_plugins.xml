@@ -23,6 +23,9 @@
     <class type="aerial_robot_control::mpc_solver::TiltQdServoThrustDistImpMdlMPCSolver" base_class_type="aerial_robot_control::mpc_solver::BaseMPCSolver">
         <description>Nonlinear Model Predictive Control with Tilt Qd Servo Thrust Disturbance Impedance Model.</description>
     </class>
+    <class type="aerial_robot_control::mpc_solver::DragonGimbalServoDistMdlMPCSolver" base_class_type="aerial_robot_control::mpc_solver::BaseMPCSolver">
+        <description>Nonlinear Model Predictive Control for DRAGON with four three-dimensional gimbal modules.</description>
+    </class>
 
     <!-- tilt tri -->
     <class type="aerial_robot_control::mpc_solver::TiltTriServoMdlMPCSolver" base_class_type="aerial_robot_control::mpc_solver::BaseMPCSolver">
