@@ -47,6 +47,7 @@
 #   experiment_results/servo_model_formal/formal_tau_sweep.{csv,md}
 #   experiment_results/servo_model_formal/run_manifest.txt
 #   experiment_results/servo_model_formal/logs/*.log
+#   experiment_results/servo_model_formal/plots/*.{png,pdf}
 #
 # Usage:
 #   ./run_servo_model_formal.sh
@@ -58,13 +59,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULT_DIR="${1:-${SCRIPT_DIR}/experiment_results/servo_model_formal}"
 LOG_DIR="${RESULT_DIR}/logs"
+PLOT_DIR="${RESULT_DIR}/plots"
 METRICS_FILE="${RESULT_DIR}/metrics.jsonl"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 readonly -a TAU_VALUES=(0.200 0.160 0.120 0.086 0.040 0.020 0.012 0.008)
 readonly EXPECTED_RUNS=40
 
-mkdir -p "${LOG_DIR}"
+mkdir -p "${LOG_DIR}" "${PLOT_DIR}"
 if [[ "${SUMMARIZE_ONLY:-0}" == "1" ]]; then
     if [[ ! -s "${METRICS_FILE}" ]]; then
         echo "SUMMARIZE_ONLY=1 requires an existing nonempty ${METRICS_FILE}" >&2
@@ -137,10 +139,13 @@ run_case() {
     local name
     name="$(controller_name "${model}")"
     local log_file="${LOG_DIR}/tau_${tau}_${name}_erk_${steps}.log"
+    local plot_prefix="${PLOT_DIR}/tau_${tau}_${name}_erk_${steps}"
 
     echo "Running model=${model} (${name}), tau=${tau}, startup=cold, ERK=${steps}"
+    : > "${plot_prefix}.png"
+    : > "${plot_prefix}.pdf"
     set +e
-    MPLCONFIGDIR="${TMPDIR:-/tmp}/nmpc_servo_model_formal_mpl" \
+    MPLBACKEND=Agg MPLCONFIGDIR="${TMPDIR:-/tmp}/nmpc_servo_model_formal_mpl" \
         "${PYTHON_BIN}" "${SCRIPT_DIR}/sim_nmpc.py" "${model}" \
         --scenario servo_delay_sweep \
         --servo-time-constant "${tau}" \
@@ -148,11 +153,15 @@ run_case() {
         --startup-mode cold \
         --test-thrust-max 30 \
         --servo-angle-max-deg 90 \
-        --no_viz > "${log_file}" 2>&1
+        --plot_type 3 \
+        --plot-output "${plot_prefix}" > "${log_file}" 2>&1
     local status=$?
     set -e
 
     record_log "${log_file}" "${model}" "${tau}" "${steps}" "${status}"
+    if [[ ! -s "${plot_prefix}.png" || ! -s "${plot_prefix}.pdf" ]]; then
+        echo "  Missing plot output for ${plot_prefix}" >&2
+    fi
     if [[ ${status} -ne 0 ]]; then
         echo "  Process failed (exit=${status}); see ${log_file}"
     fi
@@ -166,6 +175,13 @@ if [[ "${SUMMARIZE_ONLY:-0}" != "1" ]]; then
         run_case 1 "${tau}" 5
         run_case 1 "${tau}" 20
     done
+
+    png_count="$(find "${PLOT_DIR}" -maxdepth 1 -type f -name '*.png' -size +0c | wc -l)"
+    pdf_count="$(find "${PLOT_DIR}" -maxdepth 1 -type f -name '*.pdf' -size +0c | wc -l)"
+    if [[ "${png_count}" -ne "${EXPECTED_RUNS}" || "${pdf_count}" -ne "${EXPECTED_RUNS}" ]]; then
+        echo "Expected ${EXPECTED_RUNS} PNG and PDF plots, found ${png_count} PNG and ${pdf_count} PDF." >&2
+        exit 1
+    fi
 fi
 
 "${PYTHON_BIN}" - "${METRICS_FILE}" "${RESULT_DIR}" "${EXPECTED_RUNS}" <<'PY'
@@ -282,6 +298,7 @@ if [[ "${SUMMARIZE_ONLY:-0}" != "1" ]]; then
         echo "Platform: Beetle-art"
         echo "TAU_VALUES: ${TAU_VALUES[*]}"
         echo "Groups: no-servo/ERK1 no-servo/ERK20 servo-current/ERK1 servo-current/ERK5 servo-current/ERK20"
+        echo "Plots: ${PLOT_DIR} (${EXPECTED_RUNS} PNG and ${EXPECTED_RUNS} PDF)"
         echo "Startup: cold"
         echo "Bounds: thrust=0..30N servo=+/-90deg"
         echo "Analysis window: 2s"
