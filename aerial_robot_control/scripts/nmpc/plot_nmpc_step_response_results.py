@@ -131,6 +131,9 @@ def plot_metric_summary(metrics, output_prefix, position):
     markers = ("o", "s", "^")
     color_by_axis = dict(zip(axis_order, colors))
     style_by_workpoint = {workpoint: (line_styles[index], markers[index]) for index, workpoint in enumerate(workpoints)}
+    plotted_series_count = sum((axis_name, workpoint) in groups for axis_name in axis_order for workpoint in workpoints)
+    line_widths = np.linspace(2.8, 1.2, plotted_series_count)
+    plotted_series_index = 0
 
     for axis_name in axis_order:
         for workpoint in workpoints:
@@ -147,15 +150,15 @@ def plot_metric_summary(metrics, output_prefix, position):
                     values,
                     color=color_by_axis[axis_name],
                     linestyle=line_style,
+                    linewidth=line_widths[plotted_series_index],
                     marker=marker,
                     markeredgewidth=0.7,
                     markerfacecolor="white",
                 )
+            plotted_series_index += 1
 
     amplitudes = sorted({item["amplitude"] for item in selected})
-    xlabel = (
-        r"Position-step amplitude $\Delta p$ [m]" if position else r"Attitude-step amplitude $\Delta \theta$ [$^\circ$]"
-    )
+    xlabel = r"Position reference $\Delta p$ [m]" if position else r"Attitude reference $\Delta \theta$ [$^\circ$]"
     for panel_index, (plot_axis, (_, title, ylabel, _)) in enumerate(zip(axes.flat, fields)):
         plot_axis.set_title(f"({chr(ord('a') + panel_index)}) {title}", pad=7)
         plot_axis.set_xlabel(xlabel)
