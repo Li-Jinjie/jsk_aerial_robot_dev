@@ -82,6 +82,100 @@
       </link>
     </model>
 
+    <!-- A 45-degree wall for normal-force tests. Its inward normal points +X/+Z. -->
+    <model name='inclined_plane'>
+      <static>1</static>
+      <pose>1.047 -1.0 1.647 0 -0.7853981634 0</pose>
+      <link name='wall'>
+        <collision name='wall_collision'>
+          <geometry>
+            <box>
+              <size>0.05 1 1</size>
+            </box>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>1.0</mu>
+                <mu2>1.0</mu2>
+              </ode>
+            </friction>
+            <bounce>
+              <restitution_coefficient>0.1</restitution_coefficient>
+              <threshold>100.0</threshold>
+            </bounce>
+            <contact>
+              <ode>
+                <kp>1e6</kp>
+                <kd>1e3</kd>
+                <max_vel>1.0</max_vel>
+                <min_depth>0.001</min_depth>
+              </ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name='wall_visual'>
+          <geometry>
+            <box>
+              <size>0.05 1 1</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.5 1 1</ambient>
+            <diffuse>0.2 0.5 1 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Mirrored 45-degree wall on the left. Its inward normal points +X/-Z. -->
+    <model name='inclined_plane_down'>
+      <static>1</static>
+      <pose>1.047 3.0 1.253 0 0.7853981634 0</pose>
+      <link name='wall'>
+        <collision name='wall_collision'>
+          <geometry>
+            <box>
+              <size>0.05 1 1</size>
+            </box>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>1.0</mu>
+                <mu2>1.0</mu2>
+              </ode>
+            </friction>
+            <bounce>
+              <restitution_coefficient>0.1</restitution_coefficient>
+              <threshold>100.0</threshold>
+            </bounce>
+            <contact>
+              <ode>
+                <kp>1e6</kp>
+                <kd>1e3</kd>
+                <max_vel>1.0</max_vel>
+                <min_depth>0.001</min_depth>
+              </ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name='wall_visual'>
+          <geometry>
+            <box>
+              <size>0.05 1 1</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1 0.4 0.1 1</ambient>
+            <diffuse>1 0.4 0.1 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
     <!--  0066 model now has both visual part and collision part -->
     <model name="0066">
       <static>1</static>
