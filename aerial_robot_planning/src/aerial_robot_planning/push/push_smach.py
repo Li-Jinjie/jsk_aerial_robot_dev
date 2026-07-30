@@ -27,7 +27,7 @@ import rospy
 import smach
 from scipy.spatial.transform import Rotation as R, Slerp
 
-from std_srvs.srv import Trigger
+from std_srvs.srv import SetBool, Trigger
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import WrenchStamped, Transform, Twist, Quaternion, Vector3
 from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectoryPoint
@@ -436,6 +436,7 @@ class PushContext:
         self.contact_confirm_timeout = 0.50
         self.slide_speed = 0.10
         self.back_key = "b"
+        self.wrench_estimation_disabled_by_push = False
         self.back_requested = threading.Event()
         self.back_monitor: Optional[TerminalBackMonitor] = None
         rospy.on_shutdown(self.stop_back_monitor)
@@ -482,6 +483,48 @@ class PushContext:
 
     def consume_back_request(self) -> None:
         self.back_requested.clear()
+
+    def _call_wrench_estimation_enable_service(self, enabled: bool, timeout: float = 3.0) -> bool:
+        service_name = f"/{self.robot_name}/controller/wrench_est/enable"
+        try:
+            rospy.wait_for_service(service_name, timeout=timeout)
+            response = rospy.ServiceProxy(service_name, SetBool)(enabled)
+        except (rospy.ROSException, rospy.ServiceException) as error:
+            rospy.logerr("PUSH: failed to set wrench estimator enabled=%s: %s", enabled, error)
+            return False
+
+        if not response.success:
+            rospy.logerr("PUSH: wrench estimator enable request was rejected: %s", response.message)
+            return False
+
+        rospy.loginfo("PUSH: %s", response.message)
+        return True
+
+    def disable_wrench_estimation(self) -> bool:
+        """Disable wrench feedback and remember whether PUSH owns the disable."""
+        if self.wrench_estimation_disabled_by_push:
+            return True
+
+        enabled_param = f"/{self.robot_name}/controller/wrench_est/enabled"
+        if not rospy.get_param(enabled_param, True):
+            rospy.logwarn("PUSH: wrench estimator was already disabled externally.")
+            return True
+
+        if not self._call_wrench_estimation_enable_service(False):
+            return False
+
+        self.wrench_estimation_disabled_by_push = True
+        return True
+
+    def restore_wrench_estimation(self) -> bool:
+        """Re-enable the estimator only when this PUSH execution disabled it."""
+        if not self.wrench_estimation_disabled_by_push:
+            return True
+        if not self._call_wrench_estimation_enable_service(True):
+            return False
+
+        self.wrench_estimation_disabled_by_push = False
+        return True
 
 
 # ======================================================================================
@@ -777,6 +820,10 @@ class AlignState(PushBaseState):
         p = np.array(target.standoff_pos, dtype=float)
         q = self.ctx.target_quaternion(target)
 
+        if not self.ctx.disable_wrench_estimation():
+            rospy.logerr("PUSH/ALIGN: cannot disable the wrench estimator; aborting before motion.")
+            return "aborted"
+
         # Ramp from the current pose to the standoff so the first reference has ~zero
         # tracking error (a far constant setpoint can otherwise diverge the NMPC solver).
         p0 = io.get_position()
@@ -811,6 +858,9 @@ class AlignState(PushBaseState):
 
             io.publish_pose_ref(p, q)
             if io.reached_pose(p, q, self.ALIGN_POS_TOL, self.ALIGN_ANG_TOL, self.ALIGN_VEL_TOL):
+                if not self.ctx.restore_wrench_estimation():
+                    rospy.logerr("PUSH/ALIGN: cannot restore the wrench estimator; aborting push.")
+                    return "aborted"
                 rospy.loginfo("PUSH/ALIGN: standoff pose reached.")
                 return "aligned"
             if rospy.Time.now().to_sec() - t_start > self.T_ALIGN_TIMEOUT:
@@ -1243,6 +1293,9 @@ class LevelHoverState(PushBaseState):
             io.publish_pose_ref(p, q_level)
             if io.reached_pose(p, q_level, self.ALIGN_POS_TOL, self.ALIGN_ANG_TOL, self.ALIGN_VEL_TOL):
                 rospy.loginfo("PUSH/LEVEL_HOVER: level hovering pose reached.")
+                if not self.ctx.restore_wrench_estimation():
+                    rospy.logerr("PUSH/LEVEL_HOVER: failed to restore the wrench estimator.")
+                    return "aborted"
                 service_name = f"/{self.ctx.robot_name}/controller/wrench_est/calibrate"
                 try:
                     rospy.ServiceProxy(service_name, Trigger)()
@@ -1266,6 +1319,8 @@ class FinishPushState(smach.State):
         self.ctx = ctx
 
     def execute(self, userdata):
+        if not self.ctx.restore_wrench_estimation():
+            rospy.logerr("PUSH/FINISH: failed to restore the wrench estimator; manual recovery is required.")
         self.ctx.stop_back_monitor()
         return "done"
 
