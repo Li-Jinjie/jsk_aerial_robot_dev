@@ -66,6 +66,10 @@ class PushTask:
     slide_direction_world: Optional[Tuple[float, float, float]] = None
     fixed_attitude_rpy: Optional[Tuple[float, float, float]] = None
     return_to_initial_standoff: bool = False
+    circle_radius: Optional[float] = None
+    circle_center_direction_world: Optional[Tuple[float, float, float]] = None
+    circle_tangent_direction_world: Optional[Tuple[float, float, float]] = None
+    force_hold_duration: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -187,6 +191,18 @@ PUSH_AND_SLIDE_TARGET = PushTarget(
     desired_force=5.0,
 )
 
+PUSH_INCLINED_PLANE_TARGET = PushTarget(
+    standoff_pos=(0.393, -1.0, 0.993),
+    contact_pos=(1.1, -1.0, 1.7),
+    desired_force=10.0,
+)
+
+PUSH_INCLINED_PLANE_DOWN_TARGET = PushTarget(
+    standoff_pos=(0.393, 3.0, 1.907),
+    contact_pos=(1.1, 3.0, 1.2),
+    desired_force=10.0,
+)
+
 DEFAULT_PUSH_TASKS: Tuple[PushTask, ...] = (
     PushTask("single target", (THREE_PUSH_TARGETS[0],)),
     PushTask("three targets", THREE_PUSH_TARGETS),
@@ -196,6 +212,26 @@ DEFAULT_PUSH_TASKS: Tuple[PushTask, ...] = (
         slide_direction_world=(0.0, 0.0, 1.0),
         fixed_attitude_rpy=(0.0, np.pi / 2, 0.0),
         return_to_initial_standoff=True,
+    ),
+    PushTask(
+        "push and circle",
+        (PUSH_AND_SLIDE_TARGET,),
+        circle_radius=0.3,
+        circle_center_direction_world=(0.0, 0.0, 1.0),
+        circle_tangent_direction_world=(0.0, 1.0, 0.0),
+        force_hold_duration=20.0,
+        fixed_attitude_rpy=(0.0, np.pi / 2, 0.0),
+        return_to_initial_standoff=True,
+    ),
+    PushTask(
+        "push inclined plane",
+        (PUSH_INCLINED_PLANE_TARGET,),
+        fixed_attitude_rpy=(0.0, np.pi / 4, 0.0),
+    ),
+    PushTask(
+        "push opposite inclined plane",
+        (PUSH_INCLINED_PLANE_DOWN_TARGET,),
+        fixed_attitude_rpy=(0.0, 3 * np.pi / 4, 0.0),
     ),
 )
 
@@ -380,21 +416,30 @@ def _force_reference_at_time(
     slide_velocity_world: np.ndarray,
     ramp_duration: float,
     hold_duration: float,
+    circle_radius: Optional[float] = None,
+    circle_center_direction_world: Optional[np.ndarray] = None,
+    circle_tangent_direction_world: Optional[np.ndarray] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Return the force-phase position and accumulated slide offset."""
+    """Return the force-phase position and accumulated surface-motion offset."""
     elapsed = max(float(elapsed), 0.0)
-    slide_elapsed = np.clip(elapsed - ramp_duration, 0.0, hold_duration)
-    slide_offset = np.asarray(slide_velocity_world, dtype=float) * slide_elapsed
+    motion_elapsed = np.clip(elapsed - ramp_duration, 0.0, hold_duration)
+    if circle_radius is None:
+        motion_offset = np.asarray(slide_velocity_world, dtype=float) * motion_elapsed
+    else:
+        center_dir = _unit(np.asarray(circle_center_direction_world, dtype=float))
+        tangent_dir = _unit(np.asarray(circle_tangent_direction_world, dtype=float))
+        theta = 2.0 * np.pi * motion_elapsed / hold_duration
+        motion_offset = circle_radius * ((1.0 - np.cos(theta)) * center_dir + np.sin(theta) * tangent_dir)
 
     if elapsed < ramp_duration:
         alpha = elapsed / ramp_duration
         p = p_contact + (p_final - p_contact) * alpha
     elif elapsed < ramp_duration + hold_duration:
-        p = p_final + slide_offset
+        p = p_final + motion_offset
     else:
         alpha = min((elapsed - ramp_duration - hold_duration) / ramp_duration, 1.0)
-        p = p_final + (p_contact - p_final) * alpha + slide_offset
-    return p, slide_offset
+        p = p_final + (p_contact - p_final) * alpha + motion_offset
+    return p, motion_offset
 
 
 # ======================================================================================
@@ -455,6 +500,11 @@ class PushContext:
             return np.zeros(3)
         direction = _unit(np.asarray(self.selected_task.slide_direction_world, dtype=float))
         return self.slide_speed * direction
+
+    def force_hold_duration(self, default_duration: float) -> float:
+        if self.selected_task is None or self.selected_task.force_hold_duration is None:
+            return default_duration
+        return float(self.selected_task.force_hold_duration)
 
     def prepare_target_retreat(self, target: PushTarget) -> None:
         initial_standoff = np.asarray(target.standoff_pos, dtype=float)
@@ -727,6 +777,47 @@ class InitPushState(PushBaseState):
                 self.ctx.selected_task.slide_direction_world,
             )
 
+        task = self.ctx.selected_task
+        if task is not None:
+            if task.slide_direction_world is not None and task.circle_radius is not None:
+                rospy.logerr("PUSH/INIT: a task cannot configure both linear slide and circle motion.")
+                return "failed"
+            if task.force_hold_duration is not None:
+                if not np.isfinite(task.force_hold_duration) or task.force_hold_duration <= 0.0:
+                    rospy.logerr("PUSH/INIT: force_hold_duration must be finite and positive.")
+                    return "failed"
+            if task.circle_radius is not None:
+                if not np.isfinite(task.circle_radius) or task.circle_radius <= 0.0:
+                    rospy.logerr("PUSH/INIT: circle_radius must be finite and positive.")
+                    return "failed"
+                if task.circle_center_direction_world is None or task.circle_tangent_direction_world is None:
+                    rospy.logerr("PUSH/INIT: circle motion requires center and tangent directions.")
+                    return "failed"
+
+                center_dir = np.asarray(task.circle_center_direction_world, dtype=float)
+                tangent_dir = np.asarray(task.circle_tangent_direction_world, dtype=float)
+                if np.linalg.norm(center_dir) <= 1e-9 or np.linalg.norm(tangent_dir) <= 1e-9:
+                    rospy.logerr("PUSH/INIT: circle directions must be non-zero.")
+                    return "failed"
+                center_dir = _unit(center_dir)
+                tangent_dir = _unit(tangent_dir)
+                if abs(float(np.dot(center_dir, tangent_dir))) > 1e-6:
+                    rospy.logerr("PUSH/INIT: circle center and tangent directions must be orthogonal.")
+                    return "failed"
+                for target in self.ctx.push_targets:
+                    approach_dir = _approach_dir_for(target)
+                    if (
+                        abs(float(np.dot(center_dir, approach_dir))) > 1e-6
+                        or abs(float(np.dot(tangent_dir, approach_dir))) > 1e-6
+                    ):
+                        rospy.logerr("PUSH/INIT: circle directions must lie in the contact surface.")
+                        return "failed"
+                rospy.loginfo(
+                    "PUSH/INIT: circle radius=%.3f m, duration=%.1f s.",
+                    task.circle_radius,
+                    self.ctx.force_hold_duration(self.T_FORCE_HOLD),
+                )
+
         if self.ctx.io is None:
             rospy.loginfo("PUSH/INIT: initializing IO ...")
             try:
@@ -982,6 +1073,11 @@ class ApplyForceState(PushBaseState):
         p_contact = np.array(self.ctx.contact_p, dtype=float)
         p_standoff = np.array(target.standoff_pos, dtype=float)
         slide_velocity_world = self.ctx.slide_velocity_world()
+        task = self.ctx.selected_task
+        hold_duration = self.ctx.force_hold_duration(self.T_FORCE_HOLD)
+        circle_radius = task.circle_radius if task is not None else None
+        circle_center_direction_world = task.circle_center_direction_world if task is not None else None
+        circle_tangent_direction_world = task.circle_tangent_direction_world if task is not None else None
 
         # 1) accumulate the initial contact force while holding p_contact
         rospy.loginfo("PUSH/APPLY: accumulating initial contact force ...")
@@ -1071,16 +1167,22 @@ class ApplyForceState(PushBaseState):
             rospy.loginfo(
                 "PUSH/APPLY: sliding at world velocity %s m/s for %.1f s during force hold.",
                 np.round(slide_velocity_world, 3).tolist(),
-                self.T_FORCE_HOLD,
+                hold_duration,
+            )
+        elif circle_radius is not None:
+            rospy.loginfo(
+                "PUSH/APPLY: drawing one circle with radius %.3f m over %.1f s during force hold.",
+                circle_radius,
+                hold_duration,
             )
 
-        # 2) ramp up the normal force, 3) hold it while optionally sliding,
-        # 4) ramp down at the final slide position.
-        t_ramp_down_start = self.T_FORCE_RAMP + self.T_FORCE_HOLD
+        # 2) ramp up the normal force, 3) hold it while optionally moving on the
+        # surface, 4) ramp down at the final surface position.
+        t_ramp_down_start = self.T_FORCE_RAMP + hold_duration
         t_total = t_ramp_down_start + self.T_FORCE_RAMP
         t_start = rospy.Time.now().to_sec()
         p = p_contact.copy()
-        slide_offset = np.zeros(3)
+        motion_offset = np.zeros(3)
         while not rospy.is_shutdown():
             if self.preempt_requested():
                 self.service_preempt()
@@ -1094,30 +1196,36 @@ class ApplyForceState(PushBaseState):
             t = rospy.Time.now().to_sec() - t_start
             if t >= t_total:
                 break
-            p, slide_offset = _force_reference_at_time(
+            p, motion_offset = _force_reference_at_time(
                 t,
                 p_contact,
                 p_final,
                 slide_velocity_world,
                 self.T_FORCE_RAMP,
-                self.T_FORCE_HOLD,
+                hold_duration,
+                circle_radius,
+                circle_center_direction_world,
+                circle_tangent_direction_world,
             )
-            self.ctx.retreat_standoff_p = p_standoff + slide_offset
+            self.ctx.retreat_standoff_p = p_standoff + motion_offset
             io.publish_pose_ref(p, q)
             self.rate.sleep()
 
         if rospy.is_shutdown():
             return "aborted"
 
-        p_contact_end, slide_offset = _force_reference_at_time(
+        p_contact_end, motion_offset = _force_reference_at_time(
             t_total,
             p_contact,
             p_final,
             slide_velocity_world,
             self.T_FORCE_RAMP,
-            self.T_FORCE_HOLD,
+            hold_duration,
+            circle_radius,
+            circle_center_direction_world,
+            circle_tangent_direction_world,
         )
-        self.ctx.retreat_standoff_p = p_standoff + slide_offset
+        self.ctx.retreat_standoff_p = p_standoff + motion_offset
         io.publish_pose_ref(p_contact_end, q)
         self.ctx.retreat_start_p = p_contact_end
         return "applied"
