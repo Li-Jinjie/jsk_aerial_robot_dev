@@ -6,36 +6,37 @@
 #   startup:        cold (zero state, zero input, and zero OCP initial guess)
 #   thrust bounds:  0..30 N per rotor
 #   servo bounds:   +/-90 deg
-#   metric window:  first 2 s after the nonzero position command
+#   servo-travel window: absolute simulation time [1, 5) s
 #   t_servo [s]:    0.200, 0.160, 0.120, 0.086, 0.040, 0.020, 0.012, 0.008
 #
 # ERK denotes the number of integration substeps in each NMPC prediction
 # interval. The closed-loop plant is always integrated with the 1 ms simulator.
 # Servo excess is the four-channel mean total travel beyond the direct
-# start-to-end change. Each table entry is command/actual excess in degrees.
+# start-to-end change within [1, 5) s. Each table entry is command/actual
+# excess in degrees.
 # A run with any OCP failure is reported as N/A, even when partial metrics exist.
 #
-# Formal results recorded on 2026-07-19:
+# Formal results recorded on 2026-07-30:
 #
 # | t_servo | No-servo ERK 1 | No-servo ERK 20 | Servo-current ERK 1 | Servo-current ERK 5 | Servo-current ERK 20 |
 # |   [s]   | cmd/actual [deg] | cmd/actual [deg] |   cmd/actual [deg]   |   cmd/actual [deg]   |    cmd/actual [deg]   |
-# |  0.200  |       N/A        |        N/A        |     42.60 / 12.06    |     42.67 / 12.07    |      42.67 / 12.07    |
-# |  0.160  | 3235.52 / 259.87 | 3224.83 / 282.91 |     37.35 / 14.20    |     37.41 / 14.22    |      37.41 / 14.22    |
-# |  0.120  | 3031.44 / 269.73 | 2443.45 / 255.62 |     29.73 / 16.83    |     29.83 / 16.87    |      29.83 / 16.87    |
-# |  0.086  | 2858.64 / 290.51 | 2574.01 / 290.07 |     29.12 / 21.91    |     29.12 / 22.03    |      29.12 / 22.03    |
-# |  0.040  | 2454.83 / 414.81 | 2640.28 / 419.76 |     49.94 / 28.44    |     36.55 / 33.01    |      36.55 / 33.01    |
-# |  0.020  | 3275.65 / 914.31 | 2929.53 / 823.94 |          N/A         |     48.39 / 46.78    |      48.43 / 46.84    |
-# |  0.012  |3093.49 / 1337.30 |3229.70 / 1386.72 |          N/A         |     57.52 / 56.86    |      57.70 / 57.02    |
-# |  0.008  |3732.96 / 2177.60 |4477.88 / 2585.17 |          N/A         |     57.34 / 55.34    |      62.06 / 61.69    |
+# |  0.200  |       N/A        |       N/A         |      6.92 / 2.01     |      6.92 / 2.01     |       6.92 / 2.01     |
+# |  0.160  |  633.40 / 369.57 |  551.85 / 319.96 |      6.50 / 2.75     |      6.49 / 2.75     |       6.49 / 2.75     |
+# |  0.120  |  317.05 / 186.71 |  307.58 / 176.20 |      6.43 / 3.95     |      6.41 / 3.95     |       6.41 / 3.95     |
+# |  0.086  |  254.45 / 149.09 |  262.71 / 150.56 |      7.16 / 5.63     |      7.17 / 5.68     |       7.17 / 5.68     |
+# |  0.040  |  192.42 / 124.74 |  197.52 / 127.76 |      9.51 / 6.87     |     13.07 / 11.84    |      13.07 / 11.84    |
+# |  0.020  |  189.72 / 146.18 |  183.61 / 139.35 |          N/A         |     27.42 / 26.91    |      27.48 / 26.97    |
+# |  0.012  |  181.72 / 153.08 |  184.45 / 154.62 |          N/A         |     32.70 / 33.13    |      32.73 / 33.17    |
+# |  0.008  |  179.85 / 161.78 |  191.95 / 174.54 |          N/A         |     30.61 / 31.13    |      33.68 / 34.42    |
 #
 # N/A denotes an OCP failure. Both no-servo runs failed at t_servo=0.200 s;
 # servo-current ERK 1 failed at 0.020, 0.012, and 0.008 s. All other runs
 # completed without solver failures.
 #
 # Main observations:
-#   - At t_servo <= 0.020 s, both no-servo ERK settings retain large command
-#     and actual excess travel; increasing its ERK steps does not remove the
-#     oscillation.
+#   - Over [1, 5) s, both no-servo ERK settings retain much larger command and
+#     actual excess travel than the completed servo-current ERK 5/20 cases;
+#     increasing the no-servo ERK steps does not remove the oscillation.
 #   - Servo-current ERK 1 fails throughout that small-t_servo range, whereas
 #     ERK 5 and ERK 20 complete and greatly reduce excess travel.
 #   - The data therefore do not support describing no-servo ERK 1 as stable in
@@ -151,6 +152,7 @@ run_case() {
         --servo-time-constant "${tau}" \
         --ocp-sim-num-steps "${steps}" \
         --startup-mode cold \
+        --servo-travel-window 1 5 \
         --test-thrust-max 30 \
         --servo-angle-max-deg 90 \
         --plot_type 3 \
@@ -229,12 +231,16 @@ def flatten(record):
     experiment = record.get("experiment") or {}
     timing = record.get("timing") or {}
     startup = record.get("startup") or {}
-    required = ("servo_cmd_excess_travel_deg", "servo_actual_excess_travel_deg", "position_rmse_m")
+    travel_window = record.get("servo_travel_window") or {}
+    startup_required = ("servo_cmd_excess_travel_deg", "servo_actual_excess_travel_deg", "position_rmse_m")
+    travel_required = ("servo_cmd_excess_travel_deg", "servo_actual_excess_travel_deg")
     valid = (
         experiment.get("process_exit_status") == 0
         and experiment.get("metrics_present") is True
         and timing.get("solver_failures") == 0
-        and all(startup.get(key) is not None for key in required)
+        and travel_window.get("window_complete") is True
+        and all(startup.get(key) is not None for key in startup_required)
+        and all(travel_window.get(key) is not None for key in travel_required)
     )
     return {
         "status": "ok" if valid else "failed",
@@ -242,6 +248,12 @@ def flatten(record):
         "solver_failures": timing.get("solver_failures"),
         "servo_cmd_excess_deg": startup.get("servo_cmd_excess_travel_deg") if valid else None,
         "servo_actual_excess_deg": startup.get("servo_actual_excess_travel_deg") if valid else None,
+        "servo_cmd_excess_1_5s_deg": (
+            travel_window.get("servo_cmd_excess_travel_deg") if valid else None
+        ),
+        "servo_actual_excess_1_5s_deg": (
+            travel_window.get("servo_actual_excess_travel_deg") if valid else None
+        ),
         "position_rmse_m": startup.get("position_rmse_m") if valid else None,
         "log_file": experiment.get("log_file"),
     }
@@ -269,13 +281,16 @@ def cell(tau, model, steps):
     values = flatten(lookup[(tau, model, steps)])
     if values["status"] != "ok":
         return "N/A"
-    return f'{values["servo_cmd_excess_deg"]:.2f} / {values["servo_actual_excess_deg"]:.2f}'
+    return (
+        f'{values["servo_cmd_excess_1_5s_deg"]:.2f} / '
+        f'{values["servo_actual_excess_1_5s_deg"]:.2f}'
+    )
 
 lines = [
     "# Formal servo-model/ERK sweep",
     "",
-    "Cold-start metrics use the first 2 s after the nonzero position command.",
-    "Each result is servo command/actual excess travel in degrees; any OCP failure is N/A.",
+    "Servo travel is measured over absolute simulation time [1, 5) s.",
+    "Each result is servo command/actual excess travel in degrees; any OCP failure or incomplete window is N/A.",
     "",
     "| $t_{servo}$ (s) | No-servo ERK 1 | No-servo ERK 20 | Servo-current ERK 1 | Servo-current ERK 5 | Servo-current ERK 20 |",
     "|---:|---:|---:|---:|---:|---:|",
@@ -300,6 +315,7 @@ if [[ "${SUMMARIZE_ONLY:-0}" != "1" ]]; then
         echo "Groups: no-servo/ERK1 no-servo/ERK20 servo-current/ERK1 servo-current/ERK5 servo-current/ERK20"
         echo "Plots: ${PLOT_DIR} (${EXPECTED_RUNS} PNG and ${EXPECTED_RUNS} PDF)"
         echo "Startup: cold"
+        echo "Servo travel window: absolute simulation time [1,5)s"
         echo "Bounds: thrust=0..30N servo=+/-90deg"
         echo "Analysis window: 2s"
     } > "${RESULT_DIR}/run_manifest.txt"

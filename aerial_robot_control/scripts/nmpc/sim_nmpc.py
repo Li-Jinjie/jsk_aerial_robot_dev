@@ -395,8 +395,18 @@ def compute_servo_delay_sweep_metrics(
 
     startup_mask = (time_axis >= onset_time) & (time_axis < onset_time + args.analysis_window_duration)
     overall_mask = time_axis >= onset_time
+    travel_window_start, travel_window_end = args.servo_travel_window
+    travel_window_mask = (time_axis >= travel_window_start) & (time_axis < travel_window_end)
     startup = summarize(startup_mask)
     overall = summarize(overall_mask)
+    travel_window_metrics = summarize(travel_window_mask) if np.any(travel_window_mask) else {}
+    servo_travel_window = {
+        "start_time_s": float(travel_window_start),
+        "end_time_s": float(travel_window_end),
+        "window_complete": bool(time_axis.size and time_axis[-1] + ts_sim >= travel_window_end),
+        "servo_cmd_excess_travel_deg": travel_window_metrics.get("servo_cmd_excess_travel_deg"),
+        "servo_actual_excess_travel_deg": travel_window_metrics.get("servo_actual_excess_travel_deg"),
+    }
     solve_times = np.asarray(solve_time_history)
     timing = {
         "solve_time_mean_ms": float(1e3 * np.mean(solve_times)) if solve_times.size else None,
@@ -418,11 +428,13 @@ def compute_servo_delay_sweep_metrics(
             "startup_mode": args.startup_mode,
             "startup_warmup_duration_s": args.startup_warmup_duration,
             "analysis_window_duration_s": args.analysis_window_duration,
+            "servo_travel_window_s": [float(travel_window_start), float(travel_window_end)],
             "thrust_bounds_n": [0.0, args.test_thrust_max],
             "servo_bounds_deg": [-args.servo_angle_max_deg, args.servo_angle_max_deg],
         },
         "startup": startup,
         "overall": overall,
+        "servo_travel_window": servo_travel_window,
         "timing": timing,
     }
 
@@ -478,6 +490,7 @@ def main(args):
     args.startup_mode = getattr(args, "startup_mode", "cold")
     args.startup_warmup_duration = getattr(args, "startup_warmup_duration", 2.0)
     args.analysis_window_duration = getattr(args, "analysis_window_duration", 2.0)
+    args.servo_travel_window = getattr(args, "servo_travel_window", [1.0, 5.0])
     args.solve_time_csv = getattr(args, "solve_time_csv", None)
     args.step_axis = getattr(args, "step_axis", "x")
     args.step_amplitude = getattr(args, "step_amplitude", 0.2)
@@ -505,6 +518,12 @@ def main(args):
             raise ValueError("test_thrust_max must be positive.")
         if not 0.0 < args.servo_angle_max_deg <= 180.0:
             raise ValueError("servo_angle_max_deg must be greater than 0 and no greater than 180 degrees.")
+        if (
+            len(args.servo_travel_window) != 2
+            or args.servo_travel_window[0] < 0.0
+            or args.servo_travel_window[1] <= args.servo_travel_window[0]
+        ):
+            raise ValueError("--servo-travel-window requires nonnegative START and END > START.")
         if args.test_velocity_max <= 0.0 or args.segment_duration <= 0.0 or args.warmup_duration < 0.0:
             raise ValueError("Velocity/duration parameters must be positive (warmup may be zero).")
         if not args.step_levels or any(level <= 0.0 for level in args.step_levels):
@@ -1292,6 +1311,14 @@ if __name__ == "__main__":
         type=float,
         default=2.0,
         help="Duration [s] after task onset used for startup oscillation metrics.",
+    )
+    parser.add_argument(
+        "--servo-travel-window",
+        type=float,
+        nargs=2,
+        metavar=("START", "END"),
+        default=[1.0, 5.0],
+        help="Absolute half-open time window [START, END) used for servo excess-travel metrics [s].",
     )
     parser.add_argument(
         "--solve-time-csv",
