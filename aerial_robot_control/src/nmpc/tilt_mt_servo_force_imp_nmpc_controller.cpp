@@ -13,20 +13,20 @@ void nmpc::TiltMtServoForceImpNMPC::initNMPCCostW()
 
   double enlarge_factor, pMxy, pMz, Qv_xy, Qv_z, Qp_xy, Qp_z;
   double Qw_xy, Qw_z, Qq_xy, Qq_z, Qa, Rt, Rac_d;
-  getParam<double>(nmpc_nh, "enlarge_factor", enlarge_factor, 1.0);
-  getParam<double>(nmpc_nh, "pMxy", pMxy, 1.5);
-  getParam<double>(nmpc_nh, "pMz", pMz, 1.5);
-  getParam<double>(nmpc_nh, "Qv_xy", Qv_xy, 10.0);
-  getParam<double>(nmpc_nh, "Qv_z", Qv_z, 10.0);
-  getParam<double>(nmpc_nh, "Qp_xy", Qp_xy, 6.0);
-  getParam<double>(nmpc_nh, "Qp_z", Qp_z, 6.0);
-  getParam<double>(nmpc_nh, "Qw_xy", Qw_xy, 5.0);
-  getParam<double>(nmpc_nh, "Qw_z", Qw_z, 5.0);
-  getParam<double>(nmpc_nh, "Qq_xy", Qq_xy, 300.0);
-  getParam<double>(nmpc_nh, "Qq_z", Qq_z, 600.0);
-  getParam<double>(nmpc_nh, "Qa", Qa, 1.0);
-  getParam<double>(nmpc_nh, "Rt", Rt, 1.0);
-  getParam<double>(nmpc_nh, "Rac_d", Rac_d, 250.0);
+  getNMPCTunableParam<double>(nmpc_nh, "enlarge_factor", enlarge_factor, 1.0);
+  getNMPCTunableParam<double>(nmpc_nh, "pMxy", pMxy, 1.5);
+  getNMPCTunableParam<double>(nmpc_nh, "pMz", pMz, 1.5);
+  getNMPCIntTunableParam(nmpc_nh, "Qv_xy", Qv_xy, 10.0);
+  getNMPCIntTunableParam(nmpc_nh, "Qv_z", Qv_z, 10.0);
+  getNMPCIntTunableParam(nmpc_nh, "Qp_xy", Qp_xy, 6.0);
+  getNMPCIntTunableParam(nmpc_nh, "Qp_z", Qp_z, 6.0);
+  getNMPCIntTunableParam(nmpc_nh, "Qw_xy", Qw_xy, 5.0);
+  getNMPCIntTunableParam(nmpc_nh, "Qw_z", Qw_z, 5.0);
+  getNMPCIntTunableParam(nmpc_nh, "Qq_xy", Qq_xy, 300.0);
+  getNMPCIntTunableParam(nmpc_nh, "Qq_z", Qq_z, 600.0);
+  getNMPCIntTunableParam(nmpc_nh, "Qa", Qa, 1.0);
+  getNMPCIntTunableParam(nmpc_nh, "Rt", Rt, 1.0);
+  getNMPCIntTunableParam(nmpc_nh, "Rac_d", Rac_d, 250.0);
 
   const auto solver = boost::dynamic_pointer_cast<ForceImpSolver>(mpc_solver_ptr_);
   if (!solver)
@@ -171,84 +171,46 @@ void nmpc::TiltMtServoForceImpNMPC::sendCmd()
   publishModeledDisturbanceWrench();
 }
 
-void nmpc::TiltMtServoForceImpNMPC::cfgNMPCCallback(NMPCConfig& config, uint32_t level)
+nmpc::NMPCConfigMask nmpc::TiltMtServoForceImpNMPC::getSupportedNMPCConfigMask() const
 {
-  using Levels = aerial_robot_msgs::DynamicReconfigureLevels;
-  if (!config.nmpc_flag)
-    return;
+  using namespace NMPCConfigFields;
+  return ENLARGE_FACTOR | QP_XY | QP_Z | QV_XY | QV_Z | PM_XY | PM_Z | QQ_XY | QQ_Z | QW_XY | QW_Z | QA | RT | RAC_D;
+}
 
+void nmpc::TiltMtServoForceImpNMPC::applyNMPCConfig(const NMPCConfig& config, NMPCConfigMask mask)
+{
+  using namespace NMPCConfigFields;
   const auto solver = boost::dynamic_pointer_cast<ForceImpSolver>(mpc_solver_ptr_);
   if (!solver)
-  {
-    ROS_ERROR("The MPC solver is not the CoG force-impedance model.");
-    return;
-  }
+    throw std::runtime_error("The MPC solver is not the CoG force-impedance model.");
 
-  try
+  if (mask & ENLARGE_FACTOR)
+    solver->setEnlargeFactor(config.enlarge_factor);
+  if (mask & QP_XY)
   {
-    switch (level)
-    {
-      case Levels::RECONFIGURE_NMPC_ENLARGE_FACTOR:
-        solver->setEnlargeFactor(config.enlarge_factor);
-        break;
-      case Levels::RECONFIGURE_NMPC_Q_P_XY:
-        solver->setForceImpedanceWeight("pKx", config.Qp_xy, false);
-        solver->setForceImpedanceWeight("pKy", config.Qp_xy);
-        break;
-      case Levels::RECONFIGURE_NMPC_Q_P_Z:
-        solver->setForceImpedanceWeight("pKz", config.Qp_z);
-        break;
-      case Levels::RECONFIGURE_NMPC_Q_V_XY:
-        solver->setForceImpedanceWeight("pDx", config.Qv_xy, false);
-        solver->setForceImpedanceWeight("pDy", config.Qv_xy);
-        break;
-      case Levels::RECONFIGURE_NMPC_Q_V_Z:
-        solver->setForceImpedanceWeight("pDz", config.Qv_z);
-        break;
-      case Levels::RECONFIGURE_NMPC_PM_XY:
-        solver->setForceImpedanceWeight("pMx", config.pMxy, false);
-        solver->setForceImpedanceWeight("pMy", config.pMxy, false);
-        setForceImpedanceParams();
-        break;
-      case Levels::RECONFIGURE_NMPC_PM_Z:
-        solver->setForceImpedanceWeight("pMz", config.pMz, false);
-        setForceImpedanceParams();
-        break;
-      case Levels::RECONFIGURE_NMPC_Q_Q_XY:
-        mpc_solver_ptr_->setCostWDiagElement(7, config.Qq_xy);
-        mpc_solver_ptr_->setCostWDiagElement(8, config.Qq_xy);
-        break;
-      case Levels::RECONFIGURE_NMPC_Q_Q_Z:
-        mpc_solver_ptr_->setCostWDiagElement(9, config.Qq_z);
-        break;
-      case Levels::RECONFIGURE_NMPC_Q_W_XY:
-        mpc_solver_ptr_->setCostWDiagElement(10, config.Qw_xy);
-        mpc_solver_ptr_->setCostWDiagElement(11, config.Qw_xy);
-        break;
-      case Levels::RECONFIGURE_NMPC_Q_W_Z:
-        mpc_solver_ptr_->setCostWDiagElement(12, config.Qw_z);
-        break;
-      case Levels::RECONFIGURE_NMPC_Q_A:
-        for (int i = 13; i < 13 + joint_num_; ++i)
-          mpc_solver_ptr_->setCostWDiagElement(i, config.Qa);
-        break;
-      case Levels::RECONFIGURE_NMPC_R_T:
-        for (int i = mpc_solver_ptr_->NX_; i < mpc_solver_ptr_->NX_ + motor_num_; ++i)
-          mpc_solver_ptr_->setCostWDiagElement(i, config.Rt, false);
-        break;
-      case Levels::RECONFIGURE_NMPC_R_AC_D:
-        for (int i = mpc_solver_ptr_->NX_ + motor_num_; i < mpc_solver_ptr_->NX_ + motor_num_ + joint_num_; ++i)
-          mpc_solver_ptr_->setCostWDiagElement(i, config.Rac_d, false);
-        break;
-      default:
-        ROS_INFO("The dynamic-reconfigure variable is not used by force-impedance NMPC.");
-        break;
-    }
+    solver->setForceImpedanceWeight("pKx", config.Qp_xy, false);
+    solver->setForceImpedanceWeight("pKy", config.Qp_xy);
   }
-  catch (const std::invalid_argument& exception)
+  if (mask & QP_Z)
+    solver->setForceImpedanceWeight("pKz", config.Qp_z);
+  if (mask & QV_XY)
   {
-    ROS_ERROR_STREAM("NMPC force-impedance config failed: " << exception.what());
+    solver->setForceImpedanceWeight("pDx", config.Qv_xy, false);
+    solver->setForceImpedanceWeight("pDy", config.Qv_xy);
   }
+  if (mask & QV_Z)
+    solver->setForceImpedanceWeight("pDz", config.Qv_z);
+  if (mask & PM_XY)
+  {
+    solver->setForceImpedanceWeight("pMx", config.pMxy, false);
+    solver->setForceImpedanceWeight("pMy", config.pMxy, false);
+  }
+  if (mask & PM_Z)
+    solver->setForceImpedanceWeight("pMz", config.pMz, false);
+
+  TiltMtServoNMPC::applyNMPCConfig(config, mask & (QQ_XY | QQ_Z | QW_XY | QW_Z | QA | RT | RAC_D));
+  if (mask & (PM_XY | PM_Z))
+    setForceImpedanceParams();
 }
 
 #include <pluginlib/class_list_macros.h>
