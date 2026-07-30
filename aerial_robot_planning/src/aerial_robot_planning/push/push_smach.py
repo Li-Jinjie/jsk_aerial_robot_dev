@@ -167,7 +167,7 @@ THREE_PUSH_TARGETS: Tuple[PushTarget, ...] = (
     PushTarget(
         standoff_pos=(0.0, 1.0, 1.2),
         contact_pos=(1.1, 1.0, 1.2),
-        desired_force=30.0,
+        desired_force=20.0,
     ),
     PushTarget(
         standoff_pos=(0.0, 1.0, 1.5),
@@ -182,8 +182,8 @@ THREE_PUSH_TARGETS: Tuple[PushTarget, ...] = (
 )
 
 PUSH_AND_SLIDE_TARGET = PushTarget(
-    standoff_pos=(0.0, 1.0, 1.2),
-    contact_pos=(1.1, 1.0, 1.2),
+    standoff_pos=(0.0, 1.0, 1.1),
+    contact_pos=(1.1, 1.0, 1.1),
     desired_force=5.0,
 )
 
