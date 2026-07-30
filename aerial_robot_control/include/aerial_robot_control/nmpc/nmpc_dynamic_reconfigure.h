@@ -3,6 +3,7 @@
 #include "aerial_robot_control/NMPCConfig.h"
 
 #include <cstdint>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -103,6 +104,41 @@ inline std::vector<std::string> getNMPCConfigFieldNames(NMPCConfigMask mask)
       names.emplace_back(field.second);
   }
   return names;
+}
+
+inline std::string formatNMPCConfigFieldValues(const NMPCConfig& config, NMPCConfigMask mask)
+{
+  using namespace NMPCConfigFields;
+  std::ostringstream values;
+  bool is_first = true;
+  const auto append = [&](NMPCConfigMask field, const char* name, double value) {
+    if (!(mask & field))
+      return;
+    if (!is_first)
+      values << ", ";
+    values << name << "=" << value;
+    is_first = false;
+  };
+
+  append(QP_XY, "Qp_xy", config.Qp_xy);
+  append(QP_Z, "Qp_z", config.Qp_z);
+  append(QV_XY, "Qv_xy", config.Qv_xy);
+  append(QV_Z, "Qv_z", config.Qv_z);
+  append(QQ_XY, "Qq_xy", config.Qq_xy);
+  append(QQ_Z, "Qq_z", config.Qq_z);
+  append(QW_XY, "Qw_xy", config.Qw_xy);
+  append(QW_Z, "Qw_z", config.Qw_z);
+  append(QA, "Qa", config.Qa);
+  append(RT, "Rt", config.Rt);
+  append(RAC_D, "Rac_d", config.Rac_d);
+  append(QT, "Qt", config.Qt);
+  append(RTC_D, "Rtc_d", config.Rtc_d);
+  append(PM_XY, "pMxy", config.pMxy);
+  append(PM_Z, "pMz", config.pMz);
+  append(OM_XY, "oMxy", config.oMxy);
+  append(OM_Z, "oMz", config.oMz);
+  append(ENLARGE_FACTOR, "enlarge_factor", config.enlarge_factor);
+  return values.str();
 }
 
 class NMPCConfigUpdateState

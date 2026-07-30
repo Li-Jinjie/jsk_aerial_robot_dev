@@ -101,13 +101,11 @@ void nmpc::TiltBi2OrdServoNMPC::applyNMPCConfig(const NMPCConfig& config, NMPCCo
   {
     for (int i = 13 + joint_num_ * 2; i < 13 + joint_num_ * 2 + motor_num_; ++i)
       mpc_solver_ptr_->setCostWDiagElement(i, config.Rt, false);
-    ROS_INFO_STREAM("change Rt for NMPC '" << config.Rt << "'");
   }
   if (mask & RAC_D)
   {
     for (int i = 13 + joint_num_ * 2 + motor_num_; i < 13 + joint_num_ * 2 + motor_num_ + joint_num_; ++i)
       mpc_solver_ptr_->setCostWDiagElement(i, config.Rac_d, false);
-    ROS_INFO_STREAM("change Rac_d for NMPC '" << config.Rac_d << "'");
   }
 }
 

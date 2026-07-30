@@ -255,13 +255,11 @@ void nmpc::TiltMtServoThrustDistNMPC::applyNMPCConfig(const NMPCConfig& config, 
   {
     for (int i = 13 + joint_num_; i < 13 + joint_num_ + motor_num_; ++i)
       mpc_solver_ptr_->setCostWDiagElement(i, config.Qt);
-    ROS_INFO_STREAM("change Qt for NMPC '" << config.Qt << "'");
   }
   if (mask & RTC_D)
   {
     for (int i = mpc_solver_ptr_->NX_; i < mpc_solver_ptr_->NX_ + motor_num_; ++i)
       mpc_solver_ptr_->setCostWDiagElement(i, config.Rtc_d, false);
-    ROS_INFO_STREAM("change Rtc_d for NMPC '" << config.Rtc_d << "'");
   }
 }
 

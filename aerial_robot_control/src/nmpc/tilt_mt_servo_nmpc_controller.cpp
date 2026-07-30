@@ -1131,16 +1131,9 @@ void nmpc::TiltMtServoNMPC::applyPendingNMPCConfig()
     const NMPCConfigMask applied_mask = mask & supported_mask;
     applyNMPCConfig(config, applied_mask);
 
-    std::stringstream applied_names;
-    const auto names = getNMPCConfigFieldNames(applied_mask);
-    for (std::size_t i = 0; i < names.size(); ++i)
-    {
-      if (i > 0)
-        applied_names << ", ";
-      applied_names << names[i];
-    }
-    if (!names.empty())
-      ROS_INFO_STREAM("Applied NMPC dynamic-reconfigure parameters: " << applied_names.str());
+    const std::string applied_values = formatNMPCConfigFieldValues(config, applied_mask);
+    if (!applied_values.empty())
+      ROS_INFO_STREAM("Applied NMPC dynamic-reconfigure parameters: " << applied_values);
   }
   catch (const std::exception& exception)
   {
@@ -1155,63 +1148,52 @@ void nmpc::TiltMtServoNMPC::applyNMPCConfig(const NMPCConfig& config, NMPCConfig
   {
     mpc_solver_ptr_->setCostWDiagElement(0, config.Qp_xy);
     mpc_solver_ptr_->setCostWDiagElement(1, config.Qp_xy);
-    ROS_INFO_STREAM("change Qp_xy for NMPC '" << config.Qp_xy << "'");
   }
   if (mask & QP_Z)
   {
     mpc_solver_ptr_->setCostWDiagElement(2, config.Qp_z);
-    ROS_INFO_STREAM("change Qp_z for NMPC '" << config.Qp_z << "'");
   }
   if (mask & QV_XY)
   {
     mpc_solver_ptr_->setCostWDiagElement(3, config.Qv_xy);
     mpc_solver_ptr_->setCostWDiagElement(4, config.Qv_xy);
-    ROS_INFO_STREAM("change Qv_xy for NMPC '" << config.Qv_xy << "'");
   }
   if (mask & QV_Z)
   {
     mpc_solver_ptr_->setCostWDiagElement(5, config.Qv_z);
-    ROS_INFO_STREAM("change Qv_z for NMPC '" << config.Qv_z << "'");
   }
   if (mask & QQ_XY)
   {
     mpc_solver_ptr_->setCostWDiagElement(7, config.Qq_xy);
     mpc_solver_ptr_->setCostWDiagElement(8, config.Qq_xy);
-    ROS_INFO_STREAM("change Qq_xy for NMPC '" << config.Qq_xy << "'");
   }
   if (mask & QQ_Z)
   {
     mpc_solver_ptr_->setCostWDiagElement(9, config.Qq_z);
-    ROS_INFO_STREAM("change Qq_z for NMPC '" << config.Qq_z << "'");
   }
   if (mask & QW_XY)
   {
     mpc_solver_ptr_->setCostWDiagElement(10, config.Qw_xy);
     mpc_solver_ptr_->setCostWDiagElement(11, config.Qw_xy);
-    ROS_INFO_STREAM("change Qw_xy for NMPC '" << config.Qw_xy << "'");
   }
   if (mask & QW_Z)
   {
     mpc_solver_ptr_->setCostWDiagElement(12, config.Qw_z);
-    ROS_INFO_STREAM("change Qw_z for NMPC '" << config.Qw_z << "'");
   }
   if (mask & QA)
   {
     for (int i = 13; i < 13 + joint_num_; ++i)
       mpc_solver_ptr_->setCostWDiagElement(i, config.Qa);
-    ROS_INFO_STREAM("change Qa for NMPC '" << config.Qa << "'");
   }
   if (mask & RT)
   {
     for (int i = mpc_solver_ptr_->NX_; i < mpc_solver_ptr_->NX_ + motor_num_; ++i)
       mpc_solver_ptr_->setCostWDiagElement(i, config.Rt, false);
-    ROS_INFO_STREAM("change Rt for NMPC '" << config.Rt << "'");
   }
   if (mask & RAC_D)
   {
     for (int i = mpc_solver_ptr_->NX_ + motor_num_; i < mpc_solver_ptr_->NX_ + motor_num_ + joint_num_; ++i)
       mpc_solver_ptr_->setCostWDiagElement(i, config.Rac_d, false);
-    ROS_INFO_STREAM("change Rac_d for NMPC '" << config.Rac_d << "'");
   }
 }
 
