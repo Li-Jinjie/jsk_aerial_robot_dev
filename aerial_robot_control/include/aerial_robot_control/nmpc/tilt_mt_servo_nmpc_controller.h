@@ -6,13 +6,14 @@
 #define TILT_MT_SERVO_NMPC_CONTROLLER_H
 
 #include "aerial_robot_control/nmpc/base_mpc_controller.h"
+#include "aerial_robot_control/nmpc/nmpc_dynamic_reconfigure.h"
 
 #include <angles/angles.h>
 #include <tf_conversions/tf_eigen.h>
+#include <mutex>
 #include <numeric>
 
 /* dynamic reconfigure */
-#include "aerial_robot_msgs/DynamicReconfigureLevels.h"
 #include "aerial_robot_control/NMPCConfig.h"
 #include <dynamic_reconfigure/server.h>
 
@@ -172,7 +173,23 @@ protected:
   void callbackSetRefXU(const aerial_robot_msgs::PredXUConstPtr& msg) override;
   void callbackSetRefTraj(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr& msg);
   void callbackSetFixedRotor(const aerial_robot_msgs::FixRotorConstPtr& msg);
-  virtual void cfgNMPCCallback(NMPCConfig& config, uint32_t level);
+  void cfgNMPCCallback(NMPCConfig& config, uint32_t level);
+  virtual NMPCConfigMask getSupportedNMPCConfigMask() const;
+  virtual void applyNMPCConfig(const NMPCConfig& config, NMPCConfigMask mask);
+  void applyPendingNMPCConfig();
+
+  template <class T>
+  void getNMPCTunableParam(ros::NodeHandle nh, const std::string& param_name, T& param, T default_value)
+  {
+    getParam<T>(nh, param_name, param, default_value);
+    nh.setParam(param_name, param);
+  }
+
+  void getNMPCIntTunableParam(ros::NodeHandle nh, const std::string& param_name, double& param, double default_value)
+  {
+    getParam<double>(nh, param_name, param, default_value);
+    nh.setParam(param_name, static_cast<int>(param));
+  }
 
   /* utils */
   // get functions
@@ -205,6 +222,8 @@ protected:
 
 private:
   tf::Quaternion quat_prev_;  // To deal with the discontinuity of the quaternion.
+  std::mutex nmpc_config_mutex_;
+  NMPCConfigUpdateState nmpc_config_update_state_;
 };
 
 }  // namespace nmpc

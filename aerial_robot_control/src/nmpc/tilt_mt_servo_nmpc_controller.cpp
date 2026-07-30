@@ -18,6 +18,9 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
   nmpc_reconf_servers_.push_back(boost::make_shared<NMPCControlDynamicConfig>(nmpc_nh));
+  NMPCConfig startup_config = NMPCConfig::__getDefault__();
+  startup_config.__fromServer__(nmpc_nh);
+  nmpc_reconf_servers_.back()->setConfigDefault(startup_config);
   nmpc_reconf_servers_.back()->setCallback(boost::bind(&TiltMtServoNMPC::cfgNMPCCallback, this, _1, _2));
 
   /* set some ROS parameters */
@@ -183,17 +186,17 @@ void nmpc::TiltMtServoNMPC::initNMPCCostW()
 
   /* control parameters with dynamic reconfigure */
   double Qp_xy, Qp_z, Qv_xy, Qv_z, Qq_xy, Qq_z, Qw_xy, Qw_z, Qa, Rt, Rac_d;
-  getParam<double>(nmpc_nh, "Qp_xy", Qp_xy, 300);
-  getParam<double>(nmpc_nh, "Qp_z", Qp_z, 400);
-  getParam<double>(nmpc_nh, "Qv_xy", Qv_xy, 10);
-  getParam<double>(nmpc_nh, "Qv_z", Qv_z, 10);
-  getParam<double>(nmpc_nh, "Qq_xy", Qq_xy, 300);
-  getParam<double>(nmpc_nh, "Qq_z", Qq_z, 300);
-  getParam<double>(nmpc_nh, "Qw_xy", Qw_xy, 5);
-  getParam<double>(nmpc_nh, "Qw_z", Qw_z, 5);
-  getParam<double>(nmpc_nh, "Qa", Qa, 1);
-  getParam<double>(nmpc_nh, "Rt", Rt, 1);
-  getParam<double>(nmpc_nh, "Rac_d", Rac_d, 250);
+  getNMPCIntTunableParam(nmpc_nh, "Qp_xy", Qp_xy, 300);
+  getNMPCIntTunableParam(nmpc_nh, "Qp_z", Qp_z, 400);
+  getNMPCIntTunableParam(nmpc_nh, "Qv_xy", Qv_xy, 10);
+  getNMPCIntTunableParam(nmpc_nh, "Qv_z", Qv_z, 10);
+  getNMPCIntTunableParam(nmpc_nh, "Qq_xy", Qq_xy, 300);
+  getNMPCIntTunableParam(nmpc_nh, "Qq_z", Qq_z, 300);
+  getNMPCIntTunableParam(nmpc_nh, "Qw_xy", Qw_xy, 5);
+  getNMPCIntTunableParam(nmpc_nh, "Qw_z", Qw_z, 5);
+  getNMPCIntTunableParam(nmpc_nh, "Qa", Qa, 1);
+  getNMPCIntTunableParam(nmpc_nh, "Rt", Rt, 1);
+  getNMPCIntTunableParam(nmpc_nh, "Rac_d", Rac_d, 250);
 
   // diagonal matrix
   mpc_solver_ptr_->setCostWDiagElement(0, Qp_xy);
@@ -510,6 +513,8 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
 
 void nmpc::TiltMtServoNMPC::controlCore(bool is_warmup)
 {
+  applyPendingNMPCConfig();
+
   // restore velocity constraints after hovering
   if (navigator_->getNaviState() == aerial_robot_navigation::HOVER_STATE and has_restored_vel_ == false)
   {
@@ -1095,86 +1100,118 @@ void nmpc::TiltMtServoNMPC::callbackSetFixedRotor(const aerial_robot_msgs::FixRo
 
 void nmpc::TiltMtServoNMPC::cfgNMPCCallback(NMPCConfig& config, uint32_t level)
 {
-  using Levels = aerial_robot_msgs::DynamicReconfigureLevels;
-  if (config.nmpc_flag)
-  {
-    try
-    {
-      switch (level)
-      {
-        case Levels::RECONFIGURE_NMPC_Q_P_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(0, config.Qp_xy);
-          mpc_solver_ptr_->setCostWDiagElement(1, config.Qp_xy);
+  (void)level;
+  std::lock_guard<std::mutex> lock(nmpc_config_mutex_);
+  nmpc_config_update_state_.ingest(config, getSupportedNMPCConfigMask());
+}
 
-          ROS_INFO_STREAM("change Qp_xy for NMPC '" << config.Qp_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_P_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(2, config.Qp_z);
-          ROS_INFO_STREAM("change Qp_z for NMPC '" << config.Qp_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_V_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(3, config.Qv_xy);
-          mpc_solver_ptr_->setCostWDiagElement(4, config.Qv_xy);
-          ROS_INFO_STREAM("change Qv_xy for NMPC '" << config.Qv_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_V_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(5, config.Qv_z);
-          ROS_INFO_STREAM("change Qv_z for NMPC '" << config.Qv_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_Q_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(7, config.Qq_xy);
-          mpc_solver_ptr_->setCostWDiagElement(8, config.Qq_xy);
-          ROS_INFO_STREAM("change Qq_xy for NMPC '" << config.Qq_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_Q_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(9, config.Qq_z);
-          ROS_INFO_STREAM("change Qq_z for NMPC '" << config.Qq_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_W_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(10, config.Qw_xy);
-          mpc_solver_ptr_->setCostWDiagElement(11, config.Qw_xy);
-          ROS_INFO_STREAM("change Qw_xy for NMPC '" << config.Qw_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_W_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(12, config.Qw_z);
-          ROS_INFO_STREAM("change Qw_z for NMPC '" << config.Qw_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_A: {
-          for (int i = 13; i < 13 + joint_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Qa);
-          ROS_INFO_STREAM("change Qa for NMPC '" << config.Qa << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_R_T: {
-          for (int i = mpc_solver_ptr_->NX_; i < mpc_solver_ptr_->NX_ + motor_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Rt, false);
-          ROS_INFO_STREAM("change Rt for NMPC '" << config.Rt << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_R_AC_D: {
-          for (int i = mpc_solver_ptr_->NX_ + motor_num_; i < mpc_solver_ptr_->NX_ + motor_num_ + joint_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Rac_d, false);
-          ROS_INFO_STREAM("change Rac_d for NMPC '" << config.Rac_d << "'");
-          break;
-        }
-        default: {
-          ROS_INFO_STREAM("The setting variable is not in the list!");
-          break;
-        }
-      }
-    }
-    catch (std::invalid_argument& e)
+nmpc::NMPCConfigMask nmpc::TiltMtServoNMPC::getSupportedNMPCConfigMask() const
+{
+  using namespace NMPCConfigFields;
+  return QP_XY | QP_Z | QV_XY | QV_Z | QQ_XY | QQ_Z | QW_XY | QW_Z | QA | RT | RAC_D;
+}
+
+void nmpc::TiltMtServoNMPC::applyPendingNMPCConfig()
+{
+  NMPCConfig config;
+  NMPCConfigMask mask = 0;
+  {
+    std::lock_guard<std::mutex> lock(nmpc_config_mutex_);
+    if (!nmpc_config_update_state_.takePending(config, mask))
+      return;
+  }
+
+  const NMPCConfigMask supported_mask = getSupportedNMPCConfigMask();
+  const NMPCConfigMask unsupported_mask = mask & NMPCConfigFields::ALL_PARAMETERS & ~supported_mask;
+  for (const auto& name : getNMPCConfigFieldNames(unsupported_mask))
+    ROS_WARN_STREAM("NMPC dynamic-reconfigure parameter '" << name << "' is not supported by this controller.");
+
+  try
+  {
+    const NMPCConfigMask applied_mask = mask & supported_mask;
+    applyNMPCConfig(config, applied_mask);
+
+    std::stringstream applied_names;
+    const auto names = getNMPCConfigFieldNames(applied_mask);
+    for (std::size_t i = 0; i < names.size(); ++i)
     {
-      ROS_ERROR_STREAM("NMPC config failed: " << e.what());
+      if (i > 0)
+        applied_names << ", ";
+      applied_names << names[i];
     }
+    if (!names.empty())
+      ROS_INFO_STREAM("Applied NMPC dynamic-reconfigure parameters: " << applied_names.str());
+  }
+  catch (const std::exception& exception)
+  {
+    ROS_ERROR_STREAM("NMPC dynamic reconfigure failed: " << exception.what());
+  }
+}
+
+void nmpc::TiltMtServoNMPC::applyNMPCConfig(const NMPCConfig& config, NMPCConfigMask mask)
+{
+  using namespace NMPCConfigFields;
+  if (mask & QP_XY)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(0, config.Qp_xy);
+    mpc_solver_ptr_->setCostWDiagElement(1, config.Qp_xy);
+    ROS_INFO_STREAM("change Qp_xy for NMPC '" << config.Qp_xy << "'");
+  }
+  if (mask & QP_Z)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(2, config.Qp_z);
+    ROS_INFO_STREAM("change Qp_z for NMPC '" << config.Qp_z << "'");
+  }
+  if (mask & QV_XY)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(3, config.Qv_xy);
+    mpc_solver_ptr_->setCostWDiagElement(4, config.Qv_xy);
+    ROS_INFO_STREAM("change Qv_xy for NMPC '" << config.Qv_xy << "'");
+  }
+  if (mask & QV_Z)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(5, config.Qv_z);
+    ROS_INFO_STREAM("change Qv_z for NMPC '" << config.Qv_z << "'");
+  }
+  if (mask & QQ_XY)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(7, config.Qq_xy);
+    mpc_solver_ptr_->setCostWDiagElement(8, config.Qq_xy);
+    ROS_INFO_STREAM("change Qq_xy for NMPC '" << config.Qq_xy << "'");
+  }
+  if (mask & QQ_Z)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(9, config.Qq_z);
+    ROS_INFO_STREAM("change Qq_z for NMPC '" << config.Qq_z << "'");
+  }
+  if (mask & QW_XY)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(10, config.Qw_xy);
+    mpc_solver_ptr_->setCostWDiagElement(11, config.Qw_xy);
+    ROS_INFO_STREAM("change Qw_xy for NMPC '" << config.Qw_xy << "'");
+  }
+  if (mask & QW_Z)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(12, config.Qw_z);
+    ROS_INFO_STREAM("change Qw_z for NMPC '" << config.Qw_z << "'");
+  }
+  if (mask & QA)
+  {
+    for (int i = 13; i < 13 + joint_num_; ++i)
+      mpc_solver_ptr_->setCostWDiagElement(i, config.Qa);
+    ROS_INFO_STREAM("change Qa for NMPC '" << config.Qa << "'");
+  }
+  if (mask & RT)
+  {
+    for (int i = mpc_solver_ptr_->NX_; i < mpc_solver_ptr_->NX_ + motor_num_; ++i)
+      mpc_solver_ptr_->setCostWDiagElement(i, config.Rt, false);
+    ROS_INFO_STREAM("change Rt for NMPC '" << config.Rt << "'");
+  }
+  if (mask & RAC_D)
+  {
+    for (int i = mpc_solver_ptr_->NX_ + motor_num_; i < mpc_solver_ptr_->NX_ + motor_num_ + joint_num_; ++i)
+      mpc_solver_ptr_->setCostWDiagElement(i, config.Rac_d, false);
+    ROS_INFO_STREAM("change Rac_d for NMPC '" << config.Rac_d << "'");
   }
 }
 
