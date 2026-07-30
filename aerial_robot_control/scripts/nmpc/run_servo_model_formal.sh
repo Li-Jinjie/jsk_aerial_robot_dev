@@ -6,17 +6,17 @@
 #   startup:        cold (zero state, zero input, and zero OCP initial guess)
 #   thrust bounds:  0..30 N per rotor
 #   servo bounds:   +/-90 deg
-#   servo-travel window: absolute simulation time [1, 5) s
+#   default servo-travel window: absolute simulation time [1, 5) s
 #   t_servo [s]:    0.200, 0.160, 0.120, 0.086, 0.040, 0.020, 0.012, 0.008
 #
 # ERK denotes the number of integration substeps in each NMPC prediction
 # interval. The closed-loop plant is always integrated with the 1 ms simulator.
-# Servo excess is the four-channel mean total travel beyond the direct
-# start-to-end change within [1, 5) s. Each table entry is command/actual
-# excess in degrees.
+# Servo travel is the four-channel mean cumulative absolute angular travel
+# within the selected window. Each table entry is command/actual travel in
+# degrees; no direct start-to-end change is subtracted.
 # A run with any OCP failure is reported as N/A, even when partial metrics exist.
 #
-# Formal results recorded on 2026-07-30:
+# Historical excess-travel results recorded on 2026-07-30:
 #
 # | t_servo | No-servo ERK 1 | No-servo ERK 20 | Servo-current ERK 1 | Servo-current ERK 5 | Servo-current ERK 20 |
 # |   [s]   | cmd/actual [deg] | cmd/actual [deg] |   cmd/actual [deg]   |   cmd/actual [deg]   |    cmd/actual [deg]   |
@@ -54,6 +54,8 @@
 #   ./run_servo_model_formal.sh
 #   ./run_servo_model_formal.sh /absolute/output/directory
 #   SUMMARIZE_ONLY=1 ./run_servo_model_formal.sh /existing/output/directory
+#   ERK20_ONLY=1 SERVO_TRAVEL_WINDOW_START=2 SERVO_TRAVEL_WINDOW_END=5 \
+#       ./run_servo_model_formal.sh /absolute/output/directory
 
 set -euo pipefail
 
@@ -63,9 +65,19 @@ LOG_DIR="${RESULT_DIR}/logs"
 PLOT_DIR="${RESULT_DIR}/plots"
 METRICS_FILE="${RESULT_DIR}/metrics.jsonl"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+ERK20_ONLY="${ERK20_ONLY:-0}"
+SERVO_TRAVEL_WINDOW_START="${SERVO_TRAVEL_WINDOW_START:-1}"
+SERVO_TRAVEL_WINDOW_END="${SERVO_TRAVEL_WINDOW_END:-5}"
 
 readonly -a TAU_VALUES=(0.200 0.160 0.120 0.086 0.040 0.020 0.012 0.008)
-readonly EXPECTED_RUNS=40
+if [[ "${ERK20_ONLY}" == "1" ]]; then
+    readonly EXPECTED_RUNS=16
+elif [[ "${ERK20_ONLY}" == "0" ]]; then
+    readonly EXPECTED_RUNS=40
+else
+    echo "ERK20_ONLY must be 0 or 1." >&2
+    exit 1
+fi
 
 mkdir -p "${LOG_DIR}" "${PLOT_DIR}"
 if [[ "${SUMMARIZE_ONLY:-0}" == "1" ]]; then
@@ -152,7 +164,7 @@ run_case() {
         --servo-time-constant "${tau}" \
         --ocp-sim-num-steps "${steps}" \
         --startup-mode cold \
-        --servo-travel-window 1 5 \
+        --servo-travel-window "${SERVO_TRAVEL_WINDOW_START}" "${SERVO_TRAVEL_WINDOW_END}" \
         --test-thrust-max 30 \
         --servo-angle-max-deg 90 \
         --plot_type 3 \
@@ -171,11 +183,16 @@ run_case() {
 
 if [[ "${SUMMARIZE_ONLY:-0}" != "1" ]]; then
     for tau in "${TAU_VALUES[@]}"; do
-        run_case 0 "${tau}" 1
-        run_case 0 "${tau}" 20
-        run_case 1 "${tau}" 1
-        run_case 1 "${tau}" 5
-        run_case 1 "${tau}" 20
+        if [[ "${ERK20_ONLY}" == "1" ]]; then
+            run_case 0 "${tau}" 20
+            run_case 1 "${tau}" 20
+        else
+            run_case 0 "${tau}" 1
+            run_case 0 "${tau}" 20
+            run_case 1 "${tau}" 1
+            run_case 1 "${tau}" 5
+            run_case 1 "${tau}" 20
+        fi
     done
 
     png_count="$(find "${PLOT_DIR}" -maxdepth 1 -type f -name '*.png' -size +0c | wc -l)"
@@ -186,7 +203,8 @@ if [[ "${SUMMARIZE_ONLY:-0}" != "1" ]]; then
     fi
 fi
 
-"${PYTHON_BIN}" - "${METRICS_FILE}" "${RESULT_DIR}" "${EXPECTED_RUNS}" <<'PY'
+"${PYTHON_BIN}" - "${METRICS_FILE}" "${RESULT_DIR}" "${EXPECTED_RUNS}" \
+    "${ERK20_ONLY}" "${SERVO_TRAVEL_WINDOW_START}" "${SERVO_TRAVEL_WINDOW_END}" <<'PY'
 import csv
 import json
 import pathlib
@@ -195,19 +213,29 @@ import sys
 metrics_path = pathlib.Path(sys.argv[1])
 result_dir = pathlib.Path(sys.argv[2])
 expected_runs = int(sys.argv[3])
+erk20_only = sys.argv[4] == "1"
+travel_window_start = float(sys.argv[5])
+travel_window_end = float(sys.argv[6])
 records = [json.loads(line) for line in metrics_path.read_text().splitlines() if line.strip()]
 
 if len(records) != expected_runs:
     raise SystemExit(f"Expected {expected_runs} formal records, found {len(records)} in {metrics_path}")
 
 expected_taus = [0.200, 0.160, 0.120, 0.086, 0.040, 0.020, 0.012, 0.008]
-groups = [
-    (0, 1, "no_servo_erk1"),
-    (0, 20, "no_servo_erk20"),
-    (1, 1, "servo_current_erk1"),
-    (1, 5, "servo_current_erk5"),
-    (1, 20, "servo_current_erk20"),
-]
+groups = (
+    [
+        (0, 20, "no_servo_erk20"),
+        (1, 20, "servo_current_erk20"),
+    ]
+    if erk20_only
+    else [
+        (0, 1, "no_servo_erk1"),
+        (0, 20, "no_servo_erk20"),
+        (1, 1, "servo_current_erk1"),
+        (1, 5, "servo_current_erk5"),
+        (1, 20, "servo_current_erk20"),
+    ]
+)
 expected_keys = {(tau, model, steps) for tau in expected_taus for model, steps, _ in groups}
 
 lookup = {}
@@ -248,10 +276,10 @@ def flatten(record):
         "solver_failures": timing.get("solver_failures"),
         "servo_cmd_excess_deg": startup.get("servo_cmd_excess_travel_deg") if valid else None,
         "servo_actual_excess_deg": startup.get("servo_actual_excess_travel_deg") if valid else None,
-        "servo_cmd_excess_1_5s_deg": (
+        "servo_cmd_travel_window_deg": (
             travel_window.get("servo_cmd_excess_travel_deg") if valid else None
         ),
-        "servo_actual_excess_1_5s_deg": (
+        "servo_actual_travel_window_deg": (
             travel_window.get("servo_actual_excess_travel_deg") if valid else None
         ),
         "position_rmse_m": startup.get("position_rmse_m") if valid else None,
@@ -282,24 +310,40 @@ def cell(tau, model, steps):
     if values["status"] != "ok":
         return "N/A"
     return (
-        f'{values["servo_cmd_excess_1_5s_deg"]:.2f} / '
-        f'{values["servo_actual_excess_1_5s_deg"]:.2f}'
+        f'{values["servo_cmd_travel_window_deg"]:.2f} / '
+        f'{values["servo_actual_travel_window_deg"]:.2f}'
     )
 
 lines = [
     "# Formal servo-model/ERK sweep",
     "",
-    "Servo travel is measured over absolute simulation time [1, 5) s.",
-    "Each result is servo command/actual excess travel in degrees; any OCP failure or incomplete window is N/A.",
+    f"Servo travel is measured over absolute simulation time "
+    f"[{travel_window_start:g}, {travel_window_end:g}) s.",
+    "Each result is servo command/actual total travel in degrees; any OCP failure or incomplete window is N/A.",
     "",
-    "| $t_{servo}$ (s) | No-servo ERK 1 | No-servo ERK 20 | Servo-current ERK 1 | Servo-current ERK 5 | Servo-current ERK 20 |",
-    "|---:|---:|---:|---:|---:|---:|",
 ]
-for tau in expected_taus:
-    lines.append(
-        f"| {tau:.3f} | {cell(tau, 0, 1)} | {cell(tau, 0, 20)} | "
-        f"{cell(tau, 1, 1)} | {cell(tau, 1, 5)} | {cell(tau, 1, 20)} |"
+if erk20_only:
+    lines.extend(
+        [
+            "| $t_{servo}$ (s) | No-servo ERK 20 | Servo-current ERK 20 |",
+            "|---:|---:|---:|",
+        ]
     )
+else:
+    lines.extend(
+        [
+            "| $t_{servo}$ (s) | No-servo ERK 1 | No-servo ERK 20 | Servo-current ERK 1 | Servo-current ERK 5 | Servo-current ERK 20 |",
+            "|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+for tau in expected_taus:
+    if erk20_only:
+        lines.append(f"| {tau:.3f} | {cell(tau, 0, 20)} | {cell(tau, 1, 20)} |")
+    else:
+        lines.append(
+            f"| {tau:.3f} | {cell(tau, 0, 1)} | {cell(tau, 0, 20)} | "
+            f"{cell(tau, 1, 1)} | {cell(tau, 1, 5)} | {cell(tau, 1, 20)} |"
+        )
 (result_dir / "formal_tau_sweep.md").write_text("\n".join(lines) + "\n")
 
 failed = [row for row in rows if row["status"] != "ok"]
@@ -312,10 +356,14 @@ if [[ "${SUMMARIZE_ONLY:-0}" != "1" ]]; then
         echo "Command: $0 $*"
         echo "Platform: Beetle-art"
         echo "TAU_VALUES: ${TAU_VALUES[*]}"
-        echo "Groups: no-servo/ERK1 no-servo/ERK20 servo-current/ERK1 servo-current/ERK5 servo-current/ERK20"
+        if [[ "${ERK20_ONLY}" == "1" ]]; then
+            echo "Groups: no-servo/ERK20 servo-current/ERK20"
+        else
+            echo "Groups: no-servo/ERK1 no-servo/ERK20 servo-current/ERK1 servo-current/ERK5 servo-current/ERK20"
+        fi
         echo "Plots: ${PLOT_DIR} (${EXPECTED_RUNS} PNG and ${EXPECTED_RUNS} PDF)"
         echo "Startup: cold"
-        echo "Servo travel window: absolute simulation time [1,5)s"
+        echo "Servo travel window: absolute simulation time [${SERVO_TRAVEL_WINDOW_START},${SERVO_TRAVEL_WINDOW_END})s"
         echo "Bounds: thrust=0..30N servo=+/-90deg"
         echo "Analysis window: 2s"
     } > "${RESULT_DIR}/run_manifest.txt"

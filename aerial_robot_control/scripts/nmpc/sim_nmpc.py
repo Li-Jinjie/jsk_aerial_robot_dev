@@ -312,7 +312,7 @@ def _excess_travel(values):
     if len(values) < 2:
         return 0.0
     travel = np.sum(np.abs(np.diff(values, axis=0)), axis=0)
-    direct = np.abs(values[-1] - values[0])
+    direct = 0
     return float(np.mean(np.maximum(travel - direct, 0.0)))
 
 
