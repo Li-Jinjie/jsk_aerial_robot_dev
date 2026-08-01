@@ -63,9 +63,9 @@
    ###########  Control  ###########
     <rosparam file="$(arg config_dir)/PhysParamBeetleOmni.yaml" command="load" />
     <rosparam file="$(arg config_dir)/BeetleNMPCFullDist.yaml" command="load" if="$(eval arg('nmpc_mode') == 0)"/>
-    <rosparam file="$(arg config_dir)/BeetleNMPCFullServoImp.yaml" command="load" if="$(eval arg('nmpc_mode') == 1)"/>
-    <rosparam file="$(arg config_dir)/BeetleNMPCFullServoThrustDist.yaml" command="load" if="$(eval arg('nmpc_mode') == 2)"/>
-<!--    <rosparam file="$(arg config_dir)/BeetleNMPCFull.yaml" command="load" if="$(eval arg('nmpc_mode') == 3)"/>-->
+    <rosparam file="$(arg config_dir)/BeetleNMPCFullServoForceImp.yaml" command="load" if="$(eval arg('nmpc_mode') == 1)"/>
+    <rosparam file="$(arg config_dir)/BeetleNMPCFullServoImp.yaml" command="load" if="$(eval arg('nmpc_mode') == 2)"/>
+    <rosparam file="$(arg config_dir)/BeetleNMPCFullServoThrustDist.yaml" command="load" if="$(eval arg('nmpc_mode') == 3)"/>
 <!--    <rosparam file="$(arg config_dir)/BeetleNMPCNoServoDelay.yaml" command="load" if="$(eval arg('nmpc_mode') == 6)"/>-->
 
    ###########  Wrench Estimation  ###########
@@ -75,6 +75,8 @@
     <rosparam file="$(arg config_dir)/WrenchEstMomAcc.yaml" command="load" if="$(eval arg('wrench_est_mode') == 'ma')"/>
     <rosparam file="$(arg config_dir)/WrenchEstAcceleration.yaml" command="load" if="$(eval arg('wrench_est_mode') == 'acc')"/>
     <rosparam file="$(arg config_dir)/WrenchEstMHEAccMom.yaml" command="load" if="$(eval arg('wrench_est_mode') == 'mhe_ma')"/>
+    <!-- Force-impedance mode derives torque from the estimated force and the ee_contact lever arm. -->
+    <param name="controller/if_use_est_torque_4_control" value="false" if="$(eval arg('nmpc_mode') == 1)"/>
 
 
    ###########  Sensor Fusion  ###########

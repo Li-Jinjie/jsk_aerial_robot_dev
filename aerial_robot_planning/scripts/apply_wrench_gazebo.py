@@ -2,10 +2,17 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import threading
+
 import rospy
 from geometry_msgs.msg import Point, Wrench
-from gazebo_msgs.srv import ApplyBodyWrench, ApplyBodyWrenchRequest
-from std_srvs.srv import Empty
+from gazebo_msgs.srv import (
+    ApplyBodyWrench,
+    ApplyBodyWrenchRequest,
+    BodyRequest,
+    BodyRequestRequest,
+)
+from std_srvs.srv import Empty, EmptyResponse
 
 
 def _clear_private_params_and_restore_cli():
@@ -32,6 +39,18 @@ def _clear_private_params_and_restore_cli():
 
 
 class ConstantForceApplier:
+    """
+    Continuously apply a wrench through Gazebo.
+
+    The target can be changed at runtime through the private ``~wrench`` topic:
+
+      rostopic pub --once /constant_force_applier/wrench geometry_msgs/Wrench \
+        '{force: {x: 5.0, y: 0.0, z: 0.0}, torque: {x: 0.0, y: 0.0, z: 0.0}}'
+
+    Call ``rosservice call /constant_force_applier/clear`` to stop applying the
+    wrench immediately.
+    """
+
     def __init__(self):
         rospy.init_node("constant_force_applier")
 
@@ -83,6 +102,13 @@ class ConstantForceApplier:
         # The applied wrench increases gradually from zero to the target value
         self.ramp_duration = rospy.get_param("~ramp_duration", 2.0)
 
+        self.command_lock = threading.RLock()
+        self.target_force = [self.force_x, self.force_y, self.force_z]
+        self.target_torque = [self.torque_x, self.torque_y, self.torque_z]
+        self.ramp_start_force = [0.0, 0.0, 0.0]
+        self.ramp_start_torque = [0.0, 0.0, 0.0]
+        self.ramp_start_time = rospy.Time.now()
+
         rospy.loginfo("Waiting for /gazebo/apply_body_wrench service...")
         rospy.wait_for_service("/gazebo/apply_body_wrench")
         self.apply_wrench_srv = rospy.ServiceProxy("/gazebo/apply_body_wrench", ApplyBodyWrench)
@@ -91,15 +117,17 @@ class ConstantForceApplier:
         self.clear_available = False
         try:
             rospy.wait_for_service("/gazebo/clear_body_wrenches", timeout=1.0)
-            self.clear_wrenches_srv = rospy.ServiceProxy("/gazebo/clear_body_wrenches", Empty)
+            self.clear_wrenches_srv = rospy.ServiceProxy("/gazebo/clear_body_wrenches", BodyRequest)
             self.clear_available = True
         except rospy.ROSException:
             rospy.logwarn("/gazebo/clear_body_wrenches not available.")
 
-        self.start_time = rospy.Time.now()
+        self.wrench_sub = rospy.Subscriber("~wrench", Wrench, self.wrench_callback, queue_size=1)
+        self.clear_srv = rospy.Service("~clear", Empty, self.clear_callback)
+
         rospy.on_shutdown(self.on_shutdown)
 
-    def get_ramp_scale(self):
+    def get_ramp_scale(self, now=None):
         """
         Compute a scale factor in [0, 1] for gradual ramp-up.
         The scale increases linearly with time until it reaches 1.
@@ -107,18 +135,72 @@ class ConstantForceApplier:
         if self.ramp_duration <= 0.0:
             return 1.0
 
-        elapsed = (rospy.Time.now() - self.start_time).to_sec()
+        if now is None:
+            now = rospy.Time.now()
+        elapsed = (now - self.ramp_start_time).to_sec()
         scale = max(0.0, min(1.0, elapsed / self.ramp_duration))
         return scale
 
+    def _get_applied_wrench_components(self, now=None):
+        if now is None:
+            now = rospy.Time.now()
+
+        with self.command_lock:
+            scale = self.get_ramp_scale(now)
+            force = [
+                start + scale * (target - start) for start, target in zip(self.ramp_start_force, self.target_force)
+            ]
+            torque = [
+                start + scale * (target - start) for start, target in zip(self.ramp_start_torque, self.target_torque)
+            ]
+        return force, torque, scale
+
+    def set_target_wrench(self, force, torque):
+        """Set a new target wrench while preserving a continuous ramp."""
+        if len(force) != 3 or len(torque) != 3:
+            raise ValueError("force and torque must each contain exactly three values")
+
+        now = rospy.Time.now()
+        current_force, current_torque, _ = self._get_applied_wrench_components(now)
+        with self.command_lock:
+            self.ramp_start_force = current_force
+            self.ramp_start_torque = current_torque
+            self.target_force = [float(value) for value in force]
+            self.target_torque = [float(value) for value in torque]
+            self.ramp_start_time = now
+
+        rospy.loginfo(
+            "New target wrench | Force: [%.3f, %.3f, %.3f] | Torque: [%.3f, %.3f, %.3f]",
+            *self.target_force,
+            *self.target_torque,
+        )
+
+    def wrench_callback(self, msg):
+        self.set_target_wrench(
+            [msg.force.x, msg.force.y, msg.force.z],
+            [msg.torque.x, msg.torque.y, msg.torque.z],
+        )
+
+    def clear_callback(self, _request):
+        with self.command_lock:
+            self.target_force = [0.0, 0.0, 0.0]
+            self.target_torque = [0.0, 0.0, 0.0]
+            self.ramp_start_force = [0.0, 0.0, 0.0]
+            self.ramp_start_torque = [0.0, 0.0, 0.0]
+            self.ramp_start_time = rospy.Time.now()
+
+        self.clear_gazebo_wrenches()
+        rospy.loginfo("The target wrench was cleared.")
+        return EmptyResponse()
+
     def get_reference_frame_and_point(self):
         if self.point_mode == "body_offset":
-            return self.reference_frame, Point(self.offset_x, self.offset_y, self.offset_z)
+            return self.body_name, Point(self.offset_x, self.offset_y, self.offset_z)
 
         return self.reference_frame, Point(self.point_x, self.point_y, self.point_z)
 
     def build_request(self):
-        scale = self.get_ramp_scale()
+        force, torque, _ = self._get_applied_wrench_components()
         reference_frame, reference_point = self.get_reference_frame_and_point()
 
         req = ApplyBodyWrenchRequest()
@@ -127,12 +209,8 @@ class ConstantForceApplier:
         req.reference_point = reference_point
 
         req.wrench = Wrench()
-        req.wrench.force.x = scale * self.force_x
-        req.wrench.force.y = scale * self.force_y
-        req.wrench.force.z = scale * self.force_z
-        req.wrench.torque.x = scale * self.torque_x
-        req.wrench.torque.y = scale * self.torque_y
-        req.wrench.torque.z = scale * self.torque_z
+        req.wrench.force.x, req.wrench.force.y, req.wrench.force.z = force
+        req.wrench.torque.x, req.wrench.torque.y, req.wrench.torque.z = torque
 
         req.start_time = rospy.Time(0)  # Apply immediately
         req.duration = rospy.Duration(self.duration)
@@ -144,7 +222,7 @@ class ConstantForceApplier:
 
         while not rospy.is_shutdown():
             req = self.build_request()
-            scale = self.get_ramp_scale()
+            _, _, scale = self._get_applied_wrench_components()
             try:
                 self.apply_wrench_srv(req)
                 rospy.loginfo_throttle(
@@ -156,25 +234,32 @@ class ConstantForceApplier:
                     req.reference_point.x,
                     req.reference_point.y,
                     req.reference_point.z,
-                    scale * self.force_x,
-                    scale * self.force_y,
-                    scale * self.force_z,
-                    scale * self.torque_x,
-                    scale * self.torque_y,
-                    scale * self.torque_z,
+                    req.wrench.force.x,
+                    req.wrench.force.y,
+                    req.wrench.force.z,
+                    req.wrench.torque.x,
+                    req.wrench.torque.y,
+                    req.wrench.torque.z,
                 )
             except rospy.ServiceException as e:
                 rospy.logerr("Failed to call /gazebo/apply_body_wrench: %s", str(e))
             rate.sleep()
 
+    def clear_gazebo_wrenches(self):
+        if not self.clear_available:
+            return
+
+        try:
+            req = BodyRequestRequest()
+            req.body_name = self.body_name
+            self.clear_wrenches_srv(req)
+            rospy.loginfo("Cleared body wrenches in Gazebo.")
+        except rospy.ServiceException as e:
+            rospy.logwarn("Failed to clear body wrenches: %s", str(e))
+
     def on_shutdown(self):
         rospy.loginfo("Shutting down constant_force_applier...")
-        if self.clear_available:
-            try:
-                self.clear_wrenches_srv()
-                rospy.loginfo("Cleared body wrenches.")
-            except rospy.ServiceException as e:
-                rospy.logwarn("Failed to clear body wrenches: %s", str(e))
+        self.clear_gazebo_wrenches()
 
 
 if __name__ == "__main__":

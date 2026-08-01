@@ -22,6 +22,7 @@
 #include "aerial_robot_control/wrench_est/utils.h"
 
 #include <sensor_msgs/JointState.h>
+#include <std_srvs/SetBool.h>
 #include <std_srvs/Trigger.h>
 #include "spinal/ESCTelemetryArray.h"
 #include "spinal/FourAxisCommand.h"
@@ -54,8 +55,11 @@ public:
     WrenchEstBase::initialize(nh, robot_model, estimator, ctrl_loop_du);
     ros::NodeHandle wrench_est_nh(nh_, "controller/wrench_est");
 
-    // Force-stop service for external FSM interruption.
-    srv_force_stop_ = wrench_est_nh.advertiseService("calibrate", &WrenchEstActuatorMeasBase::triggerForceStopCb, this);
+    // Services for external FSM control.
+    wrench_est_nh.param("enabled", is_enabled_, true);
+    srv_calibrate_ = wrench_est_nh.advertiseService("calibrate", &WrenchEstActuatorMeasBase::triggerCalibrateCb, this);
+    srv_enable_ = wrench_est_nh.advertiseService("enable", &WrenchEstActuatorMeasBase::setEnabledCb, this);
+    wrench_est_nh.setParam("enabled", is_enabled_);
 
     // state machine mode switch
     ext_force_thresh_calib_.resize(3, 0.0);
@@ -131,6 +135,9 @@ public:
 
   virtual void update(const tf::Vector3& vel, const tf::Vector3& ang_vel)
   {
+    if (!is_enabled_)
+      return;
+
     switch (state_)
     {
       case State::STOPPED: {
@@ -336,15 +343,37 @@ private:
   // for thrust command
   ros::Subscriber sub_thrust_cmd_;
 
-  // force stop service
-  ros::ServiceServer srv_force_stop_;
+  // External FSM control services.
+  ros::ServiceServer srv_calibrate_;
+  ros::ServiceServer srv_enable_;
+  bool is_enabled_{ true };
 
-  bool triggerForceStopCb(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
+  bool triggerCalibrateCb(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
   {
     (void)req;
+    if (!is_enabled_)
+    {
+      res.success = false;
+      res.message = "Wrench estimator is disabled";
+      return true;
+    }
+
     enter(State::STOPPED);
     res.success = true;
     res.message = "Wrench estimator force-stopped to calibrate";
+    return true;
+  }
+
+  bool setEnabledCb(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& res)
+  {
+    is_enabled_ = req.data;
+    enter(State::STOPPED);
+
+    ros::NodeHandle wrench_est_nh(nh_, "controller/wrench_est");
+    wrench_est_nh.setParam("enabled", is_enabled_);
+
+    res.success = true;
+    res.message = is_enabled_ ? "Wrench estimator enabled" : "Wrench estimator disabled";
     return true;
   }
 
