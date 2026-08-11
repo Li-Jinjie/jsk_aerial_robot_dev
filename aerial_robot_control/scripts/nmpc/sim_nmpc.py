@@ -1344,7 +1344,7 @@ if __name__ == "__main__":
         "--step-levels",
         type=float,
         nargs="+",
-        default=[0.25, 0.50, 0.75, 1.00, 1.25, 1.50],
+        default=[0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25],
         help="Positive absolute horizontal position amplitudes [m]; their signs alternate.",
     )
     parser.add_argument(

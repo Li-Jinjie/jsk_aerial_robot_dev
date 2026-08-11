@@ -515,6 +515,7 @@ class Visualizer:
             ax.plot(time_data, state[:, idx], "-", color=color, label=f"{label} state")
         ax.set_title("Position tracking")
         ax.set_ylabel("Position (m)")
+        ax.set_ylim([-3.5, 3.5])
         ax.legend(framealpha=legend_alpha, ncol=2)
 
         # Euler angles in degrees.
@@ -525,6 +526,7 @@ class Visualizer:
             ax.plot(time_data, euler_state[:, idx], "-", color=color, label=f"{label} state")
         ax.set_title("Attitude tracking")
         ax.set_ylabel(r"Euler angle ($^\circ$)")
+        ax.set_ylim([-45, 70])
         ax.legend(framealpha=legend_alpha, ncol=2)
 
         # Simulator state order is base(13), servo(4), thrust(4).
