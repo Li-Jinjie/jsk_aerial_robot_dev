@@ -3,6 +3,7 @@ import numpy as np
 import scienceplots
 import matplotlib.pyplot as plt
 import argparse
+from scipy.spatial.transform import Rotation, Slerp
 
 from matplotlib.lines import lineStyles
 
@@ -10,6 +11,30 @@ from utils import unwrap_angle_sequence, calculate_rmse, quat2euler, calculate_q
 from utils import matlab_yellow, matlab_green, matlab_orange, matlab_blue
 
 legend_alpha = 0.5
+
+
+def rotate_body_vectors_to_world(vector_time, vectors_body, attitude_data, attitude_topic_prefix):
+    """Rotate body-frame vectors into the world frame using interpolated attitude."""
+    attitude_time = attitude_data["__time"].to_numpy()
+    attitude_quat = attitude_data[
+        [
+            f"{attitude_topic_prefix}/x",
+            f"{attitude_topic_prefix}/y",
+            f"{attitude_topic_prefix}/z",
+            f"{attitude_topic_prefix}/w",
+        ]
+    ].to_numpy()
+
+    # Slerp requires strictly increasing timestamps. Keep the first attitude
+    # sample at each timestamp and clamp wrench samples to the attitude range.
+    attitude_time, unique_indices = np.unique(attitude_time, return_index=True)
+    attitude_rotation = Rotation.from_quat(attitude_quat[unique_indices])
+    if len(attitude_time) == 1:
+        return attitude_rotation[0].apply(vectors_body)
+
+    interpolation_time = np.clip(vector_time, attitude_time[0], attitude_time[-1])
+    rotation_wb = Slerp(attitude_time, attitude_rotation)(interpolation_time)
+    return rotation_wb.apply(vectors_body)
 
 
 def main(file_path, type, if_hand_teleop):
@@ -469,14 +494,22 @@ def main(file_path, type, if_hand_teleop):
         # --------------------------------
         plt.subplot(4, 2, 7)
         if if_hand_teleop and "data_ext_wrench_est" in locals():
-            t = np.array(data_ext_wrench_est["__time"]) - t_bias
+            force_time = np.array(data_ext_wrench_est["__time"])
+            t = force_time - t_bias
             fx = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/x"])
             fy = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/y"])
             fz = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/z"])
-            plt.plot(t, fx, label="$f_x$", linestyle="-")
+            force_world = rotate_body_vectors_to_world(
+                force_time,
+                np.column_stack((fx, fy, fz)),
+                data_qwxyz_cog,
+                "/beetle1/uav/cog/odom/pose/pose/orientation",
+            )
+            fx, fy, fz = force_world.T
+            plt.plot(t, fx, label="$f_x$", linestyle="-.")
             plt.plot(t, fy, label="$f_y$", linestyle="--")
-            plt.plot(t, fz, label="$f_z$", linestyle="-.")
-            plt.ylabel("${^B\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
+            plt.plot(t, fz, label="$f_z$", linestyle="-")
+            plt.ylabel("${^W\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
             plt.xlabel("Time [s]", fontsize=label_size)
             plt.legend(framealpha=legend_alpha)
         else:
@@ -500,9 +533,9 @@ def main(file_path, type, if_hand_teleop):
             torque_x = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/torque/x"])
             torque_y = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/torque/y"])
             torque_z = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/torque/z"])
-            plt.plot(t, torque_x, label="$\\tau_x$", linestyle="-")
+            plt.plot(t, torque_x, label="$\\tau_x$", linestyle="-.")
             plt.plot(t, torque_y, label="$\\tau_y$", linestyle="--")
-            plt.plot(t, torque_z, label="$\\tau_z$", linestyle="-.")
+            plt.plot(t, torque_z, label="$\\tau_z$", linestyle="-")
             plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{de,0}}$ [N$\cdot$m]", fontsize=label_size)
             plt.xlabel("Time [s]", fontsize=label_size)
             plt.legend(framealpha=legend_alpha)
@@ -847,16 +880,24 @@ def main(file_path, type, if_hand_teleop):
         # --------------------------------
         plt.subplot(4, 2, 5)
 
-        t = np.array(data_ext_wrench_est["__time"]) - t_bias
+        force_time = np.array(data_ext_wrench_est["__time"])
+        t = force_time - t_bias
         fx = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/x"])
         fy = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/y"])
         fz = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/z"])
+        force_world = rotate_body_vectors_to_world(
+            force_time,
+            np.column_stack((fx, fy, fz)),
+            data_qwxyz_cog,
+            "/beetle1/uav/cog/odom/pose/pose/orientation",
+        )
+        fx, fy, fz = force_world.T
         plt.plot(t, fx, label="$f_{x}$", linestyle="-.")
         plt.plot(t, fy, label="$f_{y}$", linestyle="--")
         plt.plot(t, fz, label="$f_{z}$", linestyle="-")
 
         plt.legend(framealpha=legend_alpha)
-        plt.ylabel("${^B\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
+        plt.ylabel("${^W\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 6)
@@ -885,7 +926,7 @@ def main(file_path, type, if_hand_teleop):
         plt.plot(t, thrust4, label="$f_{c4}$", linestyle=":")
         plt.ylabel("Thrust Cmd [N]", fontsize=label_size)
         plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="upper center", ncol=2)
+        plt.legend(framealpha=legend_alpha, ncol=2)
 
         # --------------------------------
         plt.subplot(4, 2, 8)
@@ -901,7 +942,7 @@ def main(file_path, type, if_hand_teleop):
 
         plt.ylabel("Servo Cmd [$^\\circ$]", fontsize=label_size)
         plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="center", ncol=2)
+        plt.legend(framealpha=legend_alpha, ncol=2)
 
         # --------------------------------
         plt.tight_layout()
