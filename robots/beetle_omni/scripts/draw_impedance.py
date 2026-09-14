@@ -3,6 +3,7 @@ import numpy as np
 import scienceplots
 import matplotlib.pyplot as plt
 import argparse
+from scipy.spatial.transform import Rotation, Slerp
 
 from matplotlib.lines import lineStyles
 
@@ -10,6 +11,30 @@ from utils import unwrap_angle_sequence, calculate_rmse, quat2euler, calculate_q
 from utils import matlab_yellow, matlab_green, matlab_orange, matlab_blue
 
 legend_alpha = 0.5
+
+
+def rotate_body_vectors_to_world(vector_time, vectors_body, attitude_data, attitude_topic_prefix):
+    """Rotate body-frame vectors into the world frame using interpolated attitude."""
+    attitude_time = attitude_data["__time"].to_numpy()
+    attitude_quat = attitude_data[
+        [
+            f"{attitude_topic_prefix}/x",
+            f"{attitude_topic_prefix}/y",
+            f"{attitude_topic_prefix}/z",
+            f"{attitude_topic_prefix}/w",
+        ]
+    ].to_numpy()
+
+    # Slerp requires strictly increasing timestamps. Keep the first attitude
+    # sample at each timestamp and clamp wrench samples to the attitude range.
+    attitude_time, unique_indices = np.unique(attitude_time, return_index=True)
+    attitude_rotation = Rotation.from_quat(attitude_quat[unique_indices])
+    if len(attitude_time) == 1:
+        return attitude_rotation[0].apply(vectors_body)
+
+    interpolation_time = np.clip(vector_time, attitude_time[0], attitude_time[-1])
+    rotation_wb = Slerp(attitude_time, attitude_rotation)(interpolation_time)
+    return rotation_wb.apply(vectors_body)
 
 
 def main(file_path, type, if_hand_teleop):
@@ -393,12 +418,11 @@ def main(file_path, type, if_hand_teleop):
         plt.rcParams.update({"font.size": 11})  # default is 10
         label_size = 14
 
-        fig = plt.figure(figsize=(12, 7))
+        fig = plt.figure(figsize=(7, 7))
 
         t_bias = max(data_xyz["__time"].iloc[0], data_xyz_ref_nmpc["__time"].iloc[0])
-        color_ref = "#0C5DA5"
-        color_real = "#FF2C00"
-        color_cog = "#f29619"  # the orange in scienceplots
+        axis_colors = (matlab_blue, matlab_orange, matlab_yellow)
+        line_width = 1.0
 
         # --------------------------------
         plt.subplot(4, 2, 1)
@@ -410,19 +434,19 @@ def main(file_path, type, if_hand_teleop):
 
         t_ref = np.array(data_xyz_ref["__time"]) - t_bias
         x_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/x"])
-        plt.plot(t_ref, x_ref, label="$p_{x,r}$", linestyle="-", color=color_ref)
+        plt.plot(t_ref, x_ref, label="$p_{x,r}$", linestyle="--", color=axis_colors[0], linewidth=line_width)
         y_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/y"])
-        plt.plot(t_ref, y_ref, label="$p_{y,r}$", linestyle="-.", color=color_ref)
+        plt.plot(t_ref, y_ref, label="$p_{y,r}$", linestyle="--", color=axis_colors[1], linewidth=line_width)
         z_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/z"])
-        plt.plot(t_ref, z_ref, label="$p_{z,r}$", linestyle="--", color=color_ref)
+        plt.plot(t_ref, z_ref, label="$p_{z,r}$", linestyle="--", color=axis_colors[2], linewidth=line_width)
 
         t = np.array(data_xyz["__time"]) - t_bias
         x = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/x"])
-        plt.plot(t, x, label="$p_x$", linestyle="-", color=color_real)
+        plt.plot(t, x, label="$p_x$", linestyle="-", color=axis_colors[0], linewidth=line_width)
         y = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/y"])
-        plt.plot(t, y, label="$p_y$", linestyle="-.", color=color_real)
+        plt.plot(t, y, label="$p_y$", linestyle="-", color=axis_colors[1], linewidth=line_width)
         z = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/z"])
-        plt.plot(t, z, label="$p_z$", linestyle="--", color=color_real)
+        plt.plot(t, z, label="$p_z$", linestyle="-", color=axis_colors[2], linewidth=line_width)
 
         plt.legend(framealpha=legend_alpha, ncol=2)
         plt.ylabel("Position [m]", fontsize=label_size)
@@ -434,17 +458,45 @@ def main(file_path, type, if_hand_teleop):
         roll_ref = np.array(data_euler_ref["roll"])
         pitch_ref = np.array(data_euler_ref["pitch"])
         yaw_ref = np.array(data_euler_ref["yaw"])
-        plt.plot(t_ref, roll_ref * 180 / np.pi, label="roll_ref", linestyle=":", color=color_ref)
-        plt.plot(t_ref, pitch_ref * 180 / np.pi, label="pitch_ref", linestyle="-.", color=color_ref)
-        plt.plot(t_ref, yaw_ref * 180 / np.pi, label="yaw_ref", linestyle="--", color=color_ref)
+        plt.plot(
+            t_ref,
+            roll_ref * 180 / np.pi,
+            label="$\\phi_r$",
+            linestyle="--",
+            color=axis_colors[0],
+            linewidth=line_width,
+        )
+        plt.plot(
+            t_ref,
+            pitch_ref * 180 / np.pi,
+            label="$\\theta_r$",
+            linestyle="--",
+            color=axis_colors[1],
+            linewidth=line_width,
+        )
+        plt.plot(
+            t_ref,
+            yaw_ref * 180 / np.pi,
+            label="$\\psi_r$",
+            linestyle="--",
+            color=axis_colors[2],
+            linewidth=line_width,
+        )
 
         t = np.array(data_euler["__time"]) - t_bias
         roll = np.array(data_euler["roll"])
         pitch = np.array(data_euler["pitch"])
         yaw = np.array(data_euler["yaw"])
-        plt.plot(t, roll * 180 / np.pi, label="roll", linestyle="-")
-        plt.plot(t, pitch * 180 / np.pi, label="pitch", linestyle="-.")
-        plt.plot(t, yaw * 180 / np.pi, label="yaw", linestyle="--")
+        plt.plot(t, roll * 180 / np.pi, label="$\\phi$", linestyle="-", color=axis_colors[0], linewidth=line_width)
+        plt.plot(
+            t,
+            pitch * 180 / np.pi,
+            label="$\\theta$",
+            linestyle="-",
+            color=axis_colors[1],
+            linewidth=line_width,
+        )
+        plt.plot(t, yaw * 180 / np.pi, label="$\\psi$", linestyle="-", color=axis_colors[2], linewidth=line_width)
 
         plt.legend(framealpha=legend_alpha, ncol=2)
         plt.ylabel("Orientation [$^\circ$]", fontsize=label_size)
@@ -480,16 +532,24 @@ def main(file_path, type, if_hand_teleop):
         # --------------------------------
         plt.subplot(4, 2, 5)
 
-        t = np.array(data_ext_wrench_est["__time"]) - t_bias
+        force_time = np.array(data_ext_wrench_est["__time"])
+        t = force_time - t_bias
         fx = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/x"])
         fy = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/y"])
         fz = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/z"])
+        force_world = rotate_body_vectors_to_world(
+            force_time,
+            np.column_stack((fx, fy, fz)),
+            data_qwxyz_cog,
+            "/beetle1/uav/cog/odom/pose/pose/orientation",
+        )
+        fx, fy, fz = force_world.T
         plt.plot(t, fx, label="$f_{x}$", linestyle="-.")
         plt.plot(t, fy, label="$f_{y}$", linestyle="--")
         plt.plot(t, fz, label="$f_{z}$", linestyle="-")
 
         plt.legend(framealpha=legend_alpha)
-        plt.ylabel("${^B\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
+        plt.ylabel("${^W\hat{\\boldsymbol{f}}_{de}}$ [N]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 6)
@@ -503,7 +563,7 @@ def main(file_path, type, if_hand_teleop):
         plt.plot(t, torque_z, label="$\\tau_{z}$", linestyle="-")
 
         plt.legend(framealpha=legend_alpha)
-        plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{de,0}}$ [N$\cdot$m]", fontsize=label_size)
+        plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{de}}$ [N$\cdot$m]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 7)
