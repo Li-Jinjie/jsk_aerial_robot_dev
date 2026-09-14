@@ -37,7 +37,7 @@ def rotate_body_vectors_to_world(vector_time, vectors_body, attitude_data, attit
     return rotation_wb.apply(vectors_body)
 
 
-def main(file_path, type, if_hand_teleop):
+def main(file_path, type, if_push_slide):
     # Load the data from csv file
     data = pd.read_csv(file_path)
 
@@ -423,6 +423,9 @@ def main(file_path, type, if_hand_teleop):
         t_bias = max(data_xyz["__time"].iloc[0], data_xyz_ref_nmpc["__time"].iloc[0])
         axis_colors = (matlab_blue, matlab_orange, matlab_yellow)
         line_width = 1.0
+        push_t_start = 7.4
+        slide_t_start = 10.4
+        push_slide_t_stop = 12.4
 
         # --------------------------------
         plt.subplot(4, 2, 1)
@@ -563,7 +566,10 @@ def main(file_path, type, if_hand_teleop):
         plt.plot(t, torque_z, label="$\\tau_{z}$", linestyle="-")
 
         plt.legend(framealpha=legend_alpha)
-        plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{de}}$ [N$\cdot$m]", fontsize=label_size)
+        if if_push_slide:
+            plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{B_o,\\text{lever}}}$ [N$\\cdot$m]", fontsize=label_size)
+        else:
+            plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{de}}$ [N$\\cdot$m]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 7)
@@ -597,6 +603,18 @@ def main(file_path, type, if_hand_teleop):
         plt.legend(framealpha=legend_alpha, ncol=2)
 
         # --------------------------------
+        if if_push_slide:
+            for axis in fig.axes:
+                axis.axvspan(push_t_start, push_slide_t_stop, facecolor=matlab_yellow, alpha=0.2)
+                axis.axvspan(
+                    slide_t_start,
+                    push_slide_t_stop,
+                    facecolor="none",
+                    edgecolor="lightgray",
+                    hatch="///",
+                    linewidth=0.0,
+                )
+
         plt.tight_layout()
         # make the subplots very compact
         fig.subplots_adjust(hspace=0.2)
@@ -612,8 +630,13 @@ if __name__ == "__main__":
     )
     parser.add_argument("file_path", type=str, help="The file name of the trajectory")
     parser.add_argument("-t", "--type", type=int, help="The type of the trajectory")
-    parser.add_argument("-o", "--hand_teleop", action="store_true", help="Whether the trajectory is from hand teleop")
+    parser.add_argument(
+        "-p",
+        "--push_slide",
+        action="store_true",
+        help="Highlight the pushing/sliding intervals and use the lever-torque label",
+    )
 
     args = parser.parse_args()
 
-    main(args.file_path, args.type, args.hand_teleop)
+    main(args.file_path, args.type, args.push_slide)
