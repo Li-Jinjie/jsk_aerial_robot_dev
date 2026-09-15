@@ -216,7 +216,47 @@ def _add_estimate_legend(axis, show_estimate, framealpha=None):
     )
 
 
-def _plot_torque(axis, torque_time, true_torque, nmpc_data, show_estimated_torque):
+def _plot_torque(
+    axis,
+    torque_time,
+    true_torque,
+    nmpc_data,
+    show_estimated_torque,
+    show_torque_filter_comparison,
+):
+    if show_torque_filter_comparison:
+        required = ("raw_lever_arm_torque_b", "torque_compensation_b")
+        missing = [name for name in required if name not in nmpc_data.files]
+        if missing:
+            raise ValueError(
+                "NMPC bundle is missing arrays required for the torque filter comparison: " + ", ".join(missing)
+            )
+        raw_torque = nmpc_data["raw_lever_arm_torque_b"]
+        filtered_torque = nmpc_data["torque_compensation_b"]
+        if raw_torque.shape != filtered_torque.shape or raw_torque.shape != true_torque.shape:
+            raise ValueError(
+                "raw_lever_arm_torque_b, torque_compensation_b, and true torque must have matching shapes."
+            )
+
+        colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][: len(AXES)]
+        for index, (axis_name, color) in enumerate(zip(AXES, colors)):
+            axis.plot(
+                torque_time,
+                raw_torque[:, index],
+                color=color,
+                linestyle="--",
+                label=rf"$\hat{{\tau}}_{axis_name}$",
+            )
+        for index, (axis_name, color) in enumerate(zip(AXES, colors)):
+            axis.plot(
+                torque_time,
+                filtered_torque[:, index],
+                color=color,
+                linestyle="-",
+                label=rf"$\hat{{\tau}}'_{axis_name}$",
+            )
+        return
+
     if not show_estimated_torque:
         for index, axis_name in enumerate(AXES):
             axis.plot(torque_time, true_torque[:, index], label=rf"$\tau_{axis_name}$")
@@ -261,6 +301,7 @@ def _plot(
     run_label,
     show_estimated_force,
     show_estimated_torque,
+    show_torque_filter_comparison,
 ):
     _configure_plot_style()
     figure = plt.figure(figsize=(12, 12), constrained_layout=True)
@@ -281,17 +322,24 @@ def _plot(
         raise ValueError("NMPC bundle has neither applied_wrench_cog nor torque_compensation_b.")
 
     _plot_force(force_axis, force_time, applied_force, nmpc_data, show_estimated_force)
-    _plot_torque(torque_axis, force_time, lever_arm_torque, nmpc_data, show_estimated_torque)
+    _plot_torque(
+        torque_axis,
+        force_time,
+        lever_arm_torque,
+        nmpc_data,
+        show_estimated_torque,
+        show_torque_filter_comparison,
+    )
     if show_estimated_force:
         force_axis.set_ylabel(r"$^W\boldsymbol{f}_{T_o,de}$ \& $^W\hat{\boldsymbol{f}}_{de}$ [N]")
     else:
         force_axis.set_ylabel("Applied $^W\\boldsymbol{f}_{T_o}$ [N]")
-    if show_estimated_torque:
+    if show_estimated_torque or show_torque_filter_comparison:
         torque_axis.set_ylabel(r"$^B\boldsymbol{\tau}_{B_o,de}$ [N$\cdot$m]")
     else:
         torque_axis.set_ylabel("Lever-arm $^B\\boldsymbol{\\tau}_{B_o}$ [N$\cdot$m]")
     _add_estimate_legend(force_axis, show_estimated_force)
-    _add_estimate_legend(torque_axis, show_estimated_torque)
+    _add_estimate_legend(torque_axis, show_estimated_torque or show_torque_filter_comparison)
 
     frame_symbol = FRAME_SYMBOLS.get(plot_state_frame.lower(), plot_state_frame.upper())
     for axis_index, axis_name in enumerate(AXES):
@@ -368,6 +416,7 @@ def _plot_compact_xyz(
     run_label,
     show_estimated_force,
     show_estimated_torque,
+    show_torque_filter_comparison,
 ):
     """Create the vertically compact, combined-XYZ ICRA figure."""
     _configure_compact_plot_style()
@@ -389,18 +438,29 @@ def _plot_compact_xyz(
         raise ValueError("NMPC bundle has neither applied_wrench_cog nor torque_compensation_b.")
 
     _plot_force(force_axis, force_time, applied_force, nmpc_data, show_estimated_force)
-    _plot_torque(torque_axis, force_time, lever_arm_torque, nmpc_data, show_estimated_torque)
+    _plot_torque(
+        torque_axis,
+        force_time,
+        lever_arm_torque,
+        nmpc_data,
+        show_estimated_torque,
+        show_torque_filter_comparison,
+    )
 
     if show_estimated_force:
         force_axis.set_ylabel(r"$^W\boldsymbol{f}_{T_o,de}$ \& $^W\hat{\boldsymbol{f}}_{de}$ [N]")
     else:
         force_axis.set_ylabel("Applied $^W\\boldsymbol{f}_{T_o}$ [N]")
-    if show_estimated_torque:
+    if show_estimated_torque or show_torque_filter_comparison:
         torque_axis.set_ylabel(r"$^B\boldsymbol{\tau}_{B_o,de}$ [N$\cdot$m]")
     else:
         torque_axis.set_ylabel("$^B\\boldsymbol{\\tau}_{B_o, {\\rm lever}}$ [N$\\cdot$m]")
     _add_estimate_legend(force_axis, show_estimated_force, framealpha=0.5)
-    _add_estimate_legend(torque_axis, show_estimated_torque, framealpha=0.5)
+    _add_estimate_legend(
+        torque_axis,
+        show_estimated_torque or show_torque_filter_comparison,
+        framealpha=0.5,
+    )
 
     for index, (axis_name, color) in enumerate(zip(AXES, MATLAB_COLORS)):
         position_axis.plot(truth_time, state_truth[:, index], "--", color=color)
@@ -553,6 +613,7 @@ def main(args):
             args.run_label,
             args.show_estimated_force,
             args.show_estimated_torque,
+            args.show_torque_filter_comparison,
         )
         diagnostic_prefix = None
         if args.rotational_diagnostics:
@@ -597,10 +658,16 @@ if __name__ == "__main__":
         action="store_true",
         help="Overlay estimated world-frame force (solid) on applied-force truth (dashed).",
     )
-    parser.add_argument(
+    torque_display_group = parser.add_mutually_exclusive_group()
+    torque_display_group.add_argument(
         "--show-estimated-torque",
         action="store_true",
         help="Overlay estimated body-frame torque (solid) on applied-torque truth (dashed).",
+    )
+    torque_display_group.add_argument(
+        "--show-torque-filter-comparison",
+        action="store_true",
+        help="Plot force-derived torque before filtering (dashed, hat) and after filtering (solid, hat-prime).",
     )
     parser.add_argument(
         "--compact-xyz",
