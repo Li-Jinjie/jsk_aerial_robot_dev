@@ -9,6 +9,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import scienceplots  # noqa: F401 - registers the SciencePlots styles.
+from matplotlib.lines import Line2D
 
 from nmpc_tilt_mt.utils.force_impedance_experiment import (
     PAPER_RESULTS_ROOT,
@@ -23,6 +24,7 @@ from nmpc_tilt_mt.utils.force_impedance_experiment import (
 AXES = ("x", "y", "z")
 BASELINE_WINDOW = (1.5, 2.0)
 FRAME_SYMBOLS = {"cog": "B", "ee": "T"}
+MATLAB_COLORS = ("#0072BD", "#D95319", "#EDB120")
 
 
 def _configure_plot_style():
@@ -37,6 +39,26 @@ def _configure_plot_style():
             "legend.fontsize": 16,
             "figure.titlesize": 17,
             "lines.linewidth": 1.8,
+        }
+    )
+
+
+def _configure_compact_plot_style():
+    _configure_plot_style()
+    plt.rcParams.update(
+        {
+            "font.size": 11,
+            "axes.labelsize": 14,
+            "axes.titlesize": 14,
+            "xtick.labelsize": 11,
+            "ytick.labelsize": 11,
+            "legend.fontsize": 12,
+            "figure.titlesize": 14,
+            "lines.linewidth": 1.1,
+            "legend.handlelength": 1.5,
+            "legend.handletextpad": 0.4,
+            # "legend.columnspacing": 0.8,
+            # "legend.borderpad": 0.3,
         }
     )
 
@@ -245,6 +267,103 @@ def _plot(
     plt.close(figure)
 
 
+def _plot_compact_xyz(
+    output_prefix,
+    nmpc_data,
+    truth_time,
+    time_nmpc,
+    state_nmpc,
+    state_truth,
+    plot_state_frame,
+    run_label,
+):
+    """Create the vertically compact, combined-XYZ ICRA figure."""
+    _configure_compact_plot_style()
+    figure, axes = plt.subplots(3, 2, figsize=(7, 5.5), sharex=True, constrained_layout=True)
+    force_axis, torque_axis = axes[0]
+    position_axis, velocity_axis = axes[1]
+    orientation_axis, angular_velocity_axis = axes[2]
+
+    force_time = nmpc_data["time_input"]
+    wrench_key = "applied_wrench_at_point" if "applied_wrench_at_point" in nmpc_data.files else "applied_wrench_ee"
+    applied_force = nmpc_data[wrench_key][:, :3]
+    if "applied_wrench_cog" in nmpc_data.files:
+        lever_arm_torque = nmpc_data["applied_wrench_cog"][:, 3:6]
+    elif "torque_compensation_b" in nmpc_data.files:
+        lever_arm_torque = nmpc_data["torque_compensation_b"]
+    else:
+        raise ValueError("NMPC bundle has neither applied_wrench_cog nor torque_compensation_b.")
+
+    for index, axis_name in enumerate(AXES):
+        force_axis.step(
+            force_time,
+            applied_force[:, index],
+            where="post",
+            label=rf"$f_{axis_name}$",
+        )
+        torque_axis.plot(
+            force_time,
+            lever_arm_torque[:, index],
+            label=rf"$\tau_{axis_name}$",
+        )
+
+    force_axis.set_ylabel("Applied $^W\\boldsymbol{f}_{T_o}$ [N]")
+    torque_axis.set_ylabel("$^B\\boldsymbol{\\tau}_{B_o, {\\rm lever}}$ [N$\\cdot$m]")
+    force_axis.legend(ncol=3, framealpha=0.5)
+    torque_axis.legend(ncol=3, framealpha=0.5)
+
+    for index, (axis_name, color) in enumerate(zip(AXES, MATLAB_COLORS)):
+        position_axis.plot(truth_time, state_truth[:, index], "--", color=color)
+        position_axis.plot(time_nmpc, state_nmpc[:, index], color=color, label=rf"${axis_name}$")
+        velocity_axis.plot(truth_time, state_truth[:, index + 3], "--", color=color)
+        velocity_axis.plot(time_nmpc, state_nmpc[:, index + 3], color=color, label=rf"$v_{axis_name}$")
+
+    frame_symbol = FRAME_SYMBOLS.get(plot_state_frame.lower(), plot_state_frame.upper())
+    position_axis.set_ylabel(rf"$^W\boldsymbol{{p}}_{{{frame_symbol}_o}}$ [m]")
+    velocity_axis.set_ylabel(rf"$^W\boldsymbol{{v}}_{{{frame_symbol}_o}}$ [m/s]")
+    method_handles = [
+        Line2D([0], [0], color="black", linestyle="--", label="Nominal imp."),
+        Line2D([0], [0], color="black", linestyle="-", label="Force-imp. NMPC"),
+    ]
+    position_axis.legend(handles=method_handles, framealpha=0.5)
+    velocity_axis.legend(ncol=3, framealpha=0.5)
+
+    if "state_raw" not in nmpc_data.files:
+        raise ValueError("NMPC bundle is missing state_raw for orientation and angular-velocity plots.")
+    state_raw = nmpc_data["state_raw"]
+    rpy_deg = np.rad2deg(_quaternion_to_rpy(state_raw[:, 6:10]))
+    omega_b = state_raw[:, 10:13]
+    for index, (axis_name, color) in enumerate(zip(AXES, MATLAB_COLORS)):
+        orientation_axis.plot(
+            time_nmpc,
+            rpy_deg[:, index],
+            color=color,
+            label=("$\\phi$", "$\\theta$", "$\\psi$")[index],
+        )
+        angular_velocity_axis.plot(
+            time_nmpc,
+            omega_b[:, index],
+            color=color,
+            label=rf"$\omega_{axis_name}$",
+        )
+
+    orientation_axis.set_ylabel(r"Orientation [$^\circ$]")
+    angular_velocity_axis.set_ylabel(r"$^B\boldsymbol{\omega}$ [rad/s]")
+    orientation_axis.set_xlabel("Time [s]")
+    angular_velocity_axis.set_xlabel("Time [s]")
+    orientation_axis.legend(ncol=3, framealpha=0.5)
+    angular_velocity_axis.legend(ncol=3, framealpha=0.5)
+
+    for axis in axes.flat:
+        axis.set_xlim(0.0, SCENARIO_DURATION)
+
+    if run_label:
+        figure.suptitle(run_label)
+    for extension in ("png", "pdf"):
+        figure.savefig(f"{output_prefix}.{extension}", dpi=300)
+    plt.close(figure)
+
+
 def _plot_rotational_diagnostics(output_prefix, nmpc_data, metadata, run_label):
     _configure_plot_style()
     required = ("state_raw", "torque_compensation_b")
@@ -332,7 +451,8 @@ def main(args):
         metrics = _calculate_metrics(time_nmpc, state_nmpc, state_truth)
         metrics_path = args.metrics_path
         _write_metrics(metrics_path, metrics)
-        _plot(
+        plot_function = _plot_compact_xyz if args.compact_xyz else _plot
+        plot_function(
             args.output_prefix,
             nmpc_data,
             truth_time,
@@ -380,6 +500,11 @@ if __name__ == "__main__":
         help="CSV metrics path. Default: organized paper metrics directory.",
     )
     parser.add_argument("--run-label", default="", help="Optional LaTeX-compatible figure title.")
+    parser.add_argument(
+        "--compact-xyz",
+        action="store_true",
+        help="Combine XYZ traces into a compact 3x2 ICRA-style figure.",
+    )
     parser.add_argument(
         "--rotational-diagnostics",
         action="store_true",
