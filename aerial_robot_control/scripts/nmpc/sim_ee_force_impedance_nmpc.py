@@ -22,7 +22,14 @@ from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist_imp import NMPCTiltQdServoImpedance
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist_force_imp import NMPCTiltQdServoForceImpedance
 from nmpc_tilt_mt.misc.nominal_impedance import NominalImpedance
 
-np.random.seed(42)
+RANDOM_SEED = 42
+FORCE_FILTER_ALPHA = 0.1
+GYRO_NOISE_STD = 0.01
+SPECIFIC_FORCE_NOISE_STD = 0.1
+THRUST_SENSOR_NOISE_STD = 0.1
+SERVO_ANGLE_SENSOR_NOISE_STD = 0.05
+
+np.random.seed(RANDOM_SEED)
 
 
 def rotation_matrix_from_quaternion(qwxyz):
@@ -148,14 +155,20 @@ def main(args):
         args.torque_compensation = "lever-arm" if args.model == 2 else "estimator"
     if args.torque_compensation == "lever-arm" and args.wrench_application_point != "ee":
         raise ValueError("Lever-arm torque compensation requires --wrench-application-point ee.")
+    if args.lever_arm_torque_filter_time_constant < 0.0:
+        raise ValueError("--lever-arm-torque-filter-time-constant must be nonnegative.")
+    if args.lever_arm_torque_filter_time_constant > 0.0 and not (
+        args.est_dist_type == 1 and args.torque_compensation == "lever-arm"
+    ):
+        raise ValueError("--lever-arm-torque-filter-time-constant requires -e 1 and --torque-compensation lever-arm.")
     if args.scenario == SCENARIO_NAME and (
         args.model != 2
-        or args.est_dist_type != 0
+        or args.est_dist_type not in (0, 1)
         or args.wrench_application_point != "ee"
         or args.torque_compensation != "lever-arm"
     ):
         raise ValueError(
-            "The force comparison scenario requires model=2, -e 0, "
+            "The force comparison scenario requires model=2, -e 0/1, "
             "--wrench-application-point ee, and --torque-compensation lever-arm."
         )
 
@@ -178,6 +191,8 @@ def main(args):
             f"acc-{args.ee_acceleration}_"
             f"wrench-ref-{args.reference_wrench_feedforward}"
         )
+        if args.lever_arm_torque_filter_time_constant > 0.0:
+            descriptor += f"_torque-lpf-tau-{args.lever_arm_torque_filter_time_constant:g}"
         args.save_run = default_run_bundle_path("nmpc", nmpc.params, descriptor)
 
     # Get time constants
@@ -216,6 +231,11 @@ def main(args):
     # --------- Disturbance Rejection ---------
     ts_sensor = 0.01
     disturb_estimated = np.zeros(6)  # fds_w, tau_ds_b. Note that they are in different frames.
+    raw_lever_arm_torque_b = np.zeros(3)
+    torque_filter_time_constant = args.lever_arm_torque_filter_time_constant
+    torque_filter_alpha = (
+        1.0 - np.exp(-ts_sensor / torque_filter_time_constant) if torque_filter_time_constant > 0.0 else 1.0
+    )
 
     # ---------- Simulator ----------
     if args.sim_model == 0:
@@ -271,6 +291,18 @@ def main(args):
     impedance_param_start = 4 + len(nmpc.phys.physical_param_list)
     if nmpc.include_cog_dist_parameter:
         impedance_param_start += 6
+    impedance_parameter_values = None
+    if nmpc.include_impedance:
+        impedance_parameter_values = np.array(
+            [
+                nmpc.params["pMxy"],
+                nmpc.params["pMxy"],
+                nmpc.params["pMz"],
+                nmpc.params.get("oMxy", 0.0),
+                nmpc.params.get("oMxy", 0.0),
+                nmpc.params.get("oMz", 0.0),
+            ]
+        )
 
     # ---------- Visualization ----------
     viz = Visualizer(
@@ -311,6 +343,7 @@ def main(args):
     x_now_sim = x_init_sim
     applied_wrench_at_point_all = np.zeros((N_sim, 6))
     applied_wrench_cog_all = np.zeros((N_sim, 6))
+    raw_lever_arm_torque_b_all = np.zeros((N_sim, 3))
     # lever-arm has no direct estimation of the torque on end-effector, so too large value destroy the control
     torque_disturbance = 0.5 if args.torque_compensation == "lever-arm" else 2.0
     for i in range(N_sim):
@@ -371,9 +404,10 @@ def main(args):
         if args.est_dist_type == 0:
             disturb_estimated[0:3] = disturb[0:3]
             if args.torque_compensation == "lever-arm":
-                disturb_estimated[3:6] = lever_arm_torque_from_force(
+                raw_lever_arm_torque_b = lever_arm_torque_from_force(
                     disturb_estimated[0:3], x_now_sim[6:10], sim_nmpc.phys.ball_effector_p
                 )
+                disturb_estimated[3:6] = raw_lever_arm_torque_b
             elif args.torque_compensation == "estimator":
                 disturb_estimated[3:6] = disturb[3:6]
             else:
@@ -443,16 +477,7 @@ def main(args):
                 nmpc.acados_init_p[0:4] = quaternion_r
 
                 if nmpc.include_impedance:
-                    nmpc.acados_init_p[impedance_param_start : impedance_param_start + 6] = np.array(
-                        [
-                            nmpc.params["pMxy"],
-                            nmpc.params["pMxy"],
-                            nmpc.params["pMz"],
-                            nmpc.params["oMxy"],
-                            nmpc.params["oMxy"],
-                            nmpc.params["oMz"],
-                        ]
-                    )
+                    nmpc.acados_init_p[impedance_param_start : impedance_param_start + 6] = impedance_parameter_values
                     # Note that we don't need to multiply the enlarge_factor here as it has been included in the cost mtx.
 
                 ocp_solver.set(j, "p", nmpc.acados_init_p)
@@ -464,16 +489,7 @@ def main(args):
             nmpc.acados_init_p[0:4] = quaternion_r
 
             if nmpc.include_impedance:
-                nmpc.acados_init_p[impedance_param_start : impedance_param_start + 6] = np.array(
-                    [
-                        nmpc.params["pMxy"],
-                        nmpc.params["pMxy"],
-                        nmpc.params["pMz"],
-                        nmpc.params["oMxy"],
-                        nmpc.params["oMxy"],
-                        nmpc.params["oMz"],
-                    ]
-                )
+                nmpc.acados_init_p[impedance_param_start : impedance_param_start + 6] = impedance_parameter_values
 
             ocp_solver.set(ocp_solver.N, "p", nmpc.acados_init_p)
 
@@ -499,7 +515,9 @@ def main(args):
 
             mass = sim_nmpc.fake_sensor.mass
 
-            sf_b_imu = sf_b + np.random.normal(0.0, 0.1, 3)  # add noise. real: scale = 0.00727 * gravity
+            sf_b_imu = sf_b + np.random.normal(
+                0.0, SPECIFIC_FORCE_NOISE_STD, 3
+            )  # add noise. real: scale = 0.00727 * gravity
 
             wrench_u_imu_b = np.zeros(6)
             wrench_u_imu_b[0:3] = mass * sf_b_imu
@@ -509,7 +527,7 @@ def main(args):
             if args.torque_compensation == "estimator":
                 w = x_now_sim[10:13]  # Angular velocity
                 I = sim_nmpc.fake_sensor.I
-                w_imu = w + np.random.normal(0.0, 0.01, 3)  # add noise. real: scale = 0.0008 rad/s
+                w_imu = w + np.random.normal(0.0, GYRO_NOISE_STD, 3)  # add noise. real: scale = 0.0008 rad/s
 
                 ang_acc_b_imu = np.zeros(3)
                 if args.if_use_ang_acc == 0:
@@ -522,8 +540,8 @@ def main(args):
                 wrench_u_imu_b[3:6] = np.dot(I, ang_acc_b_imu) + np.cross(w, np.dot(I, w))
 
             # Calculate the internal wrench from actuator sensor measurements in Body frame
-            ft_sensor = x_now_sim[17:21] + np.random.normal(0.0, 0.1, 4)
-            a_sensor = x_now_sim[13:17] + np.random.normal(0.0, 0.05, 4)
+            ft_sensor = x_now_sim[17:21] + np.random.normal(0.0, THRUST_SENSOR_NOISE_STD, 4)
+            a_sensor = x_now_sim[13:17] + np.random.normal(0.0, SERVO_ANGLE_SENSOR_NOISE_STD, 4)
 
             z_sensor = np.zeros(8)
             z_sensor[0] = ft_sensor[0] * np.sin(a_sensor[0])
@@ -540,7 +558,7 @@ def main(args):
             # Update disturbance estimation
             if args.est_dist_type == 1:
                 # Only use the wrench difference between the imu and the actuator sensor, no u_mpc
-                alpha_force = 0.1
+                alpha_force = FORCE_FILTER_ALPHA
                 disturb_estimated[0:3] = (1 - alpha_force) * disturb_estimated[0:3] + alpha_force * np.dot(
                     rot_wb, (wrench_u_imu_b[0:3] - wrench_u_sensor_b[0:3])
                 )  # World frame
@@ -550,12 +568,16 @@ def main(args):
                         wrench_u_imu_b[3:6] - wrench_u_sensor_b[3:6]
                     )  # Body frame
                 elif args.torque_compensation == "lever-arm":
-                    disturb_estimated[3:6] = lever_arm_torque_from_force(
+                    raw_lever_arm_torque_b = lever_arm_torque_from_force(
                         disturb_estimated[0:3], x_now_sim[6:10], sim_nmpc.phys.ball_effector_p
                     )
+                    disturb_estimated[3:6] = (1.0 - torque_filter_alpha) * disturb_estimated[
+                        3:6
+                    ] + torque_filter_alpha * raw_lever_arm_torque_b
 
         if args.torque_compensation == "none":
             disturb_estimated[3:6] = 0.0
+        raw_lever_arm_torque_b_all[i, :] = raw_lever_arm_torque_b
 
         # --------- Update simulation ----------
         x_now_sim[-6:] = disturb
@@ -602,6 +624,22 @@ def main(args):
             "scenario_duration": SCENARIO_DURATION,
             "enlarge_factor": nmpc.params.get("enlarge_factor"),
             "impedance": impedance_parameters(nmpc.params),
+            "disturbance_estimator": {
+                "mode": "sensor_based" if args.est_dist_type == 1 else "perfect_information",
+                "sensor_period": ts_sensor,
+                "force_filter_alpha": FORCE_FILTER_ALPHA if args.est_dist_type == 1 else 1.0,
+                "force_filter_time_constant": (
+                    -ts_sensor / np.log1p(-FORCE_FILTER_ALPHA) if args.est_dist_type == 1 else 0.0
+                ),
+                "torque_source": args.torque_compensation,
+                "lever_arm_torque_filter_time_constant": torque_filter_time_constant,
+                "lever_arm_torque_filter_alpha": torque_filter_alpha,
+                "gyro_noise_std": GYRO_NOISE_STD,
+                "specific_force_noise_std": SPECIFIC_FORCE_NOISE_STD,
+                "thrust_sensor_noise_std": THRUST_SENSOR_NOISE_STD,
+                "servo_angle_sensor_noise_std": SERVO_ANGLE_SENSOR_NOISE_STD,
+                "random_seed": RANDOM_SEED,
+            },
         }
         save_run_bundle(
             args.save_run,
@@ -616,6 +654,7 @@ def main(args):
             applied_wrench_at_point=applied_wrench_at_point_all[: viz.data_idx, :],
             applied_wrench_cog=applied_wrench_cog_all[: viz.data_idx, :],
             estimated_force_w=viz.est_disturb_f_w_all[: viz.data_idx, :],
+            raw_lever_arm_torque_b=raw_lever_arm_torque_b_all[: viz.data_idx, :],
             torque_compensation_b=viz.est_disturb_tau_g_all[: viz.data_idx, :],
             control=viz.u_sim_all[: viz.data_idx, :],
         )
@@ -734,6 +773,14 @@ if __name__ == "__main__":
         default=None,
         help="Torque disturbance source: none, force-derived lever-arm torque, or estimator output. "
         "Default: estimator for model 0/1; lever-arm for model 2.",
+    )
+
+    parser.add_argument(
+        "--lever-arm-torque-filter-time-constant",
+        type=float,
+        default=0.0,
+        help="Optional first-order low-pass time constant [s] applied to force-derived lever-arm torque. "
+        "Requires -e 1 and --torque-compensation lever-arm. Zero preserves the unfiltered behavior.",
     )
 
     parser.add_argument(

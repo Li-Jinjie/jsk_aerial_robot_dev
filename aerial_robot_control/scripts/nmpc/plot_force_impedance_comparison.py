@@ -160,6 +160,96 @@ def _write_metrics(path, rows):
         writer.writerows(rows)
 
 
+def _plot_force(axis, force_time, applied_force, nmpc_data, show_estimated_force):
+    if not show_estimated_force:
+        for index, axis_name in enumerate(AXES):
+            axis.step(
+                force_time,
+                applied_force[:, index],
+                where="post",
+                label=rf"$f_{axis_name}$",
+            )
+        return
+
+    if "estimated_force_w" not in nmpc_data.files:
+        raise ValueError("NMPC bundle is missing estimated_force_w requested for the force plot.")
+    estimated_force = nmpc_data["estimated_force_w"]
+    if estimated_force.shape != applied_force.shape:
+        raise ValueError(
+            f"estimated_force_w shape {estimated_force.shape} does not match applied force shape {applied_force.shape}."
+        )
+
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][: len(AXES)]
+    for index, (axis_name, color) in enumerate(zip(AXES, colors)):
+        axis.step(
+            force_time,
+            applied_force[:, index],
+            where="post",
+            color=color,
+            linestyle="--",
+            label=rf"$f_{axis_name}$",
+        )
+    for index, (axis_name, color) in enumerate(zip(AXES, colors)):
+        axis.plot(
+            force_time,
+            estimated_force[:, index],
+            color=color,
+            linestyle="-",
+            label=rf"$\hat{{f}}_{axis_name}$",
+        )
+
+
+def _add_estimate_legend(axis, show_estimate, framealpha=None):
+    legend_kwargs = {"ncol": 3}
+    if framealpha is not None:
+        legend_kwargs["framealpha"] = framealpha
+    if not show_estimate:
+        axis.legend(**legend_kwargs)
+        return
+
+    handles, labels = axis.get_legend_handles_labels()
+    row_order = (0, 3, 1, 4, 2, 5)
+    axis.legend(
+        handles=[handles[index] for index in row_order],
+        labels=[labels[index] for index in row_order],
+        **legend_kwargs,
+    )
+
+
+def _plot_torque(axis, torque_time, true_torque, nmpc_data, show_estimated_torque):
+    if not show_estimated_torque:
+        for index, axis_name in enumerate(AXES):
+            axis.plot(torque_time, true_torque[:, index], label=rf"$\tau_{axis_name}$")
+        return
+
+    if "torque_compensation_b" not in nmpc_data.files:
+        raise ValueError("NMPC bundle is missing torque_compensation_b requested for the torque plot.")
+    estimated_torque = nmpc_data["torque_compensation_b"]
+    if estimated_torque.shape != true_torque.shape:
+        raise ValueError(
+            f"torque_compensation_b shape {estimated_torque.shape} does not match true torque shape "
+            f"{true_torque.shape}."
+        )
+
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][: len(AXES)]
+    for index, (axis_name, color) in enumerate(zip(AXES, colors)):
+        axis.plot(
+            torque_time,
+            true_torque[:, index],
+            color=color,
+            linestyle="--",
+            label=rf"$\tau_{axis_name}$",
+        )
+    for index, (axis_name, color) in enumerate(zip(AXES, colors)):
+        axis.plot(
+            torque_time,
+            estimated_torque[:, index],
+            color=color,
+            linestyle="-",
+            label=rf"$\hat{{\tau}}_{axis_name}$",
+        )
+
+
 def _plot(
     output_prefix,
     nmpc_data,
@@ -169,6 +259,8 @@ def _plot(
     state_truth,
     plot_state_frame,
     run_label,
+    show_estimated_force,
+    show_estimated_torque,
 ):
     _configure_plot_style()
     figure = plt.figure(figsize=(12, 12), constrained_layout=True)
@@ -179,6 +271,8 @@ def _plot(
     force_time = nmpc_data["time_input"]
     wrench_key = "applied_wrench_at_point" if "applied_wrench_at_point" in nmpc_data.files else "applied_wrench_ee"
     applied_force = nmpc_data[wrench_key][:, :3]
+    if show_estimated_torque and "applied_wrench_cog" not in nmpc_data.files:
+        raise ValueError("NMPC bundle is missing applied_wrench_cog required for true-torque plotting.")
     if "applied_wrench_cog" in nmpc_data.files:
         lever_arm_torque = nmpc_data["applied_wrench_cog"][:, 3:6]
     elif "torque_compensation_b" in nmpc_data.files:
@@ -186,22 +280,18 @@ def _plot(
     else:
         raise ValueError("NMPC bundle has neither applied_wrench_cog nor torque_compensation_b.")
 
-    for index, axis_name in enumerate(AXES):
-        force_axis.step(
-            force_time,
-            applied_force[:, index],
-            where="post",
-            label=rf"$f_{axis_name}$",
-        )
-        torque_axis.plot(
-            force_time,
-            lever_arm_torque[:, index],
-            label=rf"$\tau_{axis_name}$",
-        )
-    force_axis.set_ylabel("Applied $^W\\boldsymbol{f}_{T_o}$ [N]")
-    torque_axis.set_ylabel("Lever-arm $^B\\boldsymbol{\\tau}_{B_o}$ [N$\cdot$m]")
-    force_axis.legend(ncol=3)
-    torque_axis.legend(ncol=3)
+    _plot_force(force_axis, force_time, applied_force, nmpc_data, show_estimated_force)
+    _plot_torque(torque_axis, force_time, lever_arm_torque, nmpc_data, show_estimated_torque)
+    if show_estimated_force:
+        force_axis.set_ylabel(r"$^W\boldsymbol{f}_{T_o,de}$ \& $^W\hat{\boldsymbol{f}}_{de}$ [N]")
+    else:
+        force_axis.set_ylabel("Applied $^W\\boldsymbol{f}_{T_o}$ [N]")
+    if show_estimated_torque:
+        torque_axis.set_ylabel(r"$^B\boldsymbol{\tau}_{B_o,de}$ [N$\cdot$m]")
+    else:
+        torque_axis.set_ylabel("Lever-arm $^B\\boldsymbol{\\tau}_{B_o}$ [N$\cdot$m]")
+    _add_estimate_legend(force_axis, show_estimated_force)
+    _add_estimate_legend(torque_axis, show_estimated_torque)
 
     frame_symbol = FRAME_SYMBOLS.get(plot_state_frame.lower(), plot_state_frame.upper())
     for axis_index, axis_name in enumerate(AXES):
@@ -276,6 +366,8 @@ def _plot_compact_xyz(
     state_truth,
     plot_state_frame,
     run_label,
+    show_estimated_force,
+    show_estimated_torque,
 ):
     """Create the vertically compact, combined-XYZ ICRA figure."""
     _configure_compact_plot_style()
@@ -287,6 +379,8 @@ def _plot_compact_xyz(
     force_time = nmpc_data["time_input"]
     wrench_key = "applied_wrench_at_point" if "applied_wrench_at_point" in nmpc_data.files else "applied_wrench_ee"
     applied_force = nmpc_data[wrench_key][:, :3]
+    if show_estimated_torque and "applied_wrench_cog" not in nmpc_data.files:
+        raise ValueError("NMPC bundle is missing applied_wrench_cog required for true-torque plotting.")
     if "applied_wrench_cog" in nmpc_data.files:
         lever_arm_torque = nmpc_data["applied_wrench_cog"][:, 3:6]
     elif "torque_compensation_b" in nmpc_data.files:
@@ -294,23 +388,19 @@ def _plot_compact_xyz(
     else:
         raise ValueError("NMPC bundle has neither applied_wrench_cog nor torque_compensation_b.")
 
-    for index, axis_name in enumerate(AXES):
-        force_axis.step(
-            force_time,
-            applied_force[:, index],
-            where="post",
-            label=rf"$f_{axis_name}$",
-        )
-        torque_axis.plot(
-            force_time,
-            lever_arm_torque[:, index],
-            label=rf"$\tau_{axis_name}$",
-        )
+    _plot_force(force_axis, force_time, applied_force, nmpc_data, show_estimated_force)
+    _plot_torque(torque_axis, force_time, lever_arm_torque, nmpc_data, show_estimated_torque)
 
-    force_axis.set_ylabel("Applied $^W\\boldsymbol{f}_{T_o}$ [N]")
-    torque_axis.set_ylabel("$^B\\boldsymbol{\\tau}_{B_o, {\\rm lever}}$ [N$\\cdot$m]")
-    force_axis.legend(ncol=3, framealpha=0.5)
-    torque_axis.legend(ncol=3, framealpha=0.5)
+    if show_estimated_force:
+        force_axis.set_ylabel(r"$^W\boldsymbol{f}_{T_o,de}$ \& $^W\hat{\boldsymbol{f}}_{de}$ [N]")
+    else:
+        force_axis.set_ylabel("Applied $^W\\boldsymbol{f}_{T_o}$ [N]")
+    if show_estimated_torque:
+        torque_axis.set_ylabel(r"$^B\boldsymbol{\tau}_{B_o,de}$ [N$\cdot$m]")
+    else:
+        torque_axis.set_ylabel("$^B\\boldsymbol{\\tau}_{B_o, {\\rm lever}}$ [N$\\cdot$m]")
+    _add_estimate_legend(force_axis, show_estimated_force, framealpha=0.5)
+    _add_estimate_legend(torque_axis, show_estimated_torque, framealpha=0.5)
 
     for index, (axis_name, color) in enumerate(zip(AXES, MATLAB_COLORS)):
         position_axis.plot(truth_time, state_truth[:, index], "--", color=color)
@@ -461,6 +551,8 @@ def main(args):
             state_truth_raw,
             plot_state_frame,
             args.run_label,
+            args.show_estimated_force,
+            args.show_estimated_torque,
         )
         diagnostic_prefix = None
         if args.rotational_diagnostics:
@@ -500,6 +592,16 @@ if __name__ == "__main__":
         help="CSV metrics path. Default: organized paper metrics directory.",
     )
     parser.add_argument("--run-label", default="", help="Optional LaTeX-compatible figure title.")
+    parser.add_argument(
+        "--show-estimated-force",
+        action="store_true",
+        help="Overlay estimated world-frame force (solid) on applied-force truth (dashed).",
+    )
+    parser.add_argument(
+        "--show-estimated-torque",
+        action="store_true",
+        help="Overlay estimated body-frame torque (solid) on applied-torque truth (dashed).",
+    )
     parser.add_argument(
         "--compact-xyz",
         action="store_true",
