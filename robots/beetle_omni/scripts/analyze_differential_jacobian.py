@@ -2,7 +2,8 @@
 """
 Differential-Jacobian comparison between PInv(SVD) and PInv(SVD)+Alloc.
 
-The script generates exactly three two-panel figures:
+The script generates the original comparison figures plus a dedicated
+equal-angle-scale singularity-crossing figure:
 
 Figure 1: differential-Jacobian rank maps
     left:  PInv(SVD)
@@ -15,6 +16,8 @@ Figure 2: minimum-singular-value maps
 Figure 3:
     left:  Delta sigma_min = sigma_min,heuristic - sigma_min,PInv
     right: horizontal-plane cross section (beta = 0 deg)
+
+Figure 4: equal-angle-scale map of the locally improved crossing sectors
 
 The differential allocation Jacobian is
 
@@ -578,6 +581,85 @@ def compute_horizontal_slice(
     }
 
 
+def wrap_azimuth_deg(azimuth_deg: float) -> float:
+    return (azimuth_deg + 180.0) % 360.0 - 180.0
+
+
+def compute_singularity_crossing_analysis(
+    fixed_matrix: np.ndarray,
+    fixed_pseudoinverse: np.ndarray,
+    params: VehicleParams,
+    thrust_threshold_N: float,
+    thrust_increment_scale_N: float,
+    angle_increment_scale_rad: float,
+    orientation_step_deg: float,
+    probe_radius_deg: float,
+    improvement_tolerance: float = 1e-10,
+) -> dict[str, np.ndarray | float]:
+    """Measure locally improved straight-line crossings through singular directions."""
+    if orientation_step_deg <= 0.0 or orientation_step_deg >= 180.0:
+        raise ValueError("Crossing-orientation step must be in (0, 180) deg.")
+    if probe_radius_deg <= 0.0:
+        raise ValueError("Crossing probe radius must be positive.")
+
+    singularity_azimuth_deg = np.sort(
+        np.asarray(
+            [wrap_azimuth_deg(math.degrees(math.atan2(position[1], position[0]))) for position in params.positions_b],
+            dtype=float,
+        )
+    )
+    orientation_deg = np.arange(0.0, 180.0, orientation_step_deg)
+    shape = (singularity_azimuth_deg.size, orientation_deg.size)
+    sigma_min_difference_before = np.empty(shape, dtype=float)
+    sigma_min_difference_after = np.empty(shape, dtype=float)
+
+    for singularity_index, center_azimuth_deg in enumerate(singularity_azimuth_deg):
+        for orientation_index, orientation_i_deg in enumerate(orientation_deg):
+            orientation_i_rad = math.radians(float(orientation_i_deg))
+            azimuth_offset_deg = probe_radius_deg * math.cos(orientation_i_rad)
+            elevation_offset_deg = probe_radius_deg * math.sin(orientation_i_rad)
+
+            for side, output in (
+                (-1.0, sigma_min_difference_before),
+                (1.0, sigma_min_difference_after),
+            ):
+                direction = direction_from_angles(
+                    math.radians(wrap_azimuth_deg(center_azimuth_deg + side * azimuth_offset_deg)),
+                    math.radians(side * elevation_offset_deg),
+                )
+                result = evaluate_direction(
+                    direction_b=direction,
+                    fixed_matrix=fixed_matrix,
+                    fixed_pseudoinverse=fixed_pseudoinverse,
+                    params=params,
+                    thrust_threshold_N=thrust_threshold_N,
+                    thrust_increment_scale_N=thrust_increment_scale_N,
+                    angle_increment_scale_rad=angle_increment_scale_rad,
+                )
+                output[singularity_index, orientation_index] = result["heuristic_sigma_min"] - result["pinv_sigma_min"]
+
+    locally_improved = (sigma_min_difference_before > improvement_tolerance) & (
+        sigma_min_difference_after > improvement_tolerance
+    )
+    sector_width_deg = np.sum(locally_improved, axis=1) * orientation_step_deg
+    improved_crossing_fraction_percent = 100.0 * sector_width_deg / 180.0
+
+    return {
+        "singularity_azimuth_deg": singularity_azimuth_deg,
+        "orientation_deg": orientation_deg,
+        "sigma_min_difference_before": sigma_min_difference_before,
+        "sigma_min_difference_after": sigma_min_difference_after,
+        "locally_improved": locally_improved,
+        "sector_width_deg": sector_width_deg,
+        "improved_crossing_fraction_percent": improved_crossing_fraction_percent,
+        "mean_sector_width_deg": float(np.mean(sector_width_deg)),
+        "mean_improved_crossing_fraction_percent": float(np.mean(improved_crossing_fraction_percent)),
+        "orientation_step_deg": orientation_step_deg,
+        "probe_radius_deg": probe_radius_deg,
+        "improvement_tolerance": improvement_tolerance,
+    }
+
+
 def finish_figure(
     figure: plt.Figure,
     output_path: Path,
@@ -816,6 +898,72 @@ def plot_difference_and_horizontal_figure(
     finish_figure(figure, output_path, show_plots)
 
 
+def plot_singularity_crossing_figure(
+    maps: dict[str, np.ndarray],
+    crossing: dict[str, np.ndarray | float],
+    output_path: Path,
+    show_plots: bool,
+) -> None:
+    difference = maps["sigma_min_difference"]
+    maximum_absolute_difference = float(np.max(np.abs(difference)))
+    if maximum_absolute_difference <= 0.0:
+        maximum_absolute_difference = 1.0
+
+    figure, axis = plt.subplots(figsize=(9.0, 4.8))
+    image = axis.imshow(
+        difference,
+        origin="lower",
+        aspect="equal",
+        extent=(-180.0, 180.0, -90.0, 90.0),
+        norm=TwoSlopeNorm(
+            vmin=-maximum_absolute_difference,
+            vcenter=0.0,
+            vmax=maximum_absolute_difference,
+        ),
+    )
+    axis.set_title(r"Locally improved singularity-crossing sectors")
+    axis.set_xlabel(r"Force azimuth $\phi$ [deg]")
+    axis.set_ylabel(r"Force elevation $\beta$ [deg]")
+
+    sector_half_width_deg = 0.5 * float(crossing["mean_sector_width_deg"])
+    annotation_radius_deg = 9.0
+    for center_azimuth_deg in np.asarray(crossing["singularity_azimuth_deg"]):
+        for boundary_angle_deg in (-sector_half_width_deg, sector_half_width_deg):
+            boundary_angle_rad = math.radians(boundary_angle_deg)
+            delta_azimuth_deg = annotation_radius_deg * math.cos(boundary_angle_rad)
+            delta_elevation_deg = annotation_radius_deg * math.sin(boundary_angle_rad)
+            axis.plot(
+                [
+                    center_azimuth_deg - delta_azimuth_deg,
+                    center_azimuth_deg + delta_azimuth_deg,
+                ],
+                [-delta_elevation_deg, delta_elevation_deg],
+                color="white",
+                linestyle="--",
+                linewidth=0.9,
+            )
+
+    axis.text(
+        0.02,
+        0.97,
+        (
+            "Locally improved crossing sector\n"
+            rf"${float(crossing['mean_sector_width_deg']):.1f}^\circ/180^\circ"
+            rf"={float(crossing['mean_improved_crossing_fraction_percent']):.1f}\%$"
+        ),
+        transform=axis.transAxes,
+        va="top",
+        ha="left",
+        fontsize=9,
+        color="white",
+        bbox={"facecolor": "black", "edgecolor": "none", "alpha": 0.55, "pad": 3.0},
+    )
+    colorbar = figure.colorbar(image, ax=axis, fraction=0.025, pad=0.025)
+    colorbar.set_label(r"$\Delta\sigma_{\min}$")
+    figure.tight_layout()
+    finish_figure(figure, output_path, show_plots)
+
+
 def main() -> None:
     configure_plot_style()
 
@@ -865,6 +1013,18 @@ def main() -> None:
         default=0.05,
     )
     parser.add_argument(
+        "--crossing-angle-step-deg",
+        type=float,
+        default=0.05,
+        help="Orientation resolution for local singularity-crossing analysis [deg].",
+    )
+    parser.add_argument(
+        "--crossing-probe-radius-deg",
+        type=float,
+        default=0.01,
+        help="Angular distance sampled on each side of a singular direction [deg].",
+    )
+    parser.add_argument(
         "--show-plots",
         action="store_true",
         help="Display plots interactively instead of saving PNG files.",
@@ -901,6 +1061,16 @@ def main() -> None:
         angle_increment_scale_rad=angle_increment_scale_rad,
         azimuth_step_deg=args.horizontal_step_deg,
     )
+    crossing = compute_singularity_crossing_analysis(
+        fixed_matrix=fixed_matrix,
+        fixed_pseudoinverse=fixed_pseudoinverse,
+        params=params,
+        thrust_threshold_N=args.thrust_threshold,
+        thrust_increment_scale_N=thrust_increment_scale_N,
+        angle_increment_scale_rad=angle_increment_scale_rad,
+        orientation_step_deg=args.crossing_angle_step_deg,
+        probe_radius_deg=args.crossing_probe_radius_deg,
+    )
 
     # plot_rank_figure(
     #     maps,
@@ -918,11 +1088,18 @@ def main() -> None:
         args.output_dir / "figure_3_sigma_difference_and_horizontal_section.png",
         args.show_plots,
     )
+    plot_singularity_crossing_figure(
+        maps,
+        crossing,
+        args.output_dir / "figure_4_singularity_crossing_sectors.png",
+        args.show_plots,
+    )
 
     np.savez_compressed(
         args.output_dir / "differential_jacobian_figure_data.npz",
         **maps,
         **{f"horizontal_{key}": value for key, value in horizontal.items()},
+        **{f"crossing_{key}": value for key, value in crossing.items() if isinstance(value, np.ndarray)},
         fixed_matrix=fixed_matrix,
         positions_b=params.positions_b,
         drag_signs=params.drag_signs,
@@ -932,8 +1109,23 @@ def main() -> None:
         thrust_threshold_N=args.thrust_threshold,
         thrust_increment_scale_N=(thrust_increment_scale_N),
         angle_increment_scale_rad=(angle_increment_scale_rad),
+        crossing_orientation_step_deg=args.crossing_angle_step_deg,
+        crossing_probe_radius_deg=args.crossing_probe_radius_deg,
+        crossing_improvement_tolerance=float(crossing["improvement_tolerance"]),
     )
 
+    singularity_crossings = [
+        {
+            "azimuth_deg": float(azimuth_deg),
+            "locally_improved_sector_width_deg": float(sector_width_deg),
+            "locally_improved_crossing_fraction_percent": float(fraction_percent),
+        }
+        for azimuth_deg, sector_width_deg, fraction_percent in zip(
+            crossing["singularity_azimuth_deg"],
+            crossing["sector_width_deg"],
+            crossing["improved_crossing_fraction_percent"],
+        )
+    ]
     rank_summary = {
         "pinv_rank_values": np.unique(maps["pinv_rank"]).astype(int).tolist(),
         "heuristic_rank_values": np.unique(maps["heuristic_rank"]).astype(int).tolist(),
@@ -944,6 +1136,16 @@ def main() -> None:
         "minimum_heuristic_sigma_min": float(np.min(maps["heuristic_sigma_min"])),
         "maximum_sigma_min_improvement": float(np.max(maps["sigma_min_difference"])),
         "minimum_sigma_min_change": float(np.min(maps["sigma_min_difference"])),
+        "singularity_crossing_metric": (
+            "Both sides of a local straight-line crossing have "
+            "heuristic_sigma_min - pinv_sigma_min above the comparison tolerance."
+        ),
+        "singularity_crossing_probe_radius_deg": args.crossing_probe_radius_deg,
+        "singularity_crossing_orientation_step_deg": args.crossing_angle_step_deg,
+        "singularity_crossing_improvement_tolerance": float(crossing["improvement_tolerance"]),
+        "singularity_crossings": singularity_crossings,
+        "mean_locally_improved_sector_width_deg": float(crossing["mean_sector_width_deg"]),
+        "mean_locally_improved_crossing_fraction_percent": float(crossing["mean_improved_crossing_fraction_percent"]),
     }
 
     with (args.output_dir / "figure_summary.json").open("w", encoding="utf-8") as stream:

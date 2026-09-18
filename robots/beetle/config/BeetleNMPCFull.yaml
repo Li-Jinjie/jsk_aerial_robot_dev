@@ -11,8 +11,8 @@ controller:
     w_max: 6  # 1 rad/s ~ 57 deg/s
     w_min: -6
 
-    v_max: 1
-    v_min: -1
+    v_max: 5
+    v_min: -5
 
     thrust_max: 30  # N
     thrust_min: 0  # N
@@ -22,11 +22,11 @@ controller:
 
     # params for the cost function
     Qp_xy: 300
-    Qp_z: 400
+    Qp_z: 300
     Qv_xy: 10
     Qv_z: 10
     Qq_xy: 300
-    Qq_z: 600
+    Qq_z: 300
     Qw_xy: 5
     Qw_z: 5
     Qa: 1

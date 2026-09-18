@@ -21,7 +21,6 @@ from pathlib import Path
 
 import cvxpy as cp
 import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
 import numpy as np
 import scienceplots  # noqa: F401
 
@@ -272,10 +271,16 @@ def plot_force_response(data: dict[str, np.ndarray], output_path: Path, fmax: fl
 
     fig, axes = plt.subplots(3, 1, figsize=(8.0, 8.2), sharex=True)
 
-    # Background shading: available force range for each configuration (all subplots)
+    # Vertical dashed lines mark the maximum available force for each
+    # configuration on all subplots.
+    qd_limit_line = None
+    tilt_limit_line = None
     for ax in axes:
-        ax.axvspan(force[0], qd_force_max, alpha=0.10, color=_MC[0], zorder=0)
-        ax.axvspan(force[0], tilt_force_max, alpha=0.10, color=_MC[1], zorder=0)
+        qd_vline = ax.axvline(qd_force_max, color=_MC[0], linewidth=1.5, linestyle="--")
+        tilt_vline = ax.axvline(tilt_force_max, color=_MC[1], linewidth=1.5, linestyle="--")
+        if ax is axes[0]:
+            qd_limit_line = qd_vline
+            tilt_limit_line = tilt_vline
 
     # --- Plot 1: attitude change relative to initial (force=0) ---
     qd_pitch_0 = data["qd_pitch_deg"][0]
@@ -292,10 +297,14 @@ def plot_force_response(data: dict[str, np.ndarray], output_path: Path, fmax: fl
 
     (qd_line,) = axes[0].plot(force, qd_pitch_change, color=_MC[0], label="qd+arm", linewidth=2.0)
     (tilt_line,) = axes[0].plot(force, tilt_pitch_change, color=_MC[1], label="tilt-qd", linewidth=2.0)
-    qd_patch = Patch(color=_MC[0], alpha=0.1, label=f"qd+arm avail. range ($\\leq${qd_force_max:.0f} N)")
-    tilt_patch = Patch(color=_MC[1], alpha=0.1, label=f"tilt-qd avail. range ($\\leq${tilt_force_max:.0f} N)")
+    qd_limit_line.set_label(f"qd+arm max force ({qd_force_max:.0f} N)")
+    tilt_limit_line.set_label(f"tilt-qd max force ({tilt_force_max:.0f} N)")
     axes[0].set_ylabel("Attitude change [deg]")
-    axes[0].legend(handles=[qd_line, tilt_line, qd_patch, tilt_patch], fontsize=13, framealpha=0.9)
+    axes[0].legend(
+        handles=[qd_line, tilt_line, qd_limit_line, tilt_limit_line],
+        fontsize=13,
+        framealpha=0.9,
+    )
 
     # --- Plot 2: servo torque ---
     axes[1].plot(force, data["qd_tau_y_abs"], color=_MC[0], label=r"qd+arm $q_1$ joint $|\tau_{q_1}|$", linewidth=2.0)

@@ -523,6 +523,111 @@ class Visualizer:
         plt.show()
         # fmt: on
 
+    def visualize_tracking_actuators(
+        self,
+        ts_sim: float,
+        t_total_sim: float,
+        position_cmd: np.ndarray,
+        attitude_cmd_q: np.ndarray,
+        output_prefix: str = None,
+    ):
+        """Plot pose tracking and actuator command/state pairs in a 2x2 layout."""
+        if not (self.is_qd and self.include_servo_model and self.include_thrust_model):
+            raise ValueError(
+                "Tracking/actuator visualization requires a quadrotor simulator with servo and thrust states."
+            )
+
+        position_cmd = np.asarray(position_cmd)
+        attitude_cmd_q = np.asarray(attitude_cmd_q)
+        n_data = min(self.data_idx, len(position_cmd), len(attitude_cmd_q))
+        if n_data == 0:
+            raise ValueError("No simulation/reference data available for visualization.")
+
+        plt.style.use(["science", "grid"])
+        plt.rcParams.update(
+            {
+                "font.size": 14,
+                "axes.labelsize": 14,
+                "axes.titlesize": 14,
+                "legend.fontsize": 12,
+            }
+        )
+
+        # update() stores the state resulting from command sample i at state row i+1.
+        state = self.x_sim_all[1 : n_data + 1]
+        control = self.u_sim_all[:n_data]
+        time_data = np.arange(n_data) * ts_sim
+
+        euler_state = np.zeros((n_data, 3))
+        euler_cmd = np.zeros((n_data, 3))
+        for i in range(n_data):
+            euler_state[i] = tf.euler_from_quaternion(state[i, 6:10], axes="sxyz")
+            euler_cmd[i] = tf.euler_from_quaternion(attitude_cmd_q[i], axes="sxyz")
+        euler_state = np.degrees(euler_state)
+        euler_cmd = np.degrees(euler_cmd)
+
+        colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+        fig, axes = plt.subplots(2, 2, figsize=(11, 6.5), sharex=True)
+
+        # Position: color identifies x/y/z, line style identifies cmd/state.
+        ax = axes[0, 0]
+        for idx, label in enumerate(("x", "y", "z")):
+            color = colors[idx]
+            ax.plot(time_data, position_cmd[:n_data, idx], "--", color=color, label=f"{label} cmd")
+            ax.plot(time_data, state[:, idx], "-", color=color, label=f"{label} state")
+        ax.set_title("Position tracking")
+        ax.set_ylabel("Position (m)")
+        ax.set_ylim([-3.5, 3.5])
+        ax.legend(framealpha=legend_alpha, ncol=2)
+
+        # Euler angles in degrees.
+        ax = axes[0, 1]
+        for idx, label in enumerate(("roll", "pitch", "yaw")):
+            color = colors[idx]
+            ax.plot(time_data, euler_cmd[:, idx], "--", color=color, label=f"{label} cmd")
+            ax.plot(time_data, euler_state[:, idx], "-", color=color, label=f"{label} state")
+        ax.set_title("Attitude tracking")
+        ax.set_ylabel(r"Euler angle ($^\circ$)")
+        ax.set_ylim([-45, 70])
+        ax.legend(framealpha=legend_alpha, ncol=2)
+
+        # Simulator state order is base(13), servo(4), thrust(4).
+        ax = axes[1, 0]
+        servo_state_deg = np.degrees(state[:, 13:17])
+        servo_cmd_deg = np.degrees(control[:, 4:8])
+        for idx in range(4):
+            color = colors[idx]
+            rotor = idx + 1
+            ax.plot(time_data, servo_cmd_deg[:, idx], "--", color=color, label=rf"$\alpha_{{c{rotor}}}$")
+            ax.plot(time_data, servo_state_deg[:, idx], "-", color=color, label=rf"$\alpha_{{s{rotor}}}$")
+        ax.set_title("Servo command and state")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel(r"Servo angle ($^\circ$)")
+        ax.legend(framealpha=legend_alpha, ncol=2)
+
+        ax = axes[1, 1]
+        for idx in range(4):
+            color = colors[idx]
+            rotor = idx + 1
+            ax.plot(time_data, control[:, idx], "--", color=color, label=rf"$f_{{c{rotor}}}$")
+            ax.plot(time_data, state[:, 17 + idx], "-", color=color, label=rf"$f_{{s{rotor}}}$")
+        ax.set_title("Thrust command and state")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Thrust (N)")
+        ax.legend(framealpha=legend_alpha, ncol=2)
+
+        for ax in axes.flat:
+            ax.set_xlim([0.0, t_total_sim])
+
+        plt.tight_layout()
+        fig.subplots_adjust(hspace=0.2, wspace=0.2)
+        if output_prefix is not None:
+            output_prefix = os.path.abspath(output_prefix)
+            os.makedirs(os.path.dirname(output_prefix), exist_ok=True)
+            fig.savefig(output_prefix + ".png", dpi=200, bbox_inches="tight")
+            fig.savefig(output_prefix + ".pdf", bbox_inches="tight")
+        plt.show()
+
     def visualize_rpy(self, ocp_model_name: str, ts_sim: float, t_total_sim: float):
         plt.style.use(["science", "grid"])
 
