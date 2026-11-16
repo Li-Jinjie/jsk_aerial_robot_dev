@@ -18,7 +18,7 @@
 
 /* User Configuration */
 // Timer Clock
-#define TIMER_CLOCK 100000000  // 100MHz
+#define TIMER_CLOCK 200000000  // TIM1 clock on stm32H7 spinal (Tim1OutputFreq_Value in spinal.ioc), verified by oscilloscope
 
 /* Definition */
 #define MHZ_TO_HZ(x) ((x) * 1000000)
@@ -48,7 +48,13 @@
 #define IS_TELEMETRY true
 
 // ESC Telemetry setting
-#define ESC_TELEM_REQUEST_DIVIDER 3  // actual freq = 1kHz / ESC_TELEM_REQUEST_DIVIDER / 4
+// One telemetry slot every ESC_TELEM_REQUEST_DIVIDER control cycles (1kHz). Each slot first parses the reply requested
+// in the previous slot, then requests the ESC of the current slot. Slot 0 sends no request (idle), slots 1-4 request
+// ESC 1-4, so the idle slot lowers the per-ESC rate from 250Hz to 200Hz.
+// Per-ESC freq = 1kHz / ESC_TELEM_REQUEST_DIVIDER / ESC_TELEM_SLOT_COUNT, i.e., 200Hz with the default values.
+// Keep each reply (10 bytes) shorter than one slot: ~0.22ms at 460800 baud.
+#define ESC_TELEM_REQUEST_DIVIDER 1
+#define ESC_TELEM_SLOT_COUNT 5  // slot 0: idle, slots 1-4: ESC 1-4, slots >= 5: idle. Must be >= 5
 
 namespace
 {
@@ -118,7 +124,7 @@ private:
   void dshot_dma_start();
   void dshot_enable_dma_request();
 
-  int num_freq_divide = 0;  // make sure that the freq for telemetry is < 150hz
+  int num_freq_divide = 0;
 };
 
 #endif  // DSHOT_H
