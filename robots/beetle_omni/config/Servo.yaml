@@ -7,6 +7,8 @@ servo_controller:
   gimbals:
     angle_sgn: 1
     angle_scale: 0.001533981  # 2 * pi / 4096  Dynamixel servo: XC330-T181
+    velocity_scale: 0.02398082 # 0.229 [rev/min] -> rad/s, 0.104719755  # 2 * pi / 60
+    torque_scale: 0.00064  # 1 [mA] -> Nm·A, 0.64/1000 Dynamixel servo: XC330-T181
     zero_point_offset: 2048
 
     controller1:
