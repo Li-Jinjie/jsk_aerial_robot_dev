@@ -249,6 +249,7 @@ namespace Spine
 
             servo.index = servo_with_send_flag_.at(i).get().getIndex();
             servo.angle = servo_with_send_flag_.at(i).get().getPresentPosition();
+            servo.velocity = 0;
             servo.temp = servo_with_send_flag_.at(i).get().getPresentTemperature();
             servo.load = servo_with_send_flag_.at(i).get().getPresentCurrent();
             servo.error = servo_with_send_flag_.at(i).get().getError();

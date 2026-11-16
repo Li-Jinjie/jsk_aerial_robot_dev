@@ -181,6 +181,7 @@ void KondoServo::sendServoState()
     spinal::ServoState servo;
     servo.index = i;
     servo.angle = current_position_[i];
+    servo.velocity = 0;
     servo_state_msg_.servos[i - 1] = servo;
   }
   kondo_servo_state_pub_.publish(&servo_state_msg_);

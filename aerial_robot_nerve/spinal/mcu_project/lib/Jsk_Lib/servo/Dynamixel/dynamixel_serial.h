@@ -110,6 +110,7 @@
 #define COMMAND_FACTORY_RESET           0x06
 #define COMMAND_REBOOT					0x08
 #define COMMAND_SYNC_READ				0x82
+#define COMMAND_FAST_SYNC_READ			0x8A
 #define COMMAND_SYNC_WRITE          	0x83
 #define COMMAND_BULK_READ				0x92
 #define COMMAND_BULK_WRITE				0x93
@@ -124,8 +125,11 @@
 #define LED_BYTE_LEN					1
 #define STATUS_RETURN_LEVEL_BYTE_LEN	1
 #define GOAL_POSITION_BYTE_LEN			4
+#define GOAL_VELOCITY_BYTE_LEN			4
+#define GOAL_CURRENT_BYTE_LEN			2
 #define PRESENT_POSITION_BYTE_LEN		4
 #define PRESENT_CURRENT_BYTE_LEN		2
+#define PRESENT_CUR_VEL_POS_BYTE_LEN	10
 #define PRESENT_TEMPERATURE_BYTE_LEN	1
 #define MOVING_BYTE_LEN 				1
 #define HARDWARE_ERROR_STATUS_BYTE_LEN	1
@@ -142,19 +146,31 @@
 
 #define DX_BROADCAST_ID           	0xFE
 
+// Dynamixel Protocol 2.0 packet header.
+// The SDK names the fourth byte PKT_RESERVED; it is fixed to 0x00 for
+// ordinary instruction/status packets after 0xFF 0xFF 0xFD.
 #define HEADER0 				0xFF
 #define HEADER1 				0xFF
 #define HEADER2 				0xFD
 #define HEADER3 				0x00
+// Protocol 2.0 byte stuffing inserts an extra 0xFD after the sequence
+// 0xFF 0xFF 0xFD when it appears inside packet contents.
 #define EXCEPTION_ADDITIONAL_BYTE 0xFD
 
 #define INSTRUCTION_PACKET_SIZE 64
-#define STATUS_PACKET_SIZE 		64
+#define STATUS_PACKET_SIZE 		128
+
+// 0: default sync read
+// 1: fast sync read for present position, velocity, current, moving, and hardware error status
+#ifndef DYNAMIXEL_USE_FAST_SYNC_READ
+#define DYNAMIXEL_USE_FAST_SYNC_READ 1
+#endif
 
 #define MAX_SERVO_NUM			8
 #define PING_TRIAL_NUM			100
 
-//read status packet
+// Status packet parser states for:
+// FF FF FD 00 ID LEN_L LEN_H 0x55 ERR PARAM... CRC_L CRC_H
 #define READ_HEADER0					0
 #define READ_HEADER1					1
 #define READ_HEADER2					2
@@ -200,14 +216,15 @@
 #define INST_SET_POSITION_GAINS			13
 #define INST_SET_PROFILE_VELOCITY		14
 #define INST_SET_TORQUE					15
+#define INST_GET_CUR_VEL_POS        16
 
 //instruction frequency: 0 means no process
-#define SET_POS_DU 10 //[msec], 10ms => 100Hz
+#define SET_POS_DU 5 //[msec], 5ms => 200Hz
 #define SET_POS_OFFSET 0 // offset from SET_POS
-#define GET_POS_DU 10 //[msec], 10ms => 100Hz
-#define GET_POS_OFFSET 10 //offset from GET_POS
+#define GET_POS_DU 5 //[msec], 5ms => 200Hz (present current/velocity/position)
+#define GET_POS_OFFSET 2 //offset from GET_POS
 #define GET_LOAD_DU 200 //[msec], 200ms => 5Hz
-#define GET_LOAD_OFFSET 0 //offset from GET_LOAD
+#define GET_LOAD_OFFSET 10 //offset from GET_LOAD
 #define GET_TEMP_DU 200 //[msec], 200ms => 5Hz
 #define GET_TEMP_OFFSET 50 //offset from GET_TEMP
 #define GET_MOVE_DU 200 //[msec], 200ms => 5Hz
@@ -279,46 +296,72 @@ private:
   uint16_t buffer_length_;
 };
 
-class ServoData {
+class ServoData
+{
 public:
-	ServoData(){}
-  ServoData(uint8_t id): id_(id), torque_enable_(false), first_get_pos_flag_(true), internal_offset_(0), goal_position_(2048){}
+  ServoData(){}
+  ServoData(uint8_t id)
+    : id_(id), torque_enable_(false), first_get_pos_flag_(true), internal_offset_(0), goal_position_(2048)
+  {}
 
-	uint8_t id_;
-  	int32_t present_position_;
-	int32_t goal_position_;
-        int32_t calib_value_;
-	int32_t homing_offset_;
-        int32_t internal_offset_;
-        uint8_t present_temp_;
-	int16_t present_current_;
-	uint8_t moving_;
-	uint8_t hardware_error_status_;
-	uint16_t p_gain_, i_gain_, d_gain_;
-	uint16_t profile_velocity_;
-	uint16_t current_limit_;
-	uint16_t send_data_flag_;
-        uint16_t external_encoder_flag_;
-        int32_t joint_offset_;
-        uint16_t joint_resolution_;
-        uint16_t servo_resolution_;
-        float resolution_ratio_;
-	bool led_;
-	bool torque_enable_;
-	bool first_get_pos_flag_;
-        float angle_scale_;
-        uint16_t zero_point_offset_;
+  uint8_t id_;
+  int32_t present_position_;
+  int32_t present_velocity;
+  int16_t present_current_;
+  int32_t goal_position_;
+  int32_t goal_velocity_;
+  int16_t goal_current_;
+  int32_t calib_value_;
+  int32_t homing_offset_;
+  int32_t internal_offset_;
+  uint8_t present_temp_;
+  uint8_t moving_;
+  uint8_t hardware_error_status_;
+  uint16_t p_gain_, i_gain_, d_gain_;
+  uint16_t profile_velocity_;
+  uint16_t current_limit_;
+  uint16_t send_data_flag_;
+  uint16_t external_encoder_flag_;
+  int32_t joint_offset_;
+  uint16_t joint_resolution_;
+  uint16_t servo_resolution_;
+  float resolution_ratio_;
+  bool led_;
+  bool torque_enable_;
+  bool first_get_pos_flag_;
+  float angle_scale_;
+  uint16_t zero_point_offset_;
 
-	void updateHomingOffset() { homing_offset_ = calib_value_ - present_position_;}
-	void setPresentPosition(int32_t present_position) {present_position_ = present_position + internal_offset_;}
-	int32_t getPresentPosition() const {return present_position_;}
-	void setGoalPosition(int32_t goal_position) {goal_position_ = resolution_ratio_ * goal_position - internal_offset_;}
-        int32_t getGoalPosition() const {return goal_position_;}
-        float getAngleScale() const {return angle_scale_;}
-        uint16_t getZeroPointOffset() const {return zero_point_offset_;}
-  
-
-	bool operator==(const ServoData& r) const {return this->id_ == r.id_;}
+  void updateHomingOffset(){
+    homing_offset_ = calib_value_ - present_position_;
+  }
+  void setPresentPosition(int32_t present_position){
+    present_position_ = present_position + internal_offset_;
+  }
+  int32_t getPresentPosition() const{
+    return present_position_;
+  }
+  void setGoalPosition(int32_t goal_position){
+    goal_position_ = resolution_ratio_ * goal_position - internal_offset_;
+  }
+  int32_t getGoalPosition() const{
+    return goal_position_;
+  }
+  int32_t getGoalVelocity() const{
+    return goal_velocity_;
+  }
+  int16_t getGoalCurrent() const{
+    return goal_current_;
+  }
+  float getAngleScale() const{
+    return angle_scale_;
+  }
+  uint16_t getZeroPointOffset() const{
+    return zero_point_offset_;
+  }
+  bool operator==(const ServoData& r) const{
+    return this->id_ == r.id_;
+  }
 };
 
 class DynamixelSerial
@@ -350,7 +393,7 @@ public:
   bool getROSCommFlag() const {return flag_send_ros_;}
 
 private:
-  UART_HandleTypeDef* huart_; // uart handlercmdReadPresentPosition
+  UART_HandleTypeDef* huart_; // UART handle for the shared half-duplex bus
   osMutexId* mutex_; // for UART (RS485) I/O mutex
   MagEncoder encoder_handler_;
   RingBufferDx<std::pair<uint8_t, uint8_t>, 64> instruction_buffer_;
@@ -376,14 +419,18 @@ private:
   std::pair<uint8_t, uint8_t> instruction_last_ = std::make_pair(255, 255);
 
 
+  // Local Protocol 2.0 packet helpers.
+  // These mirror the SDK packet handler flow, but are specialized for this MCU.
   void transmitInstructionPacket(uint8_t id, uint16_t len, uint8_t instruction, uint8_t* parameters);
   int8_t readStatusPacket(uint8_t status_packet_instruction);
+  int8_t readFastSyncStatusPacket(uint8_t status_packet_instruction);
 
   void cmdPing(uint8_t id);
   void cmdReboot(uint8_t id);
   void cmdRead(uint8_t id, uint16_t address, uint16_t byte_size);
   void cmdWrite(uint8_t id, uint16_t address, uint8_t* param, int param_len);
   void cmdSyncRead(uint16_t address, uint16_t byte_size, bool send_all);
+  void cmdFastSyncRead(uint16_t address, uint16_t byte_size, bool send_all);
   void cmdSyncWrite(uint16_t address, uint8_t* param, int param_len);
 
   inline void cmdReadCurrentLimit(uint8_t servo_index);
@@ -391,6 +438,7 @@ private:
   inline void cmdReadHomingOffset(uint8_t servo_index);
   inline void cmdReadMoving(uint8_t servo_index);
   inline void cmdReadPositionGains(uint8_t servo_index);
+  inline void cmdReadPresentCurVelPos(uint8_t servo_index);
   inline void cmdReadPresentCurrent(uint8_t servo_index);
   inline void cmdReadPresentPosition(uint8_t servo_index);
   inline void cmdReadPresentTemperature(uint8_t servo_index);
@@ -402,15 +450,22 @@ private:
   inline void cmdWriteStatusReturnLevel(uint8_t id, uint8_t set);
   inline void cmdWriteTorqueEnable(uint8_t servo_index);
   inline void cmdSyncReadCurrentLimit(bool send_all = true);
+  inline void cmdFastSyncReadHardwareErrorStatus(bool send_all = true);
   inline void cmdSyncReadHardwareErrorStatus(bool send_all = true);
   inline void cmdSyncReadHomingOffset(bool send_all = true);
+  inline void cmdFastSyncReadMoving(bool send_all = true);
   inline void cmdSyncReadMoving(bool send_all = true);
+  inline void cmdFastSyncReadPresentCurVelPos(bool send_all = true);
+  inline void cmdFastSyncReadPresentTemperature(bool send_all = true);
   inline void cmdSyncReadPositionGains(bool send_all = true);
+  inline void cmdSyncReadPresentCurVelPos(bool send_all = true);
   inline void cmdSyncReadPresentCurrent(bool send_all = true);
   inline void cmdSyncReadPresentPosition(bool send_all = true);
   inline void cmdSyncReadPresentTemperature(bool send_all = true);
   inline void cmdSyncReadProfileVelocity(bool send_all = true);
   inline void cmdSyncWriteGoalPosition();
+  inline void cmdSyncWriteGoalVelocity();
+  inline void cmdSyncWriteGoalCurrent();
   inline void cmdSyncWriteLed();
   inline void cmdSyncWritePositionGains();
   inline void cmdSyncWriteProfileVelocity();
