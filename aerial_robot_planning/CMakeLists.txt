@@ -166,6 +166,7 @@ include_directories(
 catkin_install_python(PROGRAMS
         scripts/mpc_smach_node.py
         scripts/glove_control_pub.py
+        scripts/apply_wrench_gazebo.py
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

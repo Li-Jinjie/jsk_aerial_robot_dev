@@ -1,7 +1,8 @@
 wrench_estimator_name: aerial_robot_control::WrenchEstAcceleration
 
 controller:
-  if_use_est_wrench_4_control: true
+  if_use_est_force_4_control: true
+  if_use_est_torque_4_control: true
 
   wrench_est:
     # mode switch
@@ -14,7 +15,7 @@ controller:
     ang_vel_thresh_calib: [0.1, 0.1, 0.1]  # [x, y, z] rad/s
 
     lin_vel_thresh_stop: [0.5, 0.5, 0.5]  # [x, y, z] m/s
-    ang_vel_thresh_stop: [0.5, 0.5, 0.5]  # [x, y, z] rad/s
+    ang_vel_thresh_stop: [1.0, 1.0, 1.0]  # [x, y, z] rad/s
 
     # overall limit
     ext_force_limit: [50, 50, 50]  # N

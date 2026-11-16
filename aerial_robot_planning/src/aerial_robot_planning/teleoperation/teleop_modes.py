@@ -174,6 +174,17 @@ class OperationMode(TeleopBaseMode):
         # for continuous rotation
         self.cont_rot_gen = ContRotationGen()
 
+        # flag to enable continuous rotation or not
+        self.is_cont_rot_enabled = False
+
+        # check if there is /ball text in ROS environment
+        if rospy.has_param("ball2"):
+            self.enable_pitch_90deg = True
+            rospy.loginfo("ball2 robot detected in ROS environment. Pitch 90 degrees mode enabled.")
+        else:
+            self.enable_pitch_90deg = False
+            rospy.loginfo("No ball2 robot detected in ROS environment. Pitch 90 degrees mode disabled.")
+
     @staticmethod
     def _init_mode_num():
         return 1
@@ -215,7 +226,20 @@ class OperationMode(TeleopBaseMode):
         # === detect continuous rotation ===  TODO: add a parameter to enable/disable this feature
         hand_quat = self.hand_pose.pose_msg.pose.orientation
         robot_quat = self.uav_odom.pose.pose.orientation
-        robot_quat_ref, self.vel_twist = self.cont_rot_gen.update(hand_quat, robot_quat, self.vel_twist)
+
+        if self.is_cont_rot_enabled:
+            robot_quat_ref, self.vel_twist = self.cont_rot_gen.update(hand_quat, robot_quat, self.vel_twist)
+        else:
+            robot_quat_ref = hand_quat
+        # ==================================
+
+        # ======== pitch 90deg mode ========
+        if self.enable_pitch_90deg:
+            q_pitch_minus_90 = tf.quaternion_from_euler(0.0, np.pi / 2.0, 0.0)
+            robot_quat_ref_np_array = tf.quaternion_multiply(
+                [hand_quat.x, hand_quat.y, hand_quat.z, hand_quat.w], q_pitch_minus_90
+            )
+            robot_quat_ref = Quaternion(*robot_quat_ref_np_array)
         # ==================================
 
         multi_dof_joint_traj = MultiDOFJointTrajectory()

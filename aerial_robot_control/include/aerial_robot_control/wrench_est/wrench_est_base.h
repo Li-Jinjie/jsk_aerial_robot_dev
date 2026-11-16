@@ -28,7 +28,7 @@ public:
 
     setCtrlLoopDu(ctrl_loop_du);
 
-    tmr_pub_dist_wrench_ = nh_.createTimer(ros::Duration(0.1), &WrenchEstBase::callbackPubDistWrench, this);
+    tmr_pub_dist_wrench_ = nh_.createTimer(ros::Duration(0.04), &WrenchEstBase::callbackPubDistWrench, this);
     initWrenchPub();  // TODO: this function is only used to specify the topic name. Try a more elegant method later
 
     reset();

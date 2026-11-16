@@ -33,19 +33,19 @@ void nmpc::TiltMtServoThrustDistNMPC::initNMPCCostW()
 
   /* control parameters with dynamic reconfigure */
   double Qp_xy, Qp_z, Qv_xy, Qv_z, Qq_xy, Qq_z, Qw_xy, Qw_z, Qa, Qt, Rtc_d, Rac_d;
-  getParam<double>(nmpc_nh, "Qp_xy", Qp_xy, 300);
-  getParam<double>(nmpc_nh, "Qp_z", Qp_z, 400);
-  getParam<double>(nmpc_nh, "Qv_xy", Qv_xy, 10);
-  getParam<double>(nmpc_nh, "Qv_z", Qv_z, 10);
-  getParam<double>(nmpc_nh, "Qq_xy", Qq_xy, 300);
-  getParam<double>(nmpc_nh, "Qq_z", Qq_z, 300);
-  getParam<double>(nmpc_nh, "Qw_xy", Qw_xy, 5);
-  getParam<double>(nmpc_nh, "Qw_z", Qw_z, 5);
-  getParam<double>(nmpc_nh, "Qa", Qa, 1);
-  getParam<double>(nmpc_nh, "Qt", Qt, 1);
+  getNMPCIntTunableParam(nmpc_nh, "Qp_xy", Qp_xy, 300);
+  getNMPCIntTunableParam(nmpc_nh, "Qp_z", Qp_z, 400);
+  getNMPCIntTunableParam(nmpc_nh, "Qv_xy", Qv_xy, 10);
+  getNMPCIntTunableParam(nmpc_nh, "Qv_z", Qv_z, 10);
+  getNMPCIntTunableParam(nmpc_nh, "Qq_xy", Qq_xy, 300);
+  getNMPCIntTunableParam(nmpc_nh, "Qq_z", Qq_z, 300);
+  getNMPCIntTunableParam(nmpc_nh, "Qw_xy", Qw_xy, 5);
+  getNMPCIntTunableParam(nmpc_nh, "Qw_z", Qw_z, 5);
+  getNMPCIntTunableParam(nmpc_nh, "Qa", Qa, 1);
+  getNMPCIntTunableParam(nmpc_nh, "Qt", Qt, 1);
 
-  getParam<double>(nmpc_nh, "Rtc_d", Rtc_d, 1);
-  getParam<double>(nmpc_nh, "Rac_d", Rac_d, 250);
+  getNMPCIntTunableParam(nmpc_nh, "Rtc_d", Rtc_d, 1);
+  getNMPCIntTunableParam(nmpc_nh, "Rac_d", Rac_d, 250);
 
   // diagonal matrix
   mpc_solver_ptr_->setCostWDiagElement(0, Qp_xy);
@@ -77,16 +77,18 @@ void nmpc::TiltMtServoThrustDistNMPC::initNMPCConstraints()
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
 
-  double body_rate_max, body_rate_min, vel_max, vel_min;
-  double servo_angle_max, servo_angle_min;
+  double body_rate_max, body_rate_min;
   getParam<double>(nmpc_nh, "w_max", body_rate_max, 6.0);
   getParam<double>(nmpc_nh, "w_min", body_rate_min, -6.0);
-  getParam<double>(nmpc_nh, "v_max", vel_max, 1.0);
-  getParam<double>(nmpc_nh, "v_min", vel_min, -1.0);
+  getParam<double>(nmpc_nh, "v_max", vel_max_, 1.0);
+  getParam<double>(nmpc_nh, "v_min", vel_min_, -1.0);
   getParam<double>(nmpc_nh, "thrust_max", thrust_ctrl_max_, 0.0);
   getParam<double>(nmpc_nh, "thrust_min", thrust_ctrl_min_, 0.0);
-  getParam<double>(nmpc_nh, "a_max", servo_angle_max, 3.1416);
-  getParam<double>(nmpc_nh, "a_min", servo_angle_min, -3.1416);
+  getParam<double>(nmpc_nh, "a_max", servo_angle_max_, 3.1416);
+  getParam<double>(nmpc_nh, "a_min", servo_angle_min_, -3.1416);
+
+  //  TODO: this should be set in flight_navigation; don't know why set 0.2 results solver failure
+  getParam<double>(control_nh, "vel_limit_takeoff", vel_limit_takeoff_, 1.0);  // m/s
 
   // lbx and ubx
   std::vector<int> idxbx = mpc_solver_ptr_->getConstraintsIdxbx();
@@ -106,14 +108,14 @@ void nmpc::TiltMtServoThrustDistNMPC::initNMPCConstraints()
     ROS_ERROR("idxbx is not equal to idxbx_desired, we cannot set constraints lbx and ubx!");
   }
 
-  std::vector<double> lbx = { vel_min, vel_min, vel_min, body_rate_min, body_rate_min, body_rate_min };
-  std::vector<double> ubx = { vel_max, vel_max, vel_max, body_rate_max, body_rate_max, body_rate_max };
+  std::vector<double> lbx = { vel_min_, vel_min_, vel_min_, body_rate_min, body_rate_min, body_rate_min };
+  std::vector<double> ubx = { vel_max_, vel_max_, vel_max_, body_rate_max, body_rate_max, body_rate_max };
   lbx.resize(6 + joint_num_ + motor_num_);
   ubx.resize(6 + joint_num_ + motor_num_);
   for (int i = 0; i < joint_num_; i++)
   {
-    lbx[6 + i] = servo_angle_min;
-    ubx[6 + i] = servo_angle_max;
+    lbx[6 + i] = servo_angle_min_;
+    ubx[6 + i] = servo_angle_max_;
   }
   for (int i = 0; i < motor_num_; i++)
   {
@@ -158,8 +160,8 @@ void nmpc::TiltMtServoThrustDistNMPC::initNMPCConstraints()
   }
   for (int i = 0; i < joint_num_; i++)
   {
-    lbu[motor_num_ + i] = servo_angle_min;
-    ubu[motor_num_ + i] = servo_angle_max;
+    lbu[motor_num_ + i] = servo_angle_min_;
+    ubu[motor_num_ + i] = servo_angle_max_;
   }
   mpc_solver_ptr_->setConstraintsLbu(lbu);
   mpc_solver_ptr_->setConstraintsUbu(ubu);
@@ -214,9 +216,12 @@ std::vector<double> nmpc::TiltMtServoThrustDistNMPC::meas2VecX(bool is_modified_
   geometry_msgs::Vector3 external_force_w;     // default: 0, 0, 0
   geometry_msgs::Vector3 external_torque_cog;  // default: 0, 0, 0
 
-  if (if_use_est_wrench_4_control_)
+  if (if_use_est_force_4_control_)
   {
     external_force_w = wrench_est_ptr_->getDistForceW();
+  }
+  if (if_use_est_torque_4_control_)
+  {
     external_torque_cog = wrench_est_ptr_->getDistTorqueCOG();
   }
 
@@ -234,94 +239,27 @@ std::vector<double> nmpc::TiltMtServoThrustDistNMPC::meas2VecX(bool is_modified_
   return bx0;
 }
 
-void nmpc::TiltMtServoThrustDistNMPC::cfgNMPCCallback(aerial_robot_control::NMPCConfig& config, uint32_t level)
+nmpc::NMPCConfigMask nmpc::TiltMtServoThrustDistNMPC::getSupportedNMPCConfigMask() const
 {
-  using Levels = aerial_robot_msgs::DynamicReconfigureLevels;
-  if (config.nmpc_flag)
-  {
-    try
-    {
-      switch (level)
-      {
-        case Levels::RECONFIGURE_NMPC_Q_P_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(0, config.Qp_xy);
-          mpc_solver_ptr_->setCostWDiagElement(1, config.Qp_xy);
+  using namespace NMPCConfigFields;
+  return QP_XY | QP_Z | QV_XY | QV_Z | QQ_XY | QQ_Z | QW_XY | QW_Z | QA | QT | RTC_D | RAC_D;
+}
 
-          ROS_INFO_STREAM("change Qp_xy for NMPC '" << config.Qp_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_P_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(2, config.Qp_z);
-          ROS_INFO_STREAM("change Qp_z for NMPC '" << config.Qp_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_V_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(3, config.Qv_xy);
-          mpc_solver_ptr_->setCostWDiagElement(4, config.Qv_xy);
-          ROS_INFO_STREAM("change Qv_xy for NMPC '" << config.Qv_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_V_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(5, config.Qv_z);
-          ROS_INFO_STREAM("change Qv_z for NMPC '" << config.Qv_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_Q_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(7, config.Qq_xy);
-          mpc_solver_ptr_->setCostWDiagElement(8, config.Qq_xy);
-          ROS_INFO_STREAM("change Qq_xy for NMPC '" << config.Qq_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_Q_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(9, config.Qq_z);
-          ROS_INFO_STREAM("change Qq_z for NMPC '" << config.Qq_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_W_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(10, config.Qw_xy);
-          mpc_solver_ptr_->setCostWDiagElement(11, config.Qw_xy);
-          ROS_INFO_STREAM("change Qw_xy for NMPC '" << config.Qw_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_W_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(12, config.Qw_z);
-          ROS_INFO_STREAM("change Qw_z for NMPC '" << config.Qw_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_A: {
-          for (int i = 13; i < 13 + joint_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Qa);
-          ROS_INFO_STREAM("change Qa for NMPC '" << config.Qa << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_T: {
-          for (int i = 13 + joint_num_; i < 13 + joint_num_ + motor_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Qt);
-          ROS_INFO_STREAM("change Qt for NMPC '" << config.Qt << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_R_TC_D: {
-          for (int i = mpc_solver_ptr_->NX_; i < mpc_solver_ptr_->NX_ + motor_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Rtc_d, false);
-          ROS_INFO_STREAM("change Rtc_d for NMPC '" << config.Rtc_d << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_R_AC_D: {
-          for (int i = mpc_solver_ptr_->NX_ + motor_num_; i < mpc_solver_ptr_->NX_ + motor_num_ + joint_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Rac_d, false);
-          ROS_INFO_STREAM("change Rac_d for NMPC '" << config.Rac_d << "'");
-          break;
-        }
-        default: {
-          ROS_INFO_STREAM("The setting variable is not in the list!");
-          break;
-        }
-      }
-    }
-    catch (std::invalid_argument& e)
-    {
-      ROS_ERROR_STREAM("NMPC config failed: " << e.what());
-    }
+void nmpc::TiltMtServoThrustDistNMPC::applyNMPCConfig(const NMPCConfig& config, NMPCConfigMask mask)
+{
+  using namespace NMPCConfigFields;
+  const NMPCConfigMask base_fields = QP_XY | QP_Z | QV_XY | QV_Z | QQ_XY | QQ_Z | QW_XY | QW_Z | QA | RAC_D;
+  TiltMtServoNMPC::applyNMPCConfig(config, mask & base_fields);
+
+  if (mask & QT)
+  {
+    for (int i = 13 + joint_num_; i < 13 + joint_num_ + motor_num_; ++i)
+      mpc_solver_ptr_->setCostWDiagElement(i, config.Qt);
+  }
+  if (mask & RTC_D)
+  {
+    for (int i = mpc_solver_ptr_->NX_; i < mpc_solver_ptr_->NX_ + motor_num_; ++i)
+      mpc_solver_ptr_->setCostWDiagElement(i, config.Rtc_d, false);
   }
 }
 

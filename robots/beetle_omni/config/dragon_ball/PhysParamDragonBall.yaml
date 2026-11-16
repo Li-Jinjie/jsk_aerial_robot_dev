@@ -1,0 +1,22 @@
+physical:  # with mouse and short brush
+  mass: 1.49345  # kg
+  gravity: 9.79801  #9.80665 # m/s^2   Tokyo 9.798; in sim: 9.80665
+  inertia_diag: [0.0112198, 0.0111801, 0.0132828]  # kg m^2
+  dr1: 1  # direction of motor 1
+  p1: [0.082748, 0.0822218, 0.0205544]  # position of motor 1
+  dr2: -1  # direction of motor 2
+  p2: [-0.081872, 0.0822218, 0.0205544]  # position of motor 2
+  dr3: 1  # direction of motor 3
+  p3: [-0.081872, -0.0823982, 0.0205544]  # position of motor 3
+  dr4: -1  # direction of motor 4
+  p4: [0.082748, -0.0823982, 0.0205544]  # position of motor 4
+  kq_d_kt: 0.0112
+
+  num_rotors: 4
+  t_rotor: 0.0942  # TODO: need to calibrate
+
+  num_servos: 4
+  t_servo: 0.0480  # Dynamixel servo: XC330-T181 with self-tuned PID. As contrary, the previous kondo's value was 0.085883
+
+  ball_effector_p: [0, 0, 0.1]  # m should be updated in program
+  ball_effector_q: [1, 0, 0, 0]  # quaternion, qw, qx, qy, qz

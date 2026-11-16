@@ -1,7 +1,8 @@
 wrench_estimator_name: aerial_robot_control::WrenchEstMomentum
 
 controller:
-  if_use_est_wrench_4_control: true
+  if_use_est_force_4_control: true
+  if_use_est_torque_4_control: true
 
   wrench_est:
     # mode switch

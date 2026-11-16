@@ -34,7 +34,8 @@ public:
   boost::shared_ptr<aerial_robot_control::WrenchEstActuatorMeasBase> wrench_est_ptr_;
 
 protected:
-  bool if_use_est_wrench_4_control_ = false;
+  bool if_use_est_force_4_control_ = false;
+  bool if_use_est_torque_4_control_ = false;
 
   ros::Publisher pub_disturb_wrench_;  // for disturbance wrench
 

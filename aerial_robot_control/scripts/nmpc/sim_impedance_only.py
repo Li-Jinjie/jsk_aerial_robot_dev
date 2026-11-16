@@ -1,4 +1,5 @@
 import copy
+import os
 import time
 import numpy as np
 import argparse
@@ -6,6 +7,14 @@ import argparse
 from nmpc_tilt_mt.utils.nmpc_viz import Visualizer
 
 from nmpc_tilt_mt.utils.fir_differentiator import FIRDifferentiator
+from nmpc_tilt_mt.utils.force_impedance_experiment import (
+    SCENARIO_DURATION,
+    SCENARIO_NAME,
+    default_run_bundle_path,
+    get_force_comparison_wrench,
+    impedance_parameters,
+    save_run_bundle,
+)
 
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
 from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist_imp import NMPCTiltQdServoImpedance
@@ -15,12 +24,24 @@ np.random.seed(42)
 
 
 def main(args):
+    if args.save_run is not None:
+        args.save_run = os.path.abspath(args.save_run)
+
+    if args.scenario == SCENARIO_NAME and args.sim_model != 1:
+        raise ValueError("The force comparison truth run requires --sim_model 1.")
+
     # ========== Init ==========
     # ---------- Simulator ----------
     if args.sim_model == 0:
         sim_nmpc = NMPCTiltQdServoThrustDist()
     elif args.sim_model == 1:
-        sim_nmpc = NominalImpedance()
+        if args.scenario == SCENARIO_NAME:
+            sim_nmpc = NominalImpedance(config_file="BeetleNMPCFullServoForceImp.yaml", force_only=True)
+        else:
+            sim_nmpc = NominalImpedance()
+
+    if args.scenario == SCENARIO_NAME and args.save_run is None:
+        args.save_run = default_run_bundle_path("nominal", sim_nmpc.params)
 
     # Get time constants
     if sim_nmpc.include_servo_model:
@@ -34,16 +55,19 @@ def main(args):
 
     ts_sim = 0.005  # or 0.001
 
-    t_total_sim = 40.0
-    if args.plot_type == 1:
-        t_total_sim = 4.0
-    if args.plot_type == 2:
-        t_total_sim = 3.0
+    if args.scenario == SCENARIO_NAME:
+        t_total_sim = SCENARIO_DURATION
+    else:
+        t_total_sim = 40.0
+        if args.plot_type == 1:
+            t_total_sim = 4.0
+        if args.plot_type == 2:
+            t_total_sim = 3.0
 
     N_sim = int(t_total_sim / ts_sim)
 
     # Sim solver
-    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
+    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
 
     # Disturbance Initialization
@@ -71,6 +95,7 @@ def main(args):
     t_ctl = 0.0
     t_sensor = 0.0
     x_now_sim = x_init_sim
+    applied_wrench_ee_all = np.zeros((N_sim, 6))
     for i in range(N_sim):
         # --------- Update time ---------
         t_now = i * ts_sim
@@ -78,34 +103,25 @@ def main(args):
         t_sensor += ts_sim
 
         # --------- Update disturbance ---------
-        disturb = copy.deepcopy(disturb_init)
-        # Simulate random disturbance
-        # disturb[2] = np.random.normal(1.0, 3.0)  # fz in N
+        if args.scenario == SCENARIO_NAME:
+            disturb = get_force_comparison_wrench(t_now)
+        else:
+            disturb = copy.deepcopy(disturb_init)
+            # Simulate fixed disturbance at singular points
+            if 2.0 <= t_now < 7.0:
+                disturb[0] = 5.0
+            if 7.0 <= t_now < 12.0:
+                disturb[0:2] = [5.0, -5.0]
+            if 12.0 <= t_now < 17.0:
+                disturb[0:3] = [5.0, -5.0, -5.0]
+            if 20.0 <= t_now < 25.0:
+                disturb[3] = 5.0
+            if 25.0 <= t_now < 30.0:
+                disturb[3:5] = [5.0, -5.0]
+            if 30.0 <= t_now < 35.0:
+                disturb[3:6] = [5.0, -5.0, 5.0]
 
-        # Simulate fixed disturbance at singular points
-        if 2.0 <= t_now < 7.0:
-            disturb[0] = 5.0
-
-        if 7.0 <= t_now < 12.0:
-            disturb[0] = 5.0
-            disturb[1] = -5.0
-
-        if 12.0 <= t_now < 17.0:
-            disturb[0] = 5.0
-            disturb[1] = -5.0
-            disturb[2] = -5.0
-
-        if 20.0 <= t_now < 25.0:
-            disturb[3] = 5.0
-
-        if 25.0 <= t_now < 30.0:
-            disturb[3] = 5.0
-            disturb[4] = -5.0
-
-        if 30.0 <= t_now < 35.0:
-            disturb[3] = 5.0
-            disturb[4] = -5.0
-            disturb[5] = 5.0
+        applied_wrench_ee_all[i, :] = disturb
 
         # --------- Update simulation ----------
         sim_solver.set("x", x_now_sim)
@@ -120,6 +136,32 @@ def main(args):
         # --------- Update visualizer ----------
         viz.update(i, x_now_sim, 0)  # Note: The recording frequency of u_cmd is the same as ts_sim
         viz.update_est_disturb(i, disturb[0:3], disturb[3:6])
+
+    if args.save_run is not None:
+        metadata = {
+            "kind": "truth",
+            "scenario": args.scenario,
+            "model": "ideal_second_order_force_impedance",
+            "sim_model": sim_solver.model_name,
+            "ts_sim": ts_sim,
+            "interaction_frame": "ee",
+            "plot_state_frame": "ee",
+            "scenario_duration": SCENARIO_DURATION,
+            "enlarge_factor": sim_nmpc.params.get("enlarge_factor"),
+            "impedance": impedance_parameters(sim_nmpc.params),
+        }
+        save_run_bundle(
+            args.save_run,
+            metadata,
+            time_state=np.arange(viz.data_idx + 1) * ts_sim,
+            time_input=np.arange(viz.data_idx) * ts_sim,
+            state_raw=viz.x_sim_all[: viz.data_idx + 1, :],
+            state_ee=viz.x_sim_all[: viz.data_idx + 1, :13],
+            applied_wrench_ee=applied_wrench_ee_all[: viz.data_idx, :],
+            estimated_force_w=applied_wrench_ee_all[: viz.data_idx, 0:3],
+            torque_compensation_b=np.zeros((viz.data_idx, 3)),
+            control=applied_wrench_ee_all[: viz.data_idx, :],
+        )
 
     # ========== Visualize ==========
     if args.plot_type == 0:
@@ -154,6 +196,20 @@ if __name__ == "__main__":
         type=int,
         default=0,
         help="The type of plot. " "Options: 0 (default: full), 1 (less), 2 (only rpy).",
+    )
+
+    parser.add_argument(
+        "--scenario",
+        choices=("default", SCENARIO_NAME),
+        default="default",
+        help="Disturbance scenario. The force comparison scenario is a 20 s force-only experiment.",
+    )
+
+    parser.add_argument(
+        "--save-run",
+        type=str,
+        default=None,
+        help="Structured NPZ path. The comparison scenario defaults to the organized paper data directory.",
     )
 
     args = parser.parse_args()

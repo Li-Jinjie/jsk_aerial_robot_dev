@@ -11,11 +11,12 @@ MODELS=(
 #    NMPCTiltQdNoServo
 #    NMPCTiltQdServo
 #    NMPCTiltQdServoDist
+#    NMPCTiltQdServoCoGForceImpedance
 #    NMPCTiltQdServoImpedance
 #    NMPCTiltQdServoThrustDist
 #    NMPCTiltQdServoThrustImpedance
 #    NMPCTiltTriServo
-#    NMPCTiltBiServo
+#    NMPCTiltBiServoDist
 #    NMPCTiltBi2OrdServo
 #    MHEWrenchEstAccMom
 )

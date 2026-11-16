@@ -11,6 +11,7 @@
 
 // tilt quadrotor
 #include "aerial_robot_control/nmpc/tilt_qd_servo_mdl/nmpc_solver.h"
+#include "aerial_robot_control/nmpc/tilt_qd_servo_dist_cog_force_imp_mdl/nmpc_solver.h"
 #include "aerial_robot_control/nmpc/tilt_qd_servo_dist_mdl/nmpc_solver.h"
 #include "aerial_robot_control/nmpc/tilt_qd_servo_dist_imp_mdl/nmpc_solver.h"
 #include "aerial_robot_control/nmpc/tilt_qd_servo_thrust_dist_mdl/nmpc_solver.h"
@@ -20,13 +21,15 @@
 #include "aerial_robot_control/nmpc/tilt_tri_servo_mdl/nmpc_solver.h"
 
 // tilt bi-rotor
-#include "aerial_robot_control/nmpc/tilt_bi_servo_mdl/nmpc_solver.h"
+#include "aerial_robot_control/nmpc/tilt_bi_servo_dist_mdl/nmpc_solver.h"
 #include "aerial_robot_control/nmpc/tilt_bi_2_ord_servo_mdl/nmpc_solver.h"
 
 PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::FixQdMdlMPCSolver,
                        aerial_robot_control::mpc_solver::BaseMPCSolver)
 
 PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltQdServoMdlMPCSolver,
+                       aerial_robot_control::mpc_solver::BaseMPCSolver)
+PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltQdServoDistCoGForceImpMdlMPCSolver,
                        aerial_robot_control::mpc_solver::BaseMPCSolver)
 PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltQdServoDistMdlMPCSolver,
                        aerial_robot_control::mpc_solver::BaseMPCSolver)
@@ -40,7 +43,7 @@ PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltQdServoThrustDistIm
 PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltTriServoMdlMPCSolver,
                        aerial_robot_control::mpc_solver::BaseMPCSolver)
 
-PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltBiServoMdlMPCSolver,
+PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltBiServoDistMdlMPCSolver,
                        aerial_robot_control::mpc_solver::BaseMPCSolver)
 PLUGINLIB_EXPORT_CLASS(aerial_robot_control::mpc_solver::TiltBi2OrdServoMdlMPCSolver,
                        aerial_robot_control::mpc_solver::BaseMPCSolver)

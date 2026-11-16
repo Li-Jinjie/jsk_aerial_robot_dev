@@ -2,6 +2,10 @@ mpc_solver_name: aerial_robot_control::mpc_solver::TiltQdServoDistImpMdlMPCSolve
 aerial_robot_control_name: aerial_robot_control/nmpc_controller/tilt_mt/servo_imp_nmpc
 
 controller:
+  alloc:
+    type: 1  # 0: pseudo allocation, 1: heuristic allocation,
+    ft_thresh: 1.5  # N
+
   nmpc:
     T_samp: 0.01  # 100 Hz  TODO: should be adjusted by main_rate
     T_horizon: 2.0  # seconds
@@ -14,26 +18,26 @@ controller:
     v_max: 1
     v_min: -1
 
-    thrust_max: 30  # N
+    thrust_max: 23  # N
     thrust_min: 0  # N
 
     a_max: 3.15  # 180 deg + a little bit
     a_min: -3.15
 
     # params for the cost function
-    enlarge_factor: 8
+    enlarge_factor: 2
 
     # position
-    pMxy: 1.5
-    pMz: 1.5
+    pMxy: 0.0
+    pMz: 0.0
     Qv_xy: 10  # pDxy
     Qv_z: 10  # pDz
-    Qp_xy: 6  # pKxy
-    Qp_z: 6  # pKz
+    Qp_xy: 20  # pKxy
+    Qp_z: 20  # pKz
 
     # orientation
-    oMxy: 0.9
-    oMz: 0.9
+    oMxy: 0.0
+    oMz: 0.0
     Qw_xy: 10  # oDxy
     Qw_z: 10  # oDz
     Qq_xy: 15  # oKxy

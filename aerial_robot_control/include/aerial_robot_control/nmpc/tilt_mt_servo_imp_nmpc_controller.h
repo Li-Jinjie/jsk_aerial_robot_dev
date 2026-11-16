@@ -25,7 +25,8 @@ protected:
 
   void initNMPCParams() override;
 
-  void cfgNMPCCallback(NMPCConfig& config, uint32_t level) override;
+  NMPCConfigMask getSupportedNMPCConfigMask() const override;
+  void applyNMPCConfig(const NMPCConfig& config, NMPCConfigMask mask) override;
 };
 
 }  // namespace nmpc

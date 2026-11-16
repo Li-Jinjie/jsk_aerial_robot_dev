@@ -18,6 +18,9 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
   nmpc_reconf_servers_.push_back(boost::make_shared<NMPCControlDynamicConfig>(nmpc_nh));
+  NMPCConfig startup_config = NMPCConfig::__getDefault__();
+  startup_config.__fromServer__(nmpc_nh);
+  nmpc_reconf_servers_.back()->setConfigDefault(startup_config);
   nmpc_reconf_servers_.back()->setCallback(boost::bind(&TiltMtServoNMPC::cfgNMPCCallback, this, _1, _2));
 
   /* set some ROS parameters */
@@ -59,8 +62,10 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
 
 void nmpc::TiltMtServoNMPC::activate()
 {
+  // these functions are put here to wait for the physical parameters to be updated
   initAllocMat();
   updateInertialParams();
+  calcFtThresh();
 
   if (is_print_phys_params_)
     printPhysicalParams();
@@ -145,8 +150,8 @@ void nmpc::TiltMtServoNMPC::initGeneralParams()
   ros::NodeHandle alloc_nh(control_nh, "alloc");
 
   getParam<int>(alloc_nh, "type", alloc_type_, 0);
-  getParam<double>(alloc_nh, "ft_thresh", ft_thresh_, 0.5);
-  if (ft_thresh_ <= 0.0)
+  getParam<double>(alloc_nh, "ft_thresh_bias", ft_thresh_bias_, 0.5);
+  if (ft_thresh_bias_ <= 0.0)
     throw std::runtime_error(
         "ft_thresh must be greater than zero! Please set a positive value for ft_thresh in the parameter server.");
 
@@ -168,6 +173,7 @@ void nmpc::TiltMtServoNMPC::initGeneralParams()
   getParam<bool>(nmpc_nh, "is_body_rate_ctrl", is_body_rate_ctrl_, false);
   getParam<bool>(nmpc_nh, "is_print_phys_params", is_print_phys_params_, false);
   getParam<bool>(nmpc_nh, "is_debug", is_debug_, false);
+  getParam<bool>(nmpc_nh, "is_convert_ee_traj_to_cog", is_ee_traj_to_cog_conversion_enabled_, false);
 
   if (is_debug_)
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
@@ -180,17 +186,17 @@ void nmpc::TiltMtServoNMPC::initNMPCCostW()
 
   /* control parameters with dynamic reconfigure */
   double Qp_xy, Qp_z, Qv_xy, Qv_z, Qq_xy, Qq_z, Qw_xy, Qw_z, Qa, Rt, Rac_d;
-  getParam<double>(nmpc_nh, "Qp_xy", Qp_xy, 300);
-  getParam<double>(nmpc_nh, "Qp_z", Qp_z, 400);
-  getParam<double>(nmpc_nh, "Qv_xy", Qv_xy, 10);
-  getParam<double>(nmpc_nh, "Qv_z", Qv_z, 10);
-  getParam<double>(nmpc_nh, "Qq_xy", Qq_xy, 300);
-  getParam<double>(nmpc_nh, "Qq_z", Qq_z, 300);
-  getParam<double>(nmpc_nh, "Qw_xy", Qw_xy, 5);
-  getParam<double>(nmpc_nh, "Qw_z", Qw_z, 5);
-  getParam<double>(nmpc_nh, "Qa", Qa, 1);
-  getParam<double>(nmpc_nh, "Rt", Rt, 1);
-  getParam<double>(nmpc_nh, "Rac_d", Rac_d, 250);
+  getNMPCIntTunableParam(nmpc_nh, "Qp_xy", Qp_xy, 300);
+  getNMPCIntTunableParam(nmpc_nh, "Qp_z", Qp_z, 400);
+  getNMPCIntTunableParam(nmpc_nh, "Qv_xy", Qv_xy, 10);
+  getNMPCIntTunableParam(nmpc_nh, "Qv_z", Qv_z, 10);
+  getNMPCIntTunableParam(nmpc_nh, "Qq_xy", Qq_xy, 300);
+  getNMPCIntTunableParam(nmpc_nh, "Qq_z", Qq_z, 300);
+  getNMPCIntTunableParam(nmpc_nh, "Qw_xy", Qw_xy, 5);
+  getNMPCIntTunableParam(nmpc_nh, "Qw_z", Qw_z, 5);
+  getNMPCIntTunableParam(nmpc_nh, "Qa", Qa, 1);
+  getNMPCIntTunableParam(nmpc_nh, "Rt", Rt, 1);
+  getNMPCIntTunableParam(nmpc_nh, "Rac_d", Rac_d, 250);
 
   // diagonal matrix
   mpc_solver_ptr_->setCostWDiagElement(0, Qp_xy);
@@ -318,6 +324,24 @@ void nmpc::TiltMtServoNMPC::setControlMode()
            set_control_mode_srv.request.is_body_rate);
 }
 
+void nmpc::TiltMtServoNMPC::calcFtThresh()
+{
+  int rotor_num = robot_model_->getRotorNum();  // For tilt-rotor, rotor_num = servo_num
+  const auto& rotor_p = robot_model_->getRotorsOriginFromCog<Eigen::Vector3d>();
+
+  double ft_thresh_max = 0.0;
+  for (int i = 0; i < rotor_num; i++)
+  {
+    Eigen::Vector3d p_b = rotor_p[i];
+
+    double ft_thresh = mass_ * gravity_const_ * abs(p_b.z()) / sqrt(p_b.x() * p_b.x() + p_b.y() * p_b.y());
+    if (ft_thresh > ft_thresh_max)
+      ft_thresh_max = ft_thresh;
+  }
+
+  ft_thresh_ = ft_thresh_max + ft_thresh_bias_;
+}
+
 void nmpc::TiltMtServoNMPC::initAllocMat()
 {
   /* get physical param */
@@ -369,9 +393,7 @@ void nmpc::TiltMtServoNMPC::initNMPCParams()
   acados_p[0] = 1.0;  // qw
   idx_p_quat_end_ = 3;
 
-  int idx;
-  // TODO: this condition is temporary for drones that don't pass in phys param (bi, tri, fix-qd)
-  if (mpc_solver_ptr_->NP_ > 4 + 6)  // 4 for quaternion, 6 for disturbances
+  if (mpc_solver_ptr_->NP_ > 4 + 6)  // 4 for quaternion, 6 for disturbances, now support quad, tri, bi
   {
     ROS_INFO("Set physical parameters for NMPC solver");
 
@@ -379,7 +401,7 @@ void nmpc::TiltMtServoNMPC::initNMPCParams()
     std::copy(phys_p.begin(), phys_p.end(), acados_p.begin() + idx_p_quat_end_ + 1);
     idx_p_phys_end_ = idx_p_quat_end_ + phys_p.size();
   }
-  else
+  else  // This condition is temporary for drones that don't pass in phys param (some experimental code)
   {
     idx_p_phys_end_ = idx_p_quat_end_;
   }
@@ -491,6 +513,8 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
 
 void nmpc::TiltMtServoNMPC::controlCore(bool is_warmup)
 {
+  applyPendingNMPCConfig();
+
   // restore velocity constraints after hovering
   if (navigator_->getNaviState() == aerial_robot_navigation::HOVER_STATE and has_restored_vel_ == false)
   {
@@ -840,7 +864,7 @@ void nmpc::TiltMtServoNMPC::allocateToXUwOneFixedRotor(int fix_rotor_idx, double
   Eigen::VectorXd tgt_wrench_modified = ref_wrench_b - tgt_wrench_from_rotor;
 
   // 3) calculate the allocation matrix without this rotor, which is 6*6
-  if (fix_rotor_idx != rotor_idx_prev_)
+  if (fix_rotor_idx != fix_rotor_idx_prev_)
   {
     Eigen::MatrixXd alloc_mat_del_rotor(alloc_mat_.rows(), alloc_mat_.cols() - 2);
     int j = 0;
@@ -882,7 +906,7 @@ void nmpc::TiltMtServoNMPC::allocateToXUwOneFixedRotor(int fix_rotor_idx, double
   }
 
   // if the fixed rotor is the same with previous one, no need to recalculate the allocation matrix.
-  rotor_idx_prev_ = fix_rotor_idx;
+  fix_rotor_idx_prev_ = fix_rotor_idx;
 }
 
 /**
@@ -990,6 +1014,8 @@ void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJo
     return;
   }
 
+  const bool should_convert_ee_traj_to_cog = is_ee_traj_to_cog_conversion_enabled_ && msg->joint_names[0] == "ee";
+
   /* For set-point regulation, if the traj planner sends the same traj, we can skip the calculation of allocation. */
   // check if two trajectories are the same
   int max_same_idx = 0;
@@ -1015,14 +1041,29 @@ void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJo
       geometry_msgs::Quaternion quat = point.transforms[0].rotation;
       geometry_msgs::Vector3 omega = point.velocities[0].angular;
       geometry_msgs::Vector3 ang_acc = point.accelerations[0].angular;
-      setXrUrRef(tf::Vector3(pos.x, pos.y, pos.z), tf::Vector3(vel.x, vel.y, vel.z), tf::Vector3(acc.x, acc.y, acc.z),
-                 tf::Quaternion(quat.x, quat.y, quat.z, quat.w), tf::Vector3(omega.x, omega.y, omega.z),
-                 tf::Vector3(ang_acc.x, ang_acc.y, ang_acc.z), i);
+
+      if (should_convert_ee_traj_to_cog)
+      {
+        // convert the EE reference trajectory to the CoG frame
+        tf::Vector3 cog_pos, cog_vel, cog_acc, cog_omega, cog_ang_acc;
+        tf::Quaternion cog_quat;
+        robot_model_->convertFromEEContactToCoG(
+            tf::Vector3(pos.x, pos.y, pos.z), tf::Vector3(vel.x, vel.y, vel.z), tf::Vector3(acc.x, acc.y, acc.z),
+            tf::Quaternion(quat.x, quat.y, quat.z, quat.w), tf::Vector3(omega.x, omega.y, omega.z),
+            tf::Vector3(ang_acc.x, ang_acc.y, ang_acc.z), cog_pos, cog_vel, cog_acc, cog_quat, cog_omega, cog_ang_acc);
+        setXrUrRef(cog_pos, cog_vel, cog_acc, cog_quat, cog_omega, cog_ang_acc, i);
+      }
+      else
+      {
+        setXrUrRef(tf::Vector3(pos.x, pos.y, pos.z), tf::Vector3(vel.x, vel.y, vel.z), tf::Vector3(acc.x, acc.y, acc.z),
+                   tf::Quaternion(quat.x, quat.y, quat.z, quat.w), tf::Vector3(omega.x, omega.y, omega.z),
+                   tf::Vector3(ang_acc.x, ang_acc.y, ang_acc.z), i);
+      }
     }
   }
 
   x_u_ref_.header.stamp = msg->header.stamp;
-  x_u_ref_.child_frame_id = msg->joint_names[0];
+  x_u_ref_.child_frame_id = should_convert_ee_traj_to_cog ? "cog" : msg->joint_names[0];
   callbackSetRefXU(boost::make_shared<const aerial_robot_msgs::PredXU>(x_u_ref_));
 
   last_traj_msg_ = *msg;
@@ -1059,86 +1100,100 @@ void nmpc::TiltMtServoNMPC::callbackSetFixedRotor(const aerial_robot_msgs::FixRo
 
 void nmpc::TiltMtServoNMPC::cfgNMPCCallback(NMPCConfig& config, uint32_t level)
 {
-  using Levels = aerial_robot_msgs::DynamicReconfigureLevels;
-  if (config.nmpc_flag)
-  {
-    try
-    {
-      switch (level)
-      {
-        case Levels::RECONFIGURE_NMPC_Q_P_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(0, config.Qp_xy);
-          mpc_solver_ptr_->setCostWDiagElement(1, config.Qp_xy);
+  (void)level;
+  std::lock_guard<std::mutex> lock(nmpc_config_mutex_);
+  nmpc_config_update_state_.ingest(config, getSupportedNMPCConfigMask());
+}
 
-          ROS_INFO_STREAM("change Qp_xy for NMPC '" << config.Qp_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_P_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(2, config.Qp_z);
-          ROS_INFO_STREAM("change Qp_z for NMPC '" << config.Qp_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_V_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(3, config.Qv_xy);
-          mpc_solver_ptr_->setCostWDiagElement(4, config.Qv_xy);
-          ROS_INFO_STREAM("change Qv_xy for NMPC '" << config.Qv_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_V_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(5, config.Qv_z);
-          ROS_INFO_STREAM("change Qv_z for NMPC '" << config.Qv_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_Q_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(7, config.Qq_xy);
-          mpc_solver_ptr_->setCostWDiagElement(8, config.Qq_xy);
-          ROS_INFO_STREAM("change Qq_xy for NMPC '" << config.Qq_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_Q_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(9, config.Qq_z);
-          ROS_INFO_STREAM("change Qq_z for NMPC '" << config.Qq_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_W_XY: {
-          mpc_solver_ptr_->setCostWDiagElement(10, config.Qw_xy);
-          mpc_solver_ptr_->setCostWDiagElement(11, config.Qw_xy);
-          ROS_INFO_STREAM("change Qw_xy for NMPC '" << config.Qw_xy << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_W_Z: {
-          mpc_solver_ptr_->setCostWDiagElement(12, config.Qw_z);
-          ROS_INFO_STREAM("change Qw_z for NMPC '" << config.Qw_z << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_Q_A: {
-          for (int i = 13; i < 13 + joint_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Qa);
-          ROS_INFO_STREAM("change Qa for NMPC '" << config.Qa << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_R_T: {
-          for (int i = mpc_solver_ptr_->NX_; i < mpc_solver_ptr_->NX_ + motor_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Rt, false);
-          ROS_INFO_STREAM("change Rt for NMPC '" << config.Rt << "'");
-          break;
-        }
-        case Levels::RECONFIGURE_NMPC_R_AC_D: {
-          for (int i = mpc_solver_ptr_->NX_ + motor_num_; i < mpc_solver_ptr_->NX_ + motor_num_ + joint_num_; ++i)
-            mpc_solver_ptr_->setCostWDiagElement(i, config.Rac_d, false);
-          ROS_INFO_STREAM("change Rac_d for NMPC '" << config.Rac_d << "'");
-          break;
-        }
-        default: {
-          ROS_INFO_STREAM("The setting variable is not in the list!");
-          break;
-        }
-      }
-    }
-    catch (std::invalid_argument& e)
-    {
-      ROS_ERROR_STREAM("NMPC config failed: " << e.what());
-    }
+nmpc::NMPCConfigMask nmpc::TiltMtServoNMPC::getSupportedNMPCConfigMask() const
+{
+  using namespace NMPCConfigFields;
+  return QP_XY | QP_Z | QV_XY | QV_Z | QQ_XY | QQ_Z | QW_XY | QW_Z | QA | RT | RAC_D;
+}
+
+void nmpc::TiltMtServoNMPC::applyPendingNMPCConfig()
+{
+  NMPCConfig config;
+  NMPCConfigMask mask = 0;
+  {
+    std::lock_guard<std::mutex> lock(nmpc_config_mutex_);
+    if (!nmpc_config_update_state_.takePending(config, mask))
+      return;
+  }
+
+  const NMPCConfigMask supported_mask = getSupportedNMPCConfigMask();
+  const NMPCConfigMask unsupported_mask = mask & NMPCConfigFields::ALL_PARAMETERS & ~supported_mask;
+  for (const auto& name : getNMPCConfigFieldNames(unsupported_mask))
+    ROS_WARN_STREAM("NMPC dynamic-reconfigure parameter '" << name << "' is not supported by this controller.");
+
+  try
+  {
+    const NMPCConfigMask applied_mask = mask & supported_mask;
+    applyNMPCConfig(config, applied_mask);
+
+    const std::string applied_values = formatNMPCConfigFieldValues(config, applied_mask);
+    if (!applied_values.empty())
+      ROS_INFO_STREAM("Applied NMPC dynamic-reconfigure parameters: " << applied_values);
+  }
+  catch (const std::exception& exception)
+  {
+    ROS_ERROR_STREAM("NMPC dynamic reconfigure failed: " << exception.what());
+  }
+}
+
+void nmpc::TiltMtServoNMPC::applyNMPCConfig(const NMPCConfig& config, NMPCConfigMask mask)
+{
+  using namespace NMPCConfigFields;
+  if (mask & QP_XY)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(0, config.Qp_xy);
+    mpc_solver_ptr_->setCostWDiagElement(1, config.Qp_xy);
+  }
+  if (mask & QP_Z)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(2, config.Qp_z);
+  }
+  if (mask & QV_XY)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(3, config.Qv_xy);
+    mpc_solver_ptr_->setCostWDiagElement(4, config.Qv_xy);
+  }
+  if (mask & QV_Z)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(5, config.Qv_z);
+  }
+  if (mask & QQ_XY)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(7, config.Qq_xy);
+    mpc_solver_ptr_->setCostWDiagElement(8, config.Qq_xy);
+  }
+  if (mask & QQ_Z)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(9, config.Qq_z);
+  }
+  if (mask & QW_XY)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(10, config.Qw_xy);
+    mpc_solver_ptr_->setCostWDiagElement(11, config.Qw_xy);
+  }
+  if (mask & QW_Z)
+  {
+    mpc_solver_ptr_->setCostWDiagElement(12, config.Qw_z);
+  }
+  if (mask & QA)
+  {
+    for (int i = 13; i < 13 + joint_num_; ++i)
+      mpc_solver_ptr_->setCostWDiagElement(i, config.Qa);
+  }
+  if (mask & RT)
+  {
+    for (int i = mpc_solver_ptr_->NX_; i < mpc_solver_ptr_->NX_ + motor_num_; ++i)
+      mpc_solver_ptr_->setCostWDiagElement(i, config.Rt, false);
+  }
+  if (mask & RAC_D)
+  {
+    for (int i = mpc_solver_ptr_->NX_ + motor_num_; i < mpc_solver_ptr_->NX_ + motor_num_ + joint_num_; ++i)
+      mpc_solver_ptr_->setCostWDiagElement(i, config.Rac_d, false);
   }
 }
 
@@ -1179,8 +1234,8 @@ std::vector<double> nmpc::TiltMtServoNMPC::meas2VecX(bool is_modified_by_traj_fr
       // convert the position and velocity from CoG to end-effector frame
       tf::Vector3 target_ee_pos, target_ee_vel, target_ee_omega;
       tf::Quaternion target_ee_quat;
-      robot_model_->convertFromCoGToEEContact(pos, vel, quat, ang_vel, target_ee_pos, target_ee_vel, target_ee_quat,
-                                              target_ee_omega);
+      robot_model_->convertFromCoGToEEContactNoAcc(pos, vel, quat, ang_vel, target_ee_pos, target_ee_vel,
+                                                   target_ee_quat, target_ee_omega);
 
       pos = target_ee_pos;
       vel = target_ee_vel;
@@ -1251,6 +1306,18 @@ void nmpc::TiltMtServoNMPC::printPhysicalParams()
 
   cout << "kq_kt_rate" << robot_model_->getMFRate() << endl;
   cout << "abs(kq_kt_rate)" << abs(robot_model_->getMFRate()) << endl;
+
+  // cout << "ee pose relative to CoG" <<
+  std::vector<double> contact_frame_p = { 0.0, 0.0, 0.0 };
+  std::vector<double> contact_frame_q = { 1.0, 0.0, 0.0, 0.0 };
+  if (robot_model_->hasFrame("ee_contact"))
+    robot_model_->getCoGtoFramePosQuat("ee_contact", contact_frame_p, contact_frame_q);
+  else
+    ROS_WARN_THROTTLE(5, "No frame named ee_contact in the robot model! The end-effector pose will be set to CoG.");
+
+  cout << "contact_frame_p: " << contact_frame_p[0] << ", " << contact_frame_p[1] << ", " << contact_frame_p[2] << endl;
+  cout << "contact_frame_q: " << contact_frame_q[0] << ", " << contact_frame_q[1] << ", " << contact_frame_q[2] << ", "
+       << contact_frame_q[3] << endl;
 }
 
 bool nmpc::TiltMtServoNMPC::isMulDOFJointTrajPtEqual(const trajectory_msgs::MultiDOFJointTrajectoryPoint& a,

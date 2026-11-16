@@ -194,9 +194,9 @@ void StateEstimator::statePublish(const ros::TimerEvent& e)
     // make conversion
     tf::Vector3 target_ee_pos_in_w, target_ee_vel_in_w, target_ee_omega;
     tf::Quaternion target_ee_quat;
-    robot_model_->convertFromCoGToEEContact(getPos(Frame::COG, estimate_mode_), getVel(Frame::COG, estimate_mode_), q,
-                                            getAngularVel(Frame::COG, estimate_mode_), target_ee_pos_in_w,
-                                            target_ee_vel_in_w, target_ee_quat, target_ee_omega);
+    robot_model_->convertFromCoGToEEContactNoAcc(getPos(Frame::COG, estimate_mode_), getVel(Frame::COG, estimate_mode_),
+                                                 q, getAngularVel(Frame::COG, estimate_mode_), target_ee_pos_in_w,
+                                                 target_ee_vel_in_w, target_ee_quat, target_ee_omega);
 
     // ee_contact_odom_pub_
     odom_state.child_frame_id = tf::resolve(tf_prefix_, std::string("ee_contact"));

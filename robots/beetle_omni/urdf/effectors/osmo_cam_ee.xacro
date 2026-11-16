@@ -3,10 +3,10 @@
   <!--
     Macro: osmo_end_effector
     params:
-      ee_mount_link : The base link connected to the end-effector. (e.g., "ee_mount")
-      robot_ns    : ROS namespace (e.g. "beetle1"). Can be "".
+      ee_mount_link : The base link connected to the end-effector. (e.g., "ee_mount" or "ee_bottom_mount")
+      robot_ns      : ROS namespace (e.g. "beetle1"). Can be "".
   -->
-  <xacro:macro name="osmo_end_effector" params="ee_mount_link robot_ns">
+  <xacro:macro name="osmo_end_effector" params="ee_mount_link ee_contact_link robot_ns">
 
     <!-- 1) OSMO link and joint -->
     <link name="osmo">
@@ -36,7 +36,7 @@
     <!-- 3) Contact frame at the bristle tip, required by the outer framework -->
     <joint name="osmo_to_ee_contact" type="fixed">
       <parent link="osmo"/>
-      <child link="ee_contact"/>
+      <child link="${ee_contact_link}"/>
       <origin xyz="0 0 0.045" rpy="0 0 0"/>
     </joint>
 

@@ -3,6 +3,7 @@ Created by jinjie on 25/03/21.
 """
 
 from abc import ABC, abstractmethod
+from math import degrees
 import rospy
 
 from nav_msgs.msg import Odometry
@@ -99,13 +100,14 @@ class MPCPubBase(ABC):
             if hasattr(self, "track_err_calc"):
                 # Calculate RMSE of tracking error
                 pos_rmse_norm, pos_rmse, ang_rmse_norm, ang_rmse = self.track_err_calc.get_rmse_error()
+                ang_rmse_deg = [degrees(v) for v in ang_rmse]
 
                 rospy.loginfo(
                     f"\033[1;36m{self.namespace}/{self.node_name}: RMSE of tracking error: \n"
                     f"pos_err_norm = {pos_rmse_norm:.3f} m, \n"
                     f"pos_err = {pos_rmse[0]:.3f} m, {pos_rmse[1]:.3f} m, {pos_rmse[2]:.3f} m, \n"
-                    f"ang_err_norm = {ang_rmse_norm:.3f} deg, \n"
-                    f"ang_err = {ang_rmse[0]:.3f} deg, {ang_rmse[1]:.3f} deg, {ang_rmse[2]:.3f} deg\033[0m"
+                    f"ang_err_norm = {degrees(ang_rmse_norm):.3f} deg, \n"
+                    f"ang_err = {ang_rmse_deg[0]:.3f} deg, {ang_rmse_deg[1]:.3f} deg, {ang_rmse_deg[2]:.3f} deg\033[0m"
                 )  # cyan highlight
 
                 self.track_err_calc.reset()
@@ -131,12 +133,15 @@ class MPCPubBase(ABC):
         # 2.1) Calculate tracking error
         if hasattr(self, "track_err_calc"):
             err_px, err_py, err_pz, err_roll, err_pitch, err_yaw = self.track_err_calc.update(self.uav_odom, traj_msg)
+            err_roll_deg = degrees(err_roll)
+            err_pitch_deg = degrees(err_pitch)
+            err_yaw_deg = degrees(err_yaw)
 
             rospy.loginfo_throttle(
                 1,
                 f"{self.namespace}/{self.node_name}: Tracking error: "
                 f"pos_err = {err_px:.3f} m, {err_py:.3f} m, {err_pz:.3f} m, "
-                f"ang_err = {err_roll:.3f} deg, {err_pitch:.3f} deg, {err_yaw:.3f} deg",
+                f"ang_err = {err_roll_deg:.3f} deg, {err_pitch_deg:.3f} deg, {err_yaw_deg:.3f} deg",
             )
 
         # 3) Publish

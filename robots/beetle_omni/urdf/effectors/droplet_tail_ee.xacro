@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<robot name="droplet_tail_end_effector" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Macro: droplet_tail_end_effector
+    params:
+      ee_mount_link : The base link connected to the end-effector (e.g. "ee_mount" or "ee_bottom_mount").
+      robot_ns      : ROS namespace
+  -->
+  <xacro:macro name="droplet_tail_end_effector" params="ee_mount_link ee_contact_link robot_ns">
+
+    <!-- 1) Main body link and joint -->
+    <link name="droplet_tail">
+      <inertial>
+        <origin xyz="0.00000000 0.00000000 0.06114595" rpy="0 0 0"/>
+        <mass value="0.13192015"/>
+        <inertia
+                ixx="0.00036943" iyy="0.00036943" izz="0.00025199"
+                ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+      </inertial>
+      <visual>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_droplet_tail.dae" scale="1 1 1"/>
+        </geometry>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <!-- You can reuse the same mesh for collision or a simplified one -->
+          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_droplet_tail.dae"
+                scale="1 1 1"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <joint name="ee_mount_to_droplet_tail" type="fixed">
+      <parent link="${ee_mount_link}"/>
+      <child link="droplet_tail"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- 2) Contact frame at the bristle tip, required by the outer framework -->
+    <!-- ee_contact_link is passed as parameter -->
+    <joint name="droplet_tail_to_ee_contact" type="fixed">
+      <parent link="droplet_tail"/>
+      <child link="${ee_contact_link}"/>
+      <origin xyz="0 0 0.192" rpy="0 0 0"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>

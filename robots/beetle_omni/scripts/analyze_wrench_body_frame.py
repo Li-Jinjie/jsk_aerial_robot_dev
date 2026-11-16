@@ -25,7 +25,7 @@ from analyze_allocation import p1_b
 # ------------------------------------------------------------------------
 # CONSTANTS
 # ------------------------------------------------------------------------
-THRUST_MAX = 30.0  # Maximum thrust per rotor [N]
+THRUST_MAX = 23.0  # Maximum thrust per rotor [N]
 THRUST_MIN = 0.0  # Minimum thrust per rotor [N]
 WRENCH_ERROR_LIMIT = 1e-3  # Acceptable wrench error
 

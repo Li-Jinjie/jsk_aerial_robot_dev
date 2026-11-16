@@ -15,7 +15,8 @@ void nmpc::TiltMtServoDistNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle n
   TiltMtServoNMPC::initialize(nh, nhp, robot_model, estimator, navigator, ctrl_loop_du);
 
   ros::NodeHandle control_nh(nh_, "controller");
-  getParam<bool>(control_nh, "if_use_est_wrench_4_control", if_use_est_wrench_4_control_, false);
+  getParam<bool>(control_nh, "if_use_est_force_4_control", if_use_est_force_4_control_, false);
+  getParam<bool>(control_nh, "if_use_est_torque_4_control", if_use_est_torque_4_control_, false);
 
   pub_disturb_wrench_ = nh_.advertise<geometry_msgs::WrenchStamped>("ext_wrench_est/value", 1);
 }
@@ -125,9 +126,12 @@ std::vector<double> nmpc::TiltMtServoDistNMPC::meas2VecX(bool is_modified_by_tra
   geometry_msgs::Vector3 external_force_w;     // default: 0, 0, 0
   geometry_msgs::Vector3 external_torque_cog;  // default: 0, 0, 0
 
-  if (if_use_est_wrench_4_control_)
+  if (if_use_est_force_4_control_)
   {
     external_force_w = wrench_est_ptr_->getDistForceW();
+  }
+  if (if_use_est_torque_4_control_)
+  {
     external_torque_cog = wrench_est_ptr_->getDistTorqueCOG();
   }
 

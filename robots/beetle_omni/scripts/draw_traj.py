@@ -3,6 +3,7 @@ import numpy as np
 import scienceplots
 import matplotlib.pyplot as plt
 import argparse
+from scipy.spatial.transform import Rotation, Slerp
 
 from matplotlib.lines import lineStyles
 
@@ -10,6 +11,30 @@ from utils import unwrap_angle_sequence, calculate_rmse, quat2euler, calculate_q
 from utils import matlab_yellow, matlab_green, matlab_orange, matlab_blue
 
 legend_alpha = 0.5
+
+
+def rotate_body_vectors_to_world(vector_time, vectors_body, attitude_data, attitude_topic_prefix):
+    """Rotate body-frame vectors into the world frame using interpolated attitude."""
+    attitude_time = attitude_data["__time"].to_numpy()
+    attitude_quat = attitude_data[
+        [
+            f"{attitude_topic_prefix}/x",
+            f"{attitude_topic_prefix}/y",
+            f"{attitude_topic_prefix}/z",
+            f"{attitude_topic_prefix}/w",
+        ]
+    ].to_numpy()
+
+    # Slerp requires strictly increasing timestamps. Keep the first attitude
+    # sample at each timestamp and clamp wrench samples to the attitude range.
+    attitude_time, unique_indices = np.unique(attitude_time, return_index=True)
+    attitude_rotation = Rotation.from_quat(attitude_quat[unique_indices])
+    if len(attitude_time) == 1:
+        return attitude_rotation[0].apply(vectors_body)
+
+    interpolation_time = np.clip(vector_time, attitude_time[0], attitude_time[-1])
+    rotation_wb = Slerp(attitude_time, attitude_rotation)(interpolation_time)
+    return rotation_wb.apply(vectors_body)
 
 
 def main(file_path, type, if_hand_teleop):
@@ -52,9 +77,19 @@ def main(file_path, type, if_hand_teleop):
         data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/y"] = 0.0
         data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/z"] = 1.0
 
+    data_xyz_ref_nmpc = data[
+        [
+            "__time",
+            "/beetle1/nmpc/viz_ref/poses[0]/position/x",
+            "/beetle1/nmpc/viz_ref/poses[0]/position/y",
+            "/beetle1/nmpc/viz_ref/poses[0]/position/z",
+        ]
+    ]
+
     data_xyz = data_xyz.dropna()
     data_xyz_ref = data_xyz_ref.dropna()
     data_xyz_cog = data_xyz_cog.dropna()
+    data_xyz_ref_nmpc = data_xyz_ref_nmpc.dropna()
 
     # ======= rpy =========
     data_qwxyz = data[
@@ -242,18 +277,18 @@ def main(file_path, type, if_hand_teleop):
         plt.rcParams.update({"font.size": 11})  # default is 10
         label_size = 14
 
-        fig = plt.figure(figsize=(7, 7))
+        fig = plt.figure(figsize=(7, 7))  # (7, 5.5) for teleop
 
         t_bias = max(data_xyz["__time"].iloc[0], data_xyz_ref["__time"].iloc[0], data_xyz_cog["__time"].iloc[0])
         color_ref = "#0C5DA5"
         color_real = "#FF2C00"
         color_cog = "#f29619"  # the orange in scienceplots
 
-        inside_valve_t_start = 13.7
-        inside_valve_t_stop = 58.9
+        inside_valve_t_start = 8.1
+        inside_valve_t_stop = 46.9
 
-        con_rot_t_start = 39.0
-        con_rot_t_stop = 68.6
+        con_rot_t_start = 16.9
+        con_rot_t_stop = 46.9
 
         # --------------------------------
         plt.subplot(4, 2, 1)
@@ -261,9 +296,10 @@ def main(file_path, type, if_hand_teleop):
         x_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/x"])
         plt.plot(t_ref, x_ref, label="ref_ee", linestyle="--", color=color_ref)
 
-        t_cog = np.array(data_xyz_cog["__time"]) - t_bias
-        x_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/x"])
-        plt.plot(t_cog, x_cog, label="cog", linestyle="-.", color=color_cog)
+        if not if_hand_teleop:
+            t_cog = np.array(data_xyz_cog["__time"]) - t_bias
+            x_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/x"])
+            plt.plot(t_cog, x_cog, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_xyz["__time"]) - t_bias
         x = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/x"])
@@ -271,6 +307,9 @@ def main(file_path, type, if_hand_teleop):
 
         if if_hand_teleop:
             plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
+            plt.axvspan(
+                con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
+            )
 
         plt.legend(framealpha=legend_alpha, ncol=2)
         plt.ylabel("X [m]", fontsize=label_size)
@@ -304,7 +343,7 @@ def main(file_path, type, if_hand_teleop):
         plt.ylabel("Roll [$^\\circ$]", fontsize=label_size)
 
         if if_hand_teleop:
-            plt.axvspan(con_rot_t_start, con_rot_t_stop, facecolor=matlab_green, alpha=0.2)
+            plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
             plt.axvspan(
                 con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
             )
@@ -313,6 +352,19 @@ def main(file_path, type, if_hand_teleop):
         rmse_roll = calculate_rmse(t, roll, t_ref, roll_ref)
         print(f"RMSE Roll [rad]: {rmse_roll}")
         print(f"RMSE Roll [deg]: {rmse_roll * 180 / np.pi}")
+        # ----------------------------
+        # absolute tracking error (right y-axis) for Roll
+        ax = plt.gca()
+        ax2 = ax.twinx()
+        # interpolate reference to the real timestamps
+        roll_ref_interp = np.interp(t, t_ref, roll_ref)
+        # absolute error in degrees
+        roll_err_deg = np.abs((roll - roll_ref_interp) * 180.0 / np.pi)
+        ax2.plot(t, roll_err_deg, label="absolute error", color=matlab_green, alpha=0.5)
+        # fill between error curve and zero baseline to show shaded error area
+        ax2.fill_between(t, roll_err_deg, 0.0, color=matlab_green, alpha=0.2)
+        ax2.set_ylabel("Abs. Err. [$^\\circ$]", fontsize=label_size)
+        ax2.legend(framealpha=legend_alpha)  #  loc="center right"
 
         # --------------------------------
         plt.subplot(4, 2, 3)
@@ -320,9 +372,10 @@ def main(file_path, type, if_hand_teleop):
         y_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/y"])
         plt.plot(t_ref, y_ref, label="ref_ee", linestyle="--", color=color_ref)
 
-        t_cog = np.array(data_xyz_cog["__time"]) - t_bias
-        y_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/y"])
-        plt.plot(t_cog, y_cog, label="cog", linestyle="-.", color=color_cog)
+        if not if_hand_teleop:
+            t_cog = np.array(data_xyz_cog["__time"]) - t_bias
+            y_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/y"])
+            plt.plot(t_cog, y_cog, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_xyz["__time"]) - t_bias
         y = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/y"])
@@ -331,6 +384,9 @@ def main(file_path, type, if_hand_teleop):
 
         if if_hand_teleop:
             plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
+            plt.axvspan(
+                con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
+            )
 
         # plt.legend(framealpha=legend_alpha, ncol=2)
 
@@ -354,7 +410,7 @@ def main(file_path, type, if_hand_teleop):
         plt.ylabel("Pitch [$^\\circ$]", fontsize=label_size)
 
         if if_hand_teleop:
-            plt.axvspan(con_rot_t_start, con_rot_t_stop, facecolor=matlab_green, alpha=0.2)
+            plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
             plt.axvspan(
                 con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
             )
@@ -363,6 +419,15 @@ def main(file_path, type, if_hand_teleop):
         rmse_pitch = calculate_rmse(t, pitch, t_ref, pitch_ref)
         print(f"RMSE Pitch [rad]: {rmse_pitch}")
         print(f"RMSE Pitch [deg]: {rmse_pitch * 180 / np.pi}")
+        # ----------------------------
+        # absolute tracking error (right y-axis) for Pitch
+        ax = plt.gca()
+        ax2 = ax.twinx()
+        pitch_ref_interp = np.interp(t, t_ref, pitch_ref)
+        pitch_err_deg = np.abs((pitch - pitch_ref_interp) * 180.0 / np.pi)
+        ax2.plot(t, pitch_err_deg, label="absolute error", color=matlab_green, alpha=0.5)
+        ax2.fill_between(t, pitch_err_deg, 0.0, color=matlab_green, alpha=0.2)
+        ax2.set_ylabel("Abs. Err. [$^\\circ$]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 5)
@@ -370,9 +435,10 @@ def main(file_path, type, if_hand_teleop):
         z_ref = np.array(data_xyz_ref["/beetle1/set_ref_traj/points[0]/transforms[0]/translation/z"])
         plt.plot(t_ref, z_ref, label="ref", linestyle="--", color=color_ref)
 
-        t_cog = np.array(data_xyz_cog["__time"]) - t_bias
-        z_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/z"])
-        plt.plot(t_cog, z_cog, label="cog", linestyle="-.", color=color_cog)
+        if not if_hand_teleop:
+            t_cog = np.array(data_xyz_cog["__time"]) - t_bias
+            z_cog = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/z"])
+            plt.plot(t_cog, z_cog, label="cog", linestyle="-.", color=color_cog)
 
         t = np.array(data_xyz["__time"]) - t_bias
         z = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/z"])
@@ -382,6 +448,9 @@ def main(file_path, type, if_hand_teleop):
 
         if if_hand_teleop:
             plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
+            plt.axvspan(
+                con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
+            )
 
         # calculate RMSE
         rmse_z = calculate_rmse(t, z, t_ref, z_ref)
@@ -403,7 +472,7 @@ def main(file_path, type, if_hand_teleop):
         plt.ylabel("Yaw [$^\\circ$]", fontsize=label_size)
 
         if if_hand_teleop:
-            plt.axvspan(con_rot_t_start, con_rot_t_stop, facecolor=matlab_green, alpha=0.2)
+            plt.axvspan(inside_valve_t_start, inside_valve_t_stop, facecolor=matlab_yellow, alpha=0.2)
             plt.axvspan(
                 con_rot_t_start, con_rot_t_stop, facecolor="none", edgecolor="lightgray", hatch="///", linewidth=0.0
             )
@@ -412,37 +481,78 @@ def main(file_path, type, if_hand_teleop):
         rmse_yaw = calculate_rmse(t, yaw, t_ref, yaw_ref, is_yaw=True)
         print(f"RMSE Yaw [rad]: {rmse_yaw}")
         print(f"RMSE Yaw [deg]: {rmse_yaw * 180 / np.pi}")
+        # ----------------------------
+        # absolute tracking error (right y-axis) for Yaw
+        ax = plt.gca()
+        ax2 = ax.twinx()
+        yaw_ref_interp = np.interp(t, t_ref, yaw_ref)
+        yaw_err_deg = np.abs((yaw - yaw_ref_interp) * 180.0 / np.pi)
+        ax2.plot(t, yaw_err_deg, label="abs_err", color=matlab_green, alpha=0.5)
+        ax2.fill_between(t, yaw_err_deg, 0.0, color=matlab_green, alpha=0.2)
+        ax2.set_ylabel("Abs. Err. [$^\\circ$]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 7)
-        t = np.array(data_thrust_cmd["__time"]) - t_bias
-        thrust1 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[0]"])
-        plt.plot(t, thrust1, label="$f_{c1}$", linestyle="-")
-        thrust2 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[1]"])
-        plt.plot(t, thrust2, label="$f_{c2}$", linestyle="--")
-        thrust3 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[2]"])
-        plt.plot(t, thrust3, label="$f_{c3}$", linestyle="-.")
-        thrust4 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[3]"])
-        plt.plot(t, thrust4, label="$f_{c4}$", linestyle=":")
-        plt.ylabel("Thrust Cmd [N]", fontsize=label_size)
-        plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="lower left", ncol=2)
+        if if_hand_teleop and "data_ext_wrench_est" in locals():
+            force_time = np.array(data_ext_wrench_est["__time"])
+            t = force_time - t_bias
+            fx = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/x"])
+            fy = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/y"])
+            fz = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/z"])
+            force_world = rotate_body_vectors_to_world(
+                force_time,
+                np.column_stack((fx, fy, fz)),
+                data_qwxyz_cog,
+                "/beetle1/uav/cog/odom/pose/pose/orientation",
+            )
+            fx, fy, fz = force_world.T
+            plt.plot(t, fx, label="$f_x$", linestyle="-.")
+            plt.plot(t, fy, label="$f_y$", linestyle="--")
+            plt.plot(t, fz, label="$f_z$", linestyle="-")
+            plt.ylabel("${^W\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
+            plt.xlabel("Time [s]", fontsize=label_size)
+            plt.legend(framealpha=legend_alpha)
+        else:
+            t = np.array(data_thrust_cmd["__time"]) - t_bias
+            thrust1 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[0]"])
+            plt.plot(t, thrust1, label="$f_{c1}$", linestyle="-")
+            thrust2 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[1]"])
+            plt.plot(t, thrust2, label="$f_{c2}$", linestyle="--")
+            thrust3 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[2]"])
+            plt.plot(t, thrust3, label="$f_{c3}$", linestyle="-.")
+            thrust4 = np.array(data_thrust_cmd["/beetle1/four_axes/command/base_thrust[3]"])
+            plt.plot(t, thrust4, label="$f_{c4}$", linestyle=":")
+            plt.ylabel("Thrust Cmd [N]", fontsize=label_size)
+            plt.xlabel("Time [s]", fontsize=label_size)
+            plt.legend(framealpha=legend_alpha, loc="lower left", ncol=2)
 
         # --------------------------------
         plt.subplot(4, 2, 8)
-        t = np.array(data_servo_angle_cmd["__time"]) - t_bias
-        servo1 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal1/position"]) * 180 / np.pi
-        plt.plot(t, servo1, label="$\\alpha_{c1}$", linestyle="-")
-        servo2 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal2/position"]) * 180 / np.pi
-        plt.plot(t, servo2, label="$\\alpha_{c2}$", linestyle="--")
-        servo3 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal3/position"]) * 180 / np.pi
-        plt.plot(t, servo3, label="$\\alpha_{c3}$", linestyle="-.")
-        servo4 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal4/position"]) * 180 / np.pi
-        plt.plot(t, servo4, label="$\\alpha_{c4}$", linestyle=":")
+        if if_hand_teleop and "data_ext_wrench_est" in locals():
+            t = np.array(data_ext_wrench_est["__time"]) - t_bias
+            torque_x = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/torque/x"])
+            torque_y = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/torque/y"])
+            torque_z = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/torque/z"])
+            plt.plot(t, torque_x, label="$\\tau_x$", linestyle="-.")
+            plt.plot(t, torque_y, label="$\\tau_y$", linestyle="--")
+            plt.plot(t, torque_z, label="$\\tau_z$", linestyle="-")
+            plt.ylabel("${^B\hat{\\boldsymbol{\\tau}}_{de,0}}$ [N$\cdot$m]", fontsize=label_size)
+            plt.xlabel("Time [s]", fontsize=label_size)
+            plt.legend(framealpha=legend_alpha)
+        else:
+            t = np.array(data_servo_angle_cmd["__time"]) - t_bias
+            servo1 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal1/position"]) * 180 / np.pi
+            plt.plot(t, servo1, label="$\\alpha_{c1}$", linestyle="-")
+            servo2 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal2/position"]) * 180 / np.pi
+            plt.plot(t, servo2, label="$\\alpha_{c2}$", linestyle="--")
+            servo3 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal3/position"]) * 180 / np.pi
+            plt.plot(t, servo3, label="$\\alpha_{c3}$", linestyle="-.")
+            servo4 = np.array(data_servo_angle_cmd["/beetle1/gimbals_ctrl/gimbal4/position"]) * 180 / np.pi
+            plt.plot(t, servo4, label="$\\alpha_{c4}$", linestyle=":")
 
-        plt.ylabel("Servo Cmd [$^\\circ$]", fontsize=label_size)
-        plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="center left", ncol=2)
+            plt.ylabel("Servo Cmd [$^\\circ$]", fontsize=label_size)
+            plt.xlabel("Time [s]", fontsize=label_size)
+            plt.legend(framealpha=legend_alpha, loc="center left", ncol=2)
 
         # --------------------------------
         plt.tight_layout()
@@ -770,16 +880,24 @@ def main(file_path, type, if_hand_teleop):
         # --------------------------------
         plt.subplot(4, 2, 5)
 
-        t = np.array(data_ext_wrench_est["__time"]) - t_bias
+        force_time = np.array(data_ext_wrench_est["__time"])
+        t = force_time - t_bias
         fx = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/x"])
         fy = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/y"])
         fz = np.array(data_ext_wrench_est["/beetle1/ext_wrench_est/value/wrench/force/z"])
+        force_world = rotate_body_vectors_to_world(
+            force_time,
+            np.column_stack((fx, fy, fz)),
+            data_qwxyz_cog,
+            "/beetle1/uav/cog/odom/pose/pose/orientation",
+        )
+        fx, fy, fz = force_world.T
         plt.plot(t, fx, label="$f_{x}$", linestyle="-.")
         plt.plot(t, fy, label="$f_{y}$", linestyle="--")
         plt.plot(t, fz, label="$f_{z}$", linestyle="-")
 
         plt.legend(framealpha=legend_alpha)
-        plt.ylabel("${^B\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
+        plt.ylabel("${^W\hat{\\boldsymbol{f}}_{de,0}}$ [N]", fontsize=label_size)
 
         # --------------------------------
         plt.subplot(4, 2, 6)
@@ -808,7 +926,7 @@ def main(file_path, type, if_hand_teleop):
         plt.plot(t, thrust4, label="$f_{c4}$", linestyle=":")
         plt.ylabel("Thrust Cmd [N]", fontsize=label_size)
         plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="upper center", ncol=2)
+        plt.legend(framealpha=legend_alpha, ncol=2)
 
         # --------------------------------
         plt.subplot(4, 2, 8)
@@ -824,12 +942,193 @@ def main(file_path, type, if_hand_teleop):
 
         plt.ylabel("Servo Cmd [$^\\circ$]", fontsize=label_size)
         plt.xlabel("Time [s]", fontsize=label_size)
-        plt.legend(framealpha=legend_alpha, loc="center", ncol=2)
+        plt.legend(framealpha=legend_alpha, ncol=2)
 
         # --------------------------------
         plt.tight_layout()
         # make the subplots very compact
         fig.subplots_adjust(hspace=0.2)
+        plt.show()
+
+    elif type == 4:
+        plt.style.use(["science", "grid"])
+
+        plt.rcParams.update({"font.size": 14})
+        label_size = 14
+
+        color_px = "#0C5DA5"
+        color_force = "#FF2C00"
+        # color_force = "#f29619"  # the orange in scienceplots
+
+        line_width = 1.5
+
+        if "data_ext_pure" not in locals() or "data_iterm" not in locals():
+            print("No est. wrench data found!")
+            return
+
+        # use a common time bias so all curves share the same axis origin
+        t_bias = max(
+            data_xyz_cog["__time"].iloc[0],
+            data_xyz_ref_nmpc["__time"].iloc[0],
+            data_ext_pure["__time"].iloc[0],
+            data_iterm["__time"].iloc[0],
+        )
+
+        fig, ax_pos = plt.subplots(figsize=(7, 2))
+        ax_force = ax_pos.twinx()
+
+        # ----------------------------
+        # Left y-axis: position
+        # ----------------------------
+        t_ref = np.array(data_xyz_ref_nmpc["__time"]) - t_bias
+        x_ref = np.array(data_xyz_ref_nmpc["/beetle1/nmpc/viz_ref/poses[0]/position/x"])
+        line1 = ax_pos.plot(t_ref, x_ref, label="ref.", linestyle="--", color=color_px, linewidth=line_width)
+
+        t_real = np.array(data_xyz_cog["__time"]) - t_bias
+        z_real = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/x"])
+        line2 = ax_pos.plot(t_real, z_real, label="real", linestyle="-", color=color_px, linewidth=line_width)
+
+        ax_pos.set_ylabel("X [m]", fontsize=label_size)
+        ax_pos.set_xlabel("Time [s]", fontsize=label_size)
+
+        ax_pos.legend(framealpha=legend_alpha, loc="center left")
+
+        ax_pos.set_xlim(0, 30)
+        ax_pos.set_ylim(0.5, 1.65)
+
+        # ----------------------------
+        # Right y-axis: force
+        # ----------------------------
+        t_ext = np.array(data_ext_pure["__time"]) - t_bias
+        fx_ext = np.array(data_ext_pure["/beetle1/dist_w_f_cog_tq/ext/wrench/force/x"])
+        line3 = ax_force.plot(
+            t_ext, fx_ext, label="${^W\hat{f}_{de,x}}$", linestyle="-.", color=color_force, linewidth=line_width
+        )
+
+        t_iterm = np.array(data_iterm["__time"]) - t_bias
+        fz_iterm = np.array(data_iterm["/beetle1/dist_w_f_cog_tq/iterm/wrench/force/x"])
+        line4 = ax_force.plot(
+            t_iterm, fz_iterm, label="${^W\hat{f}_{dm,x}}$", linestyle=":", color=color_force, linewidth=line_width
+        )
+
+        ax_force.set_ylabel("$^Wf$ [N]", fontsize=label_size)
+
+        ax_force.legend(framealpha=legend_alpha, loc="center right")
+
+        ax_force.set_ylim(-14, 1)
+
+        plt.tight_layout()
+        plt.show()
+
+    elif type == 5:
+        plt.style.use(["science", "grid"])
+
+        plt.rcParams.update({"font.size": 14})
+        label_size = 14
+
+        color_px = "#0C5DA5"
+        color_att = "#FF2C00"
+        # color_force = "#f29619"  # the orange in scienceplots
+
+        line_width = 1.5
+
+        t_bias = max(
+            data_xyz["__time"].iloc[0],
+            data_euler["__time"].iloc[0],
+        )
+
+        fig, ax_pos = plt.subplots(figsize=(7, 2))
+        ax_attitude = ax_pos.twinx()
+
+        t_pos = np.array(data_xyz["__time"]) - t_bias
+        x_pos = np.array(data_xyz["/beetle1/uav/ee_contact/odom/pose/pose/position/x"])
+        line1 = ax_pos.plot(t_pos, x_pos, label="X of ee", linestyle="-.", color=color_px, linewidth=line_width)
+
+        ax_pos.set_ylabel("X [m]", fontsize=label_size)
+        ax_pos.set_xlabel("Time [s]", fontsize=label_size)
+        ax_pos.legend(framealpha=legend_alpha, loc="center left")
+        ax_pos.set_ylim(-0.1, 0.4)
+
+        t_att = np.array(data_euler["__time"]) - t_bias
+        pitch_att = np.array(data_euler["pitch"])
+        line2 = ax_attitude.plot(
+            t_att, pitch_att * 180 / np.pi, label="Pitch of ee", linestyle="-", color=color_att, linewidth=line_width
+        )
+        ax_attitude.set_ylabel("Pitch [$^\\circ$]", fontsize=label_size)
+        ax_attitude.legend(framealpha=legend_alpha, loc="center right")
+
+        ax_attitude.set_ylim(-2, 13)
+
+        plt.tight_layout()
+        plt.show()
+
+    elif type == 6:
+        plt.style.use(["science", "grid"])
+
+        plt.rcParams.update({"font.size": 14})
+        label_size = 14
+
+        color_px = "#0C5DA5"
+        color_force = "#FF2C00"
+        # color_force = "#f29619"  # the orange in scienceplots
+
+        line_width = 1.5
+
+        if "data_ext_pure" not in locals() or "data_iterm" not in locals():
+            print("No est. wrench data found!")
+            return
+
+        # use a common time bias so all curves share the same axis origin
+        t_bias = max(
+            data_xyz_cog["__time"].iloc[0],
+            data_xyz_ref_nmpc["__time"].iloc[0],
+            data_ext_pure["__time"].iloc[0],
+            data_iterm["__time"].iloc[0],
+        )
+
+        fig, ax_pos = plt.subplots(figsize=(7, 2))
+        ax_force = ax_pos.twinx()
+
+        # ----------------------------
+        # Left y-axis: position
+        # ----------------------------
+        t_ref = np.array(data_xyz_ref_nmpc["__time"]) - t_bias
+        z_ref = np.array(data_xyz_ref_nmpc["/beetle1/nmpc/viz_ref/poses[0]/position/z"])
+        # generate z_ref_desired with the same shape with z_ref
+        z_ref_desired = np.ones_like(z_ref) * 0.0
+        # set the z_desired to 2.0 when t>2.28
+        z_ref_desired[t_ref >= 1.9] = 2.0
+
+        line1 = ax_pos.plot(t_ref, z_ref_desired, label="ref.", linestyle="--", color=color_px, linewidth=line_width)
+
+        t_real = np.array(data_xyz_cog["__time"]) - t_bias
+        z_real = np.array(data_xyz_cog["/beetle1/uav/cog/odom/pose/pose/position/z"])
+        line2 = ax_pos.plot(t_real, z_real, label="real", linestyle="-", color=color_px, linewidth=line_width)
+
+        ax_pos.set_ylabel("Z [m]", fontsize=label_size)
+        ax_pos.set_xlabel("Time [s]", fontsize=label_size)
+
+        ax_pos.legend(framealpha=legend_alpha, loc="center left")
+
+        ax_pos.set_xlim(0, 10)
+        ax_pos.set_ylim(-0.1, 2.3)
+
+        # ----------------------------
+        # Right y-axis: force
+        # ----------------------------
+        t_iterm = np.array(data_iterm["__time"]) - t_bias
+        fz_iterm = np.array(data_iterm["/beetle1/dist_w_f_cog_tq/iterm/wrench/force/z"])
+        line4 = ax_force.plot(
+            t_iterm, fz_iterm, label="${^W\hat{f}_{dm,z}}$", linestyle="-.", color=color_force, linewidth=line_width
+        )
+
+        ax_force.set_ylabel("$^Wf$ [N]", fontsize=label_size)
+
+        ax_force.legend(framealpha=legend_alpha, loc="center right")
+
+        ax_force.set_ylim(-2.1, 0.5)
+
+        plt.tight_layout()
         plt.show()
 
     else:

@@ -50,10 +50,13 @@ class NMPCTiltQdServoImpedance(QDNMPCBase):
                                                            q_wt_w, q_wt_x, q_wt_y, q_wt_z)
 
         rot_wb = self._get_rot_wb_ca(self.qw, self.qx, self.qy, self.qz)
+        rot_bw = rot_wb.T
         skew_w = self._get_skew_symmetric_matrix(self.w)
 
         rot_bt = self._get_rot_wb_ca(self.ee_q[0], self.ee_q[1], self.ee_q[2], self.ee_q[3])
         rot_tb = rot_bt.T
+
+        skew_ee_p = self._get_skew_symmetric_matrix(self.ee_p)
 
         state_y = ca.vertcat(
             self.p + rot_wb @ self.ee_p,
@@ -64,8 +67,10 @@ class NMPCTiltQdServoImpedance(QDNMPCBase):
             qe_z + self.qzr,
             rot_tb @ self.w,
             self.a_s,
-            ca.times(lin_acc_w, self.mp) - self.fds_w,
-            ca.times(ang_acc_b, self.mq) - self.tau_ds_b,
+            # ca.times(lin_acc_w, self.mp) - self.fds_w
+            - self.fds_w,
+            # ca.times(ang_acc_b, self.mq) - rot_tb @ (self.tau_ds_b - skew_ee_p @ rot_bw @ self.fds_w)
+            - rot_tb @ (self.tau_ds_b - skew_ee_p @ rot_bw @ self.fds_w),
         )
 
         state_y_e = ca.vertcat(
@@ -77,8 +82,8 @@ class NMPCTiltQdServoImpedance(QDNMPCBase):
             qe_z + self.qzr,
             rot_tb @ self.w,
             self.a_s,
-            ca.vertcat(0, 0, 0),  # lin acc = 0 for infinite horizon
-            ca.vertcat(0, 0, 0),  # ang acc = 0 for infinite horizon
+            - self.fds_w,
+            - rot_tb @ (self.tau_ds_b - skew_ee_p @ rot_bw @ self.fds_w),
         )
 
         control_y = ca.vertcat(

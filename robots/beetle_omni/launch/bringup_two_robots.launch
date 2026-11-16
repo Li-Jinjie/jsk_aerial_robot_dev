@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- global settings -->
+    <arg name="simulation" default="True"/>
+    <arg name="real_machine" default="False"/>
+    <arg name="headless" default="True"/>
+    <arg name="world_type" default="0"/>
+
+    <!-- robot 1: omni -->
+    <include file="$(find beetle_omni)/launch/bringup_nmpc_omni.launch">
+        <arg name="simulation" value="$(arg simulation)"/>
+        <arg name="real_machine" value="$(arg real_machine)"/>
+        <arg name="headless" value="$(arg headless)"/>
+        <arg name="world_type" value="$(arg world_type)"/>
+
+        <arg name="nmpc_mode" value="1"/>
+        <arg name="wrench_est_mode" value="acc"/>
+        <arg name="end_effector" value="brush"/>
+
+        <!-- only this one launches gazebo -->
+        <arg name="launch_gazebo" value="True"/>
+
+        <arg name="robot_id" value="1"/>
+        <arg name="spawn_x" value="0.0"/>
+        <arg name="spawn_y" value="0.0"/>
+        <arg name="spawn_z" value="0.2"/>
+        <arg name="spawn_yaw" value="0.0"/>
+    </include>
+
+    <!-- robot 2: ball -->
+    <include file="$(find beetle_omni)/launch/bringup_nmpc_ball.launch">
+        <arg name="simulation" value="$(arg simulation)"/>
+        <arg name="real_machine" value="$(arg real_machine)"/>
+        <arg name="headless" value="True"/>
+
+        <arg name="nmpc_mode" value="0"/>
+        <arg name="wrench_est_mode" value="acc"/>
+        <arg name="end_effector" value="mouse"/>
+
+        <!-- gazebo already started above -->
+        <arg name="launch_gazebo" value="False"/>
+
+        <arg name="robot_id" value="2"/>
+        <arg name="spawn_x" value="-1.5"/>
+        <arg name="spawn_y" value="0.0"/>
+        <arg name="spawn_z" value="0.2"/>
+        <arg name="spawn_yaw" value="0.0"/>
+    </include>
+
+    <node pkg="topic_tools" type="relay" name="relay_ball2_pose"
+          args="/ball2/mocap/pose /hand/mocap/pose" />
+
+</launch>

@@ -1,0 +1,48 @@
+mpc_solver_name: aerial_robot_control::mpc_solver::TiltQdServoDistCoGForceImpMdlMPCSolver
+aerial_robot_control_name: aerial_robot_control/nmpc_controller/tilt_mt/servo_force_imp_nmpc
+
+controller:
+  alloc:
+    type: 1
+    ft_thresh_bias: 1.5
+
+  nmpc:
+    T_samp: 0.01
+    T_horizon: 2.0
+    T_step: 0.1
+
+    # Constraints
+    w_max: 6
+    w_min: -6
+    v_max: 1
+    v_min: -1
+    thrust_max: 23
+    thrust_min: 0
+    a_max: 3.15
+    a_min: -3.15
+
+    # Translational force impedance (from BeetleNMPCFullServoImp.yaml)
+    enlarge_factor: 2
+    pMxy: 1.5
+    pMz: 1.5
+    Qv_xy: 10
+    Qv_z: 10
+    Qp_xy: 20
+    Qp_z: 20
+
+    # Ordinary attitude tracking (from BeetleNMPCFullDist.yaml)
+    Qw_xy: 5
+    Qw_z: 5
+    Qq_xy: 300
+    Qq_z: 600
+
+    # Actuators
+    Qa: 2
+    Rt: 2
+    Rac_d: 250
+
+    is_attitude_ctrl: false
+    is_body_rate_ctrl: false
+    is_convert_ee_traj_to_cog: true
+    is_print_phys_params: false
+    is_debug: false

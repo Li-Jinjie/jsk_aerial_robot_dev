@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   pluginlib
   roscpp
   spinal
+  std_srvs
   tf
 )
 
@@ -46,7 +47,7 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG")
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES control_utils flight_control_pluginlib flight_navigation wrench_est_plugins
-  CATKIN_DEPENDS aerial_robot_estimation aerial_robot_model aerial_robot_msgs dynamic_reconfigure pluginlib roscpp spinal tf
+  CATKIN_DEPENDS aerial_robot_estimation aerial_robot_model aerial_robot_msgs dynamic_reconfigure pluginlib roscpp spinal std_srvs tf
 )
 
 include_directories(
@@ -88,11 +89,12 @@ target_link_libraries(mpc_solver_plugins ${catkin_LIBRARIES} acados
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_mdl.so
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_dist_mdl/c_generated_code/libacados_sim_solver_tilt_qd_servo_dist_mdl.so
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_dist_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_dist_mdl.so
+        ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_dist_cog_force_imp_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_dist_cog_force_imp_mdl.so
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_dist_imp_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_dist_imp_mdl.so
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_thrust_dist_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_thrust_dist_mdl.so
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_qd_servo_thrust_dist_imp_mdl/c_generated_code/libacados_ocp_solver_tilt_qd_servo_thrust_dist_imp_mdl.so
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_tri_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_tri_servo_mdl.so
-        ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_bi_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_bi_servo_mdl.so
+        ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_bi_servo_dist_mdl/c_generated_code/libacados_ocp_solver_tilt_bi_servo_dist_mdl.so
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_bi_2_ord_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_bi_2_ord_servo_mdl.so
 )
 add_dependencies(mpc_solver_plugins gen_acados_code)
@@ -108,6 +110,7 @@ add_library(flight_control_pluginlib
         src/nmpc/fix_qd_thrust_out_mdl/nmpc_controller.cpp
         src/nmpc/tilt_mt_servo_nmpc_controller.cpp
         src/nmpc/tilt_mt_servo_dist_nmpc_controller.cpp
+        src/nmpc/tilt_mt_servo_force_imp_nmpc_controller.cpp
         src/nmpc/tilt_mt_servo_imp_nmpc_controller.cpp
         src/nmpc/tilt_mt_servo_thrust_dist_nmpc_controller.cpp
         src/nmpc/tilt_mt_servo_thrust_imp_nmpc_controller.cpp

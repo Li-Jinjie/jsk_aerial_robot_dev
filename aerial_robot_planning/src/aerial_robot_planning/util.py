@@ -173,7 +173,7 @@ def check_traj_info(t: np.ndarray, x: np.ndarray, if_return_path=False) -> Optio
 class TrackingErrorCalculator:
     def __init__(self):
         self.all_pos_err = [[], [], []]  # x, y, z
-        self.all_ang_err = [[], [], []]  # roll, pitch, yaw
+        self.all_ang_err = [[], [], []]  # roll, pitch, yaw (radians)
 
     def reset(self):
         self.__init__()
@@ -195,6 +195,7 @@ class TrackingErrorCalculator:
 
         pos_rmse = np.sqrt(np.mean(all_pos_err_np**2, axis=1))
         pos_rmse_norm = np.linalg.norm(pos_rmse)
+        # Angular errors are accumulated in radians; convert to degrees only for display if needed.
         ang_rmse = np.sqrt(np.mean(all_ang_err_np**2, axis=1))
         ang_rmse_norm = np.linalg.norm(ang_rmse)
 
@@ -258,7 +259,7 @@ class TrackingErrorCalculator:
         dy = cur_pos.y - ref_py
         dz = cur_pos.z - ref_pz
 
-        # Orientation error
+        # Orientation error (returned in radians by tf.transformations.euler_from_matrix)
         m_cur = tf.transformations.quaternion_matrix(q_cur)
         m_ref = tf.transformations.quaternion_matrix([ref_qx, ref_qy, ref_qz, ref_qw])
         m_err = m_cur.dot(m_ref.T)
